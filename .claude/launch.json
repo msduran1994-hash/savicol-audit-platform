@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:/Users/Usuario/AppData/Roaming/npm/node_modules/pnpm/bin/pnpm.mjs", "--filter", "@savicol/web", "dev"],
+      "cwd": "C:/Savicol/audit-platform",
+      "port": 3000
+    }
+  ]
+}

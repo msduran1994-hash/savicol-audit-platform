@@ -1,0 +1,622 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCHEMA Prisma · Audit Platform Savicol
+// ═══════════════════════════════════════════════════════════════════════════════
+// Provider: SQLite (desarrollo). Migración a Postgres = cambiar provider + DATABASE_URL.
+//
+// Adaptaciones SQLite:
+//   • Enums Postgres → campos String + constantes TS
+//   • Arrays (TipoRiesgo[]) → String que contiene JSON.stringify([...])
+//   • Decimal(15,2) → Float
+//   • @db.Text → omitido (SQLite TEXT es ilimitado)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USERS ────────────────────────────────────────────────────────────────────
+// role: ADMIN | AUDITOR | SUPERVISOR | AUDITEE | VIEWER | AI_AGENT
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         String    @default("VIEWER")
+  mfaEnabled   Boolean   @default(false)
+  mfaSecret    String?
+  avatarUrl    String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions        Session[]
+  auditActivities AuditActivity[]    @relation("CreatedByUser")
+  auditChanges    AuditActivityLog[]
+  accessLogs      AccessLog[]
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  refreshToken String   @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── AUDIT ACTIVITIES (Plataforma Cronograma) ────────────────────────────────
+// status: COMPLETED | IN_PROGRESS | NOT_STARTED | OVERDUE
+model AuditActivity {
+  id           String   @id @default(cuid())
+  item         Int
+  area         String
+  auditorId    String
+  auditorName  String
+  activity     String
+  activityType String
+  startDate    DateTime
+  endDate      DateTime
+  status       String   @default("NOT_STARTED")
+  notes        String?
+  year         Int      @default(2026)
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdBy User?              @relation("CreatedByUser", fields: [createdById], references: [id])
+  logs      AuditActivityLog[]
+
+  @@index([auditorId])
+  @@index([status])
+  @@index([year])
+}
+
+model AuditActivityLog {
+  id         String   @id @default(cuid())
+  activityId String
+  userId     String
+  action     String        // CREATED | UPDATED | DELETED
+  oldValues  String?       // JSON
+  newValues  String?       // JSON
+  changedAt  DateTime @default(now())
+
+  activity AuditActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user     User          @relation(fields: [userId], references: [id])
+
+  @@index([activityId])
+}
+
+// ─── ACCESS LOG ───────────────────────────────────────────────────────────────
+model AccessLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  resource  String?
+  ipAddress String?
+  userAgent String?
+  metadata  String?      // JSON
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MÓDULO GRANJAS
+// ═══════════════════════════════════════════════════════════════════════════════
+// tipoGranja:        ARRENDADA | PROPIA | INTEGRADA
+// tipoOperativo:     ENGORDE | REPRODUCTORA
+// nivelRiesgo:       BAJO | MEDIO | ALTO
+// estadoSanitario:   OPTIMO | ALERTA | CRITICO
+// estado:            ACTIVA | INACTIVA | CUARENTENA
+model Granja {
+  id                          String   @id @default(cuid())
+  codigo                      String   @unique
+  nombre                      String
+  estado                      String   @default("ACTIVA")
+  region                      String
+  vereda                      String
+  ubicacionGoogleMaps         String?
+  administrador               String
+  responsable                 String?
+  tecnicoVeterinarioId        String?
+  tecnicoVeterinarioNombre    String?
+  tecnicoVeterinarioEmail     String?
+  tecnicoVeterinarioTelefono  String?
+  telefono                    String
+  tipoGranja                  String
+  tipoOperativo               String
+  nivelRiesgo                 String   @default("BAJO")
+  capacidadAves               Int
+  estadoSanitario             String   @default("OPTIMO")
+  notas                       String?
+  isDemo                      Boolean  @default(false)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  veterinario     TecnicoVeterinario?  @relation(fields: [tecnicoVeterinarioId], references: [id])
+  auditorias      AuditoriaGranja[]
+  hallazgos       Hallazgo[]
+  kpis            KPI[]
+  inventarioItems InventarioItem[]
+  documentos      DocumentoGranja[]
+  actividadLogs   ActividadGranjaLog[]
+
+  @@index([region])
+  @@index([tipoGranja])
+  @@index([nivelRiesgo])
+}
+
+model TecnicoVeterinario {
+  id        String   @id
+  nombre    String
+  email     String?  @unique
+  telefono  String?
+  color     String   @default("#3B82F6")
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  granjas Granja[]
+}
+
+// tipoAuditoria: ACOMPANAMIENTO_INSUMOS | ALIMENTACION | INVENTARIO | SANIDAD | MORTALIDAD | GENERAL
+// estado: PENDIENTE | EN_PROCESO | COMPLETADA | APROBADA | NO_APROBADA
+model AuditoriaGranja {
+  id              String    @id @default(cuid())
+  auditorId       String
+  auditorNombre   String
+  granjaId        String
+  tipoAuditoria   String
+  fechaProgramada DateTime
+  fechaEjecutada  DateTime?
+  estado          String    @default("PENDIENTE")
+  comentarios     String?
+  isDemo          Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  granja          Granja               @relation(fields: [granjaId], references: [id], onDelete: Cascade)
+  respuestasCheck ChecklistRespuesta[]
+  hallazgos       Hallazgo[]
+
+  @@index([granjaId])
+  @@index([estado])
+}
+
+model ChecklistRespuesta {
+  id          String   @id @default(cuid())
+  auditoriaId String
+  preguntaId  String        // AMB-01, BIO-02, etc.
+  respuesta   String        // Cumple | No Cumple | No Aplica
+  observacion String?
+  createdAt   DateTime @default(now())
+
+  auditoria AuditoriaGranja @relation(fields: [auditoriaId], references: [id], onDelete: Cascade)
+
+  @@index([auditoriaId])
+}
+
+// categoria: AMBIENTAL | BIOSEGURIDAD | SANITARIO | FINANCIERO | DOCUMENTAL | MORTALIDAD | INVENTARIO_INSUMOS | INFRAESTRUCTURA | OPERATIVO
+// criticidad: BAJA | MEDIA | ALTA | CRITICA
+// estado: ABIERTO | EN_PLAN | CERRADO | VERIFICADO
+// tiposRiesgo: JSON string ej '["LEGAL","OPERATIVO"]'
+model Hallazgo {
+  id                String   @id @default(cuid())
+  titulo            String
+  granjaId          String
+  auditoriaId       String?
+  auditorId         String
+  auditorNombre     String
+  tipoGranja        String
+  tipoOperativo     String
+  fechaVisita       DateTime
+  categoria         String
+  tiposRiesgo       String   @default("[]")   // JSON array
+  criticidad        String
+  estado            String   @default("ABIERTO")
+  descripcion       String
+  recomendacionesIA String?
+  isDemo            Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  granja     Granja              @relation(fields: [granjaId], references: [id], onDelete: Cascade)
+  auditoria  AuditoriaGranja?    @relation(fields: [auditoriaId], references: [id])
+  evidencias EvidenciaHallazgo[]
+  kpis       KPI[]
+
+  @@index([granjaId])
+  @@index([criticidad])
+  @@index([estado])
+}
+
+model EvidenciaHallazgo {
+  id         String   @id @default(cuid())
+  hallazgoId String
+  tipo       String   // foto, pdf, video, otro
+  nombre     String
+  url        String
+  size       Int
+  uploadedAt DateTime @default(now())
+  uploadedBy String
+
+  hallazgo Hallazgo @relation(fields: [hallazgoId], references: [id], onDelete: Cascade)
+
+  @@index([hallazgoId])
+}
+
+// estadoKPI: NO_INICIADO | EN_CURSO | EN_ESPERA | COMPLETADO
+model KPI {
+  id                    String    @id @default(cuid())
+  hallazgoId            String?
+  granjaId              String
+  accion                String
+  seguimiento           String
+  fechaCumplimiento     DateTime?
+  fechaCompromiso       DateTime
+  fechaProximaVisita    DateTime?
+  planAccionVeterinario String
+  estado                String    @default("NO_INICIADO")
+  responsable           String
+  porcentajeAvance      Int       @default(0)
+  isDemo                Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  hallazgo Hallazgo? @relation(fields: [hallazgoId], references: [id])
+  granja   Granja    @relation(fields: [granjaId], references: [id], onDelete: Cascade)
+
+  @@index([granjaId])
+  @@index([estado])
+}
+
+// categoria: ALIMENTO_CONCENTRADO | INSUMOS_VETERINARIOS | MEDICAMENTOS | EQUIPOS | BIOSEGURIDAD_INV | INFRAESTRUCTURA_INV
+// estado: DISPONIBLE | STOCK_BAJO | AGOTADO | VENCIDO | POR_VENCER
+model InventarioItem {
+  id               String    @id @default(cuid())
+  granjaId         String
+  categoria        String
+  producto         String
+  unidad           String
+  stock            Float
+  stockMinimo      Float
+  fechaVencimiento DateTime?
+  estado           String    @default("DISPONIBLE")
+  ubicacion        String?
+  notas            String?
+  isDemo           Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  granja Granja @relation(fields: [granjaId], references: [id], onDelete: Cascade)
+
+  @@index([granjaId])
+  @@index([categoria])
+  @@index([estado])
+}
+
+model DocumentoGranja {
+  id            String   @id @default(cuid())
+  granjaId      String
+  nombre        String
+  tipo          String   // PDF | Excel | CSV | Word | Imagen | Otro
+  categoria     String
+  size          Int
+  url           String
+  ocrTexto      String?
+  ocrCompletado Boolean  @default(false)
+  uploadedAt    DateTime @default(now())
+  uploadedBy    String
+  isDemo        Boolean  @default(false)
+
+  granja Granja @relation(fields: [granjaId], references: [id], onDelete: Cascade)
+
+  @@index([granjaId])
+  @@index([categoria])
+}
+
+model ActividadGranjaLog {
+  id            String   @id @default(cuid())
+  granjaId      String?
+  tipo          String        // Auditoría | Hallazgo | KPI | Granja | Documento | Sistema
+  accion        String        // Creado | Actualizado | Eliminado | Aprobado | Cargado | Exportado
+  recursoId     String
+  recursoNombre String
+  usuarioId     String
+  usuarioNombre String
+  detalles      String?
+  timestamp     DateTime @default(now())
+  isDemo        Boolean  @default(false)
+
+  granja Granja? @relation(fields: [granjaId], references: [id], onDelete: SetNull)
+
+  @@index([granjaId])
+  @@index([tipo])
+  @@index([timestamp])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MÓDULO ACOMPAÑAMIENTO A RUTAS
+// ═══════════════════════════════════════════════════════════════════════════════
+model Cliente {
+  id        String   @id
+  codigo    String?  @unique
+  nombre    String
+  tipo      String
+  ciudad    String
+  region    String?
+  telefono  String?
+  email     String?
+  direccion String?
+  activo    Boolean  @default(true)
+  isDemo    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  acompanamientos Acompanamiento[]
+}
+
+model Vehiculo {
+  id          String   @id
+  placa       String   @unique
+  tipo        String
+  capacidadKg Int
+  color       String   @default("#3B82F6")
+  activo      Boolean  @default(true)
+  isDemo      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  acompanamientos Acompanamiento[]
+}
+
+model Conductor {
+  id        String   @id
+  nombre    String
+  documento String   @unique
+  licencia  String
+  telefono  String?
+  activo    Boolean  @default(true)
+  isDemo    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  acompanamientos Acompanamiento[]
+}
+
+model Auxiliar {
+  id        String   @id
+  nombre    String
+  documento String   @unique
+  telefono  String?
+  activo    Boolean  @default(true)
+  isDemo    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  acompanamientos Acompanamiento[]
+}
+
+model Ruta {
+  id        String   @id
+  codigo    String   @unique
+  nombre    String
+  ciudad    String
+  region    String
+  activa    Boolean  @default(true)
+  isDemo    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  acompanamientos Acompanamiento[]
+}
+
+// motivo: PRODUCTO_VENCIDO | EMPAQUE_DANADO | CADENA_FRIO_ROTA | PRODUCTO_NO_SOLICITADO | DIFERENCIA_PESO | CALIDAD_NO_CONFORME | CANTIDAD_EQUIVOCADA | ENTREGA_TARDIA | CLIENTE_AUSENTE | OTRO
+// criticidad: CRITICO | ALTO | MEDIO | BAJO
+// estado: PROGRAMADO | EN_CURSO | COMPLETADO | CON_HALLAZGOS | CERRADO
+// riesgosAsociados: JSON string ej '["LEGAL","OPERATIVO"]'
+model Acompanamiento {
+  id                  String   @id @default(cuid())
+  fecha               DateTime
+  auditorId           String
+  auditorNombre       String
+  clienteId           String
+  rutaId              String
+  vehiculoId          String
+  conductorId         String
+  auxiliarId          String?
+  motivo              String
+  valorDevueltoCOP    Float
+  cantidadKgDevueltos Float
+  observacionAuditor  String
+  riesgosAsociados    String   @default("[]")    // JSON array
+  criticidad          String
+  estado              String   @default("PROGRAMADO")
+  isDemo              Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  cliente    Cliente              @relation(fields: [clienteId],   references: [id])
+  ruta       Ruta                 @relation(fields: [rutaId],      references: [id])
+  vehiculo   Vehiculo             @relation(fields: [vehiculoId],  references: [id])
+  conductor  Conductor            @relation(fields: [conductorId], references: [id])
+  auxiliar   Auxiliar?            @relation(fields: [auxiliarId],  references: [id])
+  evidencias EvidenciaRuta[]
+  acciones   AccionCumplimiento[]
+
+  @@index([clienteId])
+  @@index([rutaId])
+  @@index([vehiculoId])
+  @@index([criticidad])
+  @@index([estado])
+  @@index([fecha])
+}
+
+model EvidenciaRuta {
+  id               String   @id @default(cuid())
+  acompanamientoId String
+  tipo             String      // Foto | PDF | Excel | Video | Otro
+  nombre           String
+  url              String
+  size             Int
+  categoria        String?
+  uploadedAt       DateTime @default(now())
+  uploadedBy       String
+  ocrTexto         String?
+  ocrCompletado    Boolean  @default(false)
+  isDemo           Boolean  @default(false)
+
+  acompanamiento Acompanamiento @relation(fields: [acompanamientoId], references: [id], onDelete: Cascade)
+
+  @@index([acompanamientoId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MÓDULO CEDIS — Auditoría de Centros de Distribución
+// ═══════════════════════════════════════════════════════════════════════════════
+// tipoRiesgo: REPUTACIONAL | FINANCIERO | CONTAGIO | OPERATIVO | LEGAL
+// criticidad: CRITICA | ALTA | MEDIA | BAJA
+// estado:     ABIERTO | EN_PLAN | EN_VERIFICACION | CERRADO | REINCIDENTE
+// categoria:  INVENTARIO | CAJA | CARTERA | LOGISTICA | BIOSEGURIDAD | INFRAESTRUCTURA | PROCEDIMIENTOS
+
+model Cedi {
+  id            String   @id @default(cuid())
+  codigo        String   @unique
+  nombre        String
+  ciudad        String
+  region        String
+  administrador String
+  telefono      String
+  direccion     String?
+  capacidad     Int?
+  activo        Boolean  @default(true)
+  isDemo        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  auditorias  AuditoriaCedi[]
+  hallazgos   HallazgoCedi[]
+  evidencias  EvidenciaCedi[]
+}
+
+model AuditoriaCedi {
+  id                       String   @id @default(cuid())
+  cediId                   String
+  fechaVisita              DateTime
+  auditorId                String
+  auditorNombre            String
+  administrador            String
+  tipoRiesgo               String
+  observacionRiesgo        String
+  observacionInventario    String?
+  observacionCaja          String?
+  observacionCartera       String?
+  observacionLogistica     String?
+  observacionBioseguridad  String?
+  observacionInfraestructura String?
+  observacionProcedimientos String?
+  planMejoraMercadeo       String?
+  seguimientoCorrectivo    String?
+  checksJSON               String?   // JSON con map subItem → Cumple/No Cumple/No Aplica
+  criticidad               String
+  estado                   String    @default("ABIERTO")
+  isDemo                   Boolean   @default(false)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  cedi       Cedi             @relation(fields: [cediId], references: [id], onDelete: Cascade)
+  hallazgos  HallazgoCedi[]
+  evidencias EvidenciaCedi[]
+
+  @@index([cediId])
+  @@index([estado])
+  @@index([criticidad])
+  @@index([fechaVisita])
+}
+
+model HallazgoCedi {
+  id                String    @id @default(cuid())
+  auditoriaId       String?
+  cediId            String
+  titulo            String
+  categoria         String
+  subItem           String?
+  descripcion       String
+  tipoRiesgo        String
+  criticidad        String
+  estado            String    @default("ABIERTO")
+  recomendacionIA   String?
+  responsable       String?
+  fechaCompromiso   DateTime?
+  fechaCierre       DateTime?
+  porcentajeAvance  Int       @default(0)
+  reincidente       Boolean   @default(false)
+  isDemo            Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  cedi      Cedi           @relation(fields: [cediId], references: [id], onDelete: Cascade)
+  auditoria AuditoriaCedi? @relation(fields: [auditoriaId], references: [id])
+
+  @@index([cediId])
+  @@index([categoria])
+  @@index([criticidad])
+  @@index([estado])
+}
+
+model EvidenciaCedi {
+  id            String   @id @default(cuid())
+  auditoriaId   String?
+  hallazgoId    String?
+  cediId        String
+  tipo          String
+  nombre        String
+  url           String
+  size          Int
+  categoria     String?
+  uploadedAt    DateTime @default(now())
+  uploadedBy    String
+  ocrTexto      String?
+  ocrCompletado Boolean  @default(false)
+  isDemo        Boolean  @default(false)
+
+  cedi      Cedi           @relation(fields: [cediId], references: [id], onDelete: Cascade)
+  auditoria AuditoriaCedi? @relation(fields: [auditoriaId], references: [id])
+
+  @@index([cediId])
+  @@index([auditoriaId])
+}
+
+// ─── BACK A RUTAS ────────────────────────────────────────────────────────────
+// estado: PENDIENTE | EN_PROCESO | VERIFICACION | CERRADO | CERRADO_CON_REINCIDENCIA
+model AccionCumplimiento {
+  id                  String    @id @default(cuid())
+  acompanamientoId    String
+  planAccion          String
+  responsable         String
+  estado              String    @default("PENDIENTE")
+  porcentajeAvance    Int       @default(0)
+  fechaCompromiso     DateTime
+  fechaCumplimiento   DateTime?
+  evidenciaCorreccion String?
+  validadoPor         String?
+  reincidencia        Boolean   @default(false)
+  isDemo              Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  acompanamiento Acompanamiento @relation(fields: [acompanamientoId], references: [id], onDelete: Cascade)
+
+  @@index([acompanamientoId])
+  @@index([estado])
+}

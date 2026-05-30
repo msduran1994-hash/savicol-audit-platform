@@ -1,0 +1,27 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCHEMA Prisma — VERSIÓN POSTGRES (para producción)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Cuando despliegues a producción:
+//   1. Copia este archivo sobre schema.prisma
+//   2. Cambia DATABASE_URL a postgresql://...
+//   3. pnpm prisma migrate deploy
+//   4. pnpm prisma db seed
+//
+// Diferencias vs schema.prisma (SQLite):
+//   - provider = "postgresql"
+//   - Mantiene los enums como String (compatible y portable)
+//   - Mantiene riesgos como JSON string (portable, fácil migrar a String[] luego)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Todos los modelos exactamente iguales que en schema.prisma
+// Copia los modelos de schema.prisma aquí cuando hagas el deploy.
+// (Mantenemos el archivo de referencia separado para claridad.)

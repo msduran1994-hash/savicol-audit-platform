@@ -1,0 +1,63 @@
+# ═════════════════════════════════════════════════════════════════════════════
+# Audit Platform Savicol — .gitignore
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Dependencias (no van en repo, se reinstalan con pnpm)
+node_modules/
+.pnpm-store/
+
+# Build artifacts (se regeneran)
+.next/
+dist/
+build/
+out/
+.turbo/
+
+# Variables de entorno (¡NUNCA en repo! contienen secrets)
+.env
+.env.local
+.env.development
+.env.production
+.env.production.local
+
+# Bases de datos locales (solo SQLite dev)
+*.db
+*.db-journal
+apps/api/prisma/dev.db*
+
+# IMPORTANTE: prisma/migrations/ SÍ va en git (necesario para deploy)
+!apps/api/prisma/migrations/
+!apps/api/prisma/migrations/**
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Coverage / tests
+coverage/
+.nyc_output/
+
+# Editores
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel
+
+# Archivos temporales
+*.tmp
+*.tsbuildinfo
+
+# Uploads locales (dev)
+apps/api/uploads/
+
+# Screenshots y reportes (no van en el repo de la app)
+screens/

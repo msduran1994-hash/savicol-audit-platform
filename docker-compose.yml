@@ -1,0 +1,37 @@
+# ═════════════════════════════════════════════════════════════════════════════
+# Audit Platform Savicol — Stack de desarrollo
+# ═════════════════════════════════════════════════════════════════════════════
+# Levanta SOLO Postgres en Docker. El API NestJS y el web Next.js se corren
+# con `pnpm dev` para tener hot-reload completo.
+#
+# Uso:
+#   docker compose up -d           ← arranca postgres en background
+#   docker compose logs -f postgres ← ver logs
+#   docker compose down            ← detener
+#   docker compose down -v         ← detener y BORRAR los datos (cuidado)
+# ═════════════════════════════════════════════════════════════════════════════
+
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: savicol-postgres
+    restart: unless-stopped
+    ports:
+      - "5433:5432"   # 5433 host → 5432 container (evita conflicto con otros postgres)
+    environment:
+      POSTGRES_USER:     savicol
+      POSTGRES_PASSWORD: savicol_dev_2026
+      POSTGRES_DB:       audit_platform
+    volumes:
+      - savicol_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:     ["CMD-SHELL", "pg_isready -U savicol -d audit_platform"]
+      interval: 5s
+      timeout:  5s
+      retries:  10
+
+volumes:
+  savicol_postgres_data:
+    name: savicol_postgres_data
