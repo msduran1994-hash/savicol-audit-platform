@@ -1,13 +1,12 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "cd ../.. && pnpm install --frozen-lockfile && cd apps/api && sh prisma/postgres-prepare.sh && pnpm build"
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "apps/api/Dockerfile"
   },
   "deploy": {
-    "startCommand": "npx prisma db push --accept-data-loss --skip-generate && npx prisma db seed && node dist/main",
     "healthcheckPath": "/api/v1/auth/login",
-    "healthcheckTimeout": 60,
+    "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }
