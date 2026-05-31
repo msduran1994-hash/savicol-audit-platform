@@ -1,53 +1,43 @@
 # ═════════════════════════════════════════════════════════════════════════════
-# Dockerfile · API NestJS Savicol
+# Dockerfile · API NestJS Savicol — single-stage simplificado
 # ═════════════════════════════════════════════════════════════════════════════
-# Build determinístico para Railway / cualquier plataforma cloud.
-# Usa pnpm via Corepack + Prisma con Postgres.
+# Imagen única para evitar problemas de symlinks pnpm entre stages.
+# Trade-off: imagen más grande pero deploy más confiable.
 # ═════════════════════════════════════════════════════════════════════════════
 
-FROM node:20-alpine AS base
-RUN apk add --no-cache openssl libc6-compat
+FROM node:20-alpine
+
+# Dependencias del sistema
+RUN apk add --no-cache openssl libc6-compat python3 make g++
+
+# Habilitar pnpm via corepack
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+
 WORKDIR /app
 
-# ─── Stage 1: install deps ──────────────────────────────────────────────────
-FROM base AS deps
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
-COPY apps/api/package.json ./apps/api/
-COPY apps/web/package.json ./apps/web/
-COPY packages/shared-types/package.json ./packages/shared-types/
-RUN pnpm install --frozen-lockfile
-
-# ─── Stage 2: build ─────────────────────────────────────────────────────────
-FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
-COPY --from=deps /app/packages ./packages
+# Copiar todo el monorepo
 COPY . .
 
-# Adapta schema Prisma a Postgres (cambiar provider sqlite → postgresql)
+# Instalar deps (frozen-lockfile garantiza determinismo)
+RUN pnpm install --frozen-lockfile
+
+# Adaptar schema Prisma de SQLite → Postgres
 RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/' apps/api/prisma/schema.prisma
-# Las migraciones SQLite no son compatibles → las borramos, usaremos db push
+
+# Borrar migraciones de SQLite (incompatibles con Postgres · usaremos db push)
 RUN rm -rf apps/api/prisma/migrations
 
-# Generar Prisma Client + compilar NestJS
+# Generar Prisma Client para Postgres
 RUN cd apps/api && pnpm prisma generate
+
+# Compilar el API NestJS
 RUN pnpm --filter @savicol/api build
 
-# ─── Stage 3: runtime ───────────────────────────────────────────────────────
-FROM base AS runner
-ENV NODE_ENV=production
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
-COPY --from=builder /app/apps/api/dist ./apps/api/dist
-COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
-COPY --from=builder /app/apps/api/package.json ./apps/api/
-COPY --from=builder /app/packages ./packages
-COPY --from=builder /app/package.json ./
-
+# Trabajar desde el directorio del API
 WORKDIR /app/apps/api
 
+# Puerto que escucha Nest
 EXPOSE 4000
 
-# Al arrancar: aplica schema a Postgres + seed + lanza API
+# Al arrancar: sync schema → seed (ADMIN + datos demo) → arrancar API
 CMD ["sh", "-c", "npx prisma db push --accept-data-loss --skip-generate && npx prisma db seed && node dist/main"]
