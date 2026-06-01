@@ -4,13 +4,14 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { CEDIS_DEMO } from "../lib/cedis.constants";
+import { DEMO_MODE } from "../lib/granjas.constants";
 import type { Cedi, AuditoriaCedi, HallazgoCedi, EvidenciaCedi } from "../lib/cedis.types";
 import { apiPost, apiPatch, apiDelete } from "../lib/api";
 
 // ─── DATOS DEMO ──────────────────────────────────────────────────────────────
 const CEDIS_INIT: Cedi[] = CEDIS_DEMO.map(c => ({ ...c, activo: true, _demo: true }));
 
-const AUDITORIAS_DEMO: AuditoriaCedi[] = [
+const AUDITORIAS_DEMO: AuditoriaCedi[] = !DEMO_MODE ? [] : [
   {
     id: "DEMO_AUC_001", cediId: "DEMO_CED_001", cediNombre: "CEDI Bogotá Norte",
     fechaVisita: "2026-05-10", auditorId: "MD", auditorNombre: "Michael Duran",
@@ -52,7 +53,7 @@ const AUDITORIAS_DEMO: AuditoriaCedi[] = [
   },
 ];
 
-const HALLAZGOS_DEMO: HallazgoCedi[] = [
+const HALLAZGOS_DEMO: HallazgoCedi[] = !DEMO_MODE ? [] : [
   { id: "DEMO_HAC_001", auditoriaId: "DEMO_AUC_002", cediId: "DEMO_CED_003", titulo: "Pediluvio inoperante 3 días", categoria: "Bioseguridad", subItem: "Pediluvio", descripcion: "Pediluvio sin solución desinfectante. Riesgo de contagio cruzado.", tipoRiesgo: "Contagio", criticidad: "Crítica", estado: "Abierto", recomendacionIA: "Reabastecer solución de yodo activo al 2% inmediatamente.", responsable: "Ricardo Alonso Pérez", fechaCompromiso: "2026-06-01", porcentajeAvance: 25, reincidente: true, createdAt: "2026-05-18T09:30:00Z", updatedAt: "2026-05-22T11:00:00Z", _demo: true },
   { id: "DEMO_HAC_002", auditoriaId: "DEMO_AUC_003", cediId: "DEMO_CED_002", titulo: "Cartera vencida > 60 días", categoria: "Cartera", subItem: "Vencimiento por edades", descripcion: "COP 2.300.000 en cartera vencida a más de 60 días.", tipoRiesgo: "Financiero", criticidad: "Alta", estado: "En Verificación", recomendacionIA: "Activar plan de cobranza estratégico con 3 niveles de seguimiento.", responsable: "Patricia Elena Ramos", fechaCompromiso: "2026-06-10", porcentajeAvance: 60, reincidente: false, createdAt: "2026-05-22T11:30:00Z", updatedAt: "2026-05-25T17:00:00Z", _demo: true },
   { id: "DEMO_HAC_003", auditoriaId: "DEMO_AUC_004", cediId: "DEMO_CED_004", titulo: "Tiempos de entrega +22%", categoria: "Logística", subItem: "Tiempos Entrega", descripcion: "Promedio de entrega 22% por encima del estándar Savicol.", tipoRiesgo: "Reputacional", criticidad: "Alta", estado: "En Plan", recomendacionIA: "Replanificar rutas. Capacitación a conductores.", responsable: "Adriana Lucía Sandoval", fechaCompromiso: "2026-06-15", porcentajeAvance: 40, reincidente: false, createdAt: "2026-05-25T09:00:00Z", updatedAt: "2026-05-26T14:30:00Z", _demo: true },

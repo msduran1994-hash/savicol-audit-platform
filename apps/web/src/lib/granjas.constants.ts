@@ -2,6 +2,12 @@
 // MÓDULO GRANJAS — Catálogos, enumeraciones y biblioteca de checklist IA
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ─── DEMO_MODE FLAG ─────────────────────────────────────────────────────────
+// Por defecto FALSE en producción · solo se activan demos si explícitamente
+// se setea NEXT_PUBLIC_DEMO_MODE=true (típicamente solo en desarrollo local).
+// Esto cumple la regla: "No utilizar datos ficticios en producción".
+export const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
 // ─── ENUMERACIONES ───────────────────────────────────────────────────────────
 export const TIPO_GRANJA = ["Arrendada", "Propia", "Integrada"] as const;
 export type TipoGranja = typeof TIPO_GRANJA[number];
@@ -313,12 +319,14 @@ export const CHECKLIST_PREGUNTAS: ChecklistPregunta[] = [
 ];
 
 // ─── TÉCNICOS VETERINARIOS DEMO (DEMO_MODE) ──────────────────────────────────
-export const VETERINARIOS_DEMO = [
+type VeterinarioDemo = { id: string; name: string; color: string; _demo: boolean };
+const _VETERINARIOS_DEMO_DATA: ReadonlyArray<VeterinarioDemo> = [
   { id: "VET-01", name: "Dra. María Fernanda López",   color: "#10B981", _demo: true },
   { id: "VET-02", name: "Dr. Carlos Andrés Restrepo",   color: "#3B82F6", _demo: true },
   { id: "VET-03", name: "Dra. Ana Lucía Cárdenas",      color: "#8B5CF6", _demo: true },
   { id: "VET-04", name: "Dr. Juan Pablo Mendoza",       color: "#F59E0B", _demo: true },
-] as const;
+];
+export const VETERINARIOS_DEMO: ReadonlyArray<VeterinarioDemo> = !DEMO_MODE ? [] : _VETERINARIOS_DEMO_DATA;
 
 // ─── NAVEGACIÓN INTERNA DEL MÓDULO ───────────────────────────────────────────
 export const GRANJAS_NAV = [
@@ -333,8 +341,3 @@ export const GRANJAS_NAV = [
   { href: "/granjas/actividad",   label: "Actividad",          icon: "Activity",        order: 9 },
   { href: "/granjas/documentos",  label: "Documentos",         icon: "Files",          order: 10 },
 ] as const;
-
-// ─── DEMO_MODE FLAG ─────────────────────────────────────────────────────────
-// Cuando esté en false, no se cargarán datos demo.
-// En producción establecer: NEXT_PUBLIC_DEMO_MODE=false
-export const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
