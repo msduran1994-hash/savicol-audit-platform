@@ -53,4 +53,15 @@ export class CedisController {
   }
 
   @Post("hallazgos") createHallazgo(@Body() dto: CreateHallazgoCediDto) { return this.svc.createHallazgo(dto); }
+
+  @Patch("hallazgos/:id")
+  updateHallazgo(@Param("id") id: string, @Body() dto: Partial<CreateHallazgoCediDto>) {
+    return this.svc.updateHallazgo(id, dto);
+  }
+
+  @Delete("hallazgos/:id")
+  @HttpCode(HttpStatus.OK)
+  removeHallazgo(@Param("id") id: string) {
+    return this.svc.removeHallazgo(id);
+  }
 }

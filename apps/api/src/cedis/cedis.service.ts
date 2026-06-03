@@ -156,6 +156,28 @@ export class CedisService {
     });
   }
 
+  async updateHallazgo(id: string, dto: Partial<CreateHallazgoCediDto>) {
+    const existing = await this.prisma.hallazgoCedi.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Hallazgo no encontrado");
+
+    return this.prisma.hallazgoCedi.update({
+      where: { id },
+      data: {
+        ...dto,
+        ...(dto.fechaCompromiso && { fechaCompromiso: new Date(dto.fechaCompromiso) }),
+        ...((dto as any).fechaCierre && { fechaCierre: new Date((dto as any).fechaCierre) }),
+      },
+    });
+  }
+
+  async removeHallazgo(id: string) {
+    const existing = await this.prisma.hallazgoCedi.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Hallazgo no encontrado");
+
+    await this.prisma.hallazgoCedi.delete({ where: { id } });
+    return { message: "Hallazgo eliminado", id };
+  }
+
   // ── DASHBOARD ──
   async getDashboard() {
     const [cedis, auditorias, hallazgos] = await Promise.all([

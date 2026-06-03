@@ -173,6 +173,34 @@ export class GranjasService {
     return h;
   }
 
+  async updateHallazgo(id: string, dto: Partial<CreateHallazgoDto>, updatedBy: string) {
+    const existing = await this.prisma.hallazgo.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Hallazgo no encontrado");
+
+    const { tiposRiesgo, ...rest } = dto;
+    const h = await this.prisma.hallazgo.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(dto.fechaVisita && { fechaVisita: new Date(dto.fechaVisita) }),
+        ...(tiposRiesgo     && { tiposRiesgo: JSON.stringify(tiposRiesgo) }),
+      },
+    });
+    await this.logActivity({ granjaId: existing.granjaId, tipo: "Hallazgo", accion: "Actualizado",
+      recursoId: id, recursoNombre: h.titulo, usuarioId: updatedBy, usuarioNombre: "" });
+    return h;
+  }
+
+  async removeHallazgo(id: string, deletedBy: string) {
+    const existing = await this.prisma.hallazgo.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Hallazgo no encontrado");
+
+    await this.prisma.hallazgo.delete({ where: { id } });
+    await this.logActivity({ granjaId: existing.granjaId, tipo: "Hallazgo", accion: "Eliminado",
+      recursoId: id, recursoNombre: existing.titulo, usuarioId: deletedBy, usuarioNombre: "" });
+    return { message: "Hallazgo eliminado", id };
+  }
+
   // ── KPIs ──
   findAllKPIs(filters: { granjaId?: string; estado?: EstadoKPI }) {
     return this.prisma.kPI.findMany({

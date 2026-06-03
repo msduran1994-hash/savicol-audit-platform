@@ -224,12 +224,63 @@ export class RutasService {
     });
   }
 
-  // ── MAESTROS (catálogos de la DB) ──
+  // ── MAESTROS (catálogos de la DB) — READ ──
   findClientes()    { return this.prisma.cliente.findMany({ where: { activo: true }, orderBy: { nombre: "asc" } }); }
   findRutas()       { return this.prisma.ruta.findMany({ where: { activa: true }, orderBy: { nombre: "asc" } }); }
   findVehiculos()   { return this.prisma.vehiculo.findMany({ where: { activo: true }, orderBy: { placa: "asc" } }); }
   findConductores() { return this.prisma.conductor.findMany({ where: { activo: true }, orderBy: { nombre: "asc" } }); }
   findAuxiliares()  { return this.prisma.auxiliar.findMany({ where: { activo: true }, orderBy: { nombre: "asc" } }); }
+
+  // ── MAESTROS — CREATE ──
+  createCliente(dto: { id?: string; nombre: string; tipo: string; ciudad: string; region?: string; telefono?: string; email?: string; direccion?: string }) {
+    return this.prisma.cliente.create({
+      data: { ...dto, id: dto.id ?? `CL-${Date.now()}`, isDemo: false },
+    });
+  }
+  createRuta(dto: { id?: string; codigo: string; nombre: string; ciudad: string; region: string }) {
+    return this.prisma.ruta.create({
+      data: { ...dto, id: dto.id ?? `RT-${Date.now()}`, isDemo: false },
+    });
+  }
+  createVehiculo(dto: { id?: string; placa: string; tipo: string; capacidadKg: number; color?: string }) {
+    return this.prisma.vehiculo.create({
+      data: { ...dto, id: dto.id ?? `VH-${Date.now()}`, isDemo: false },
+    });
+  }
+  createConductor(dto: { id?: string; nombre: string; documento: string; licencia: string; telefono?: string }) {
+    return this.prisma.conductor.create({
+      data: { ...dto, id: dto.id ?? `CN-${Date.now()}`, isDemo: false },
+    });
+  }
+  createAuxiliar(dto: { id?: string; nombre: string; documento: string; telefono?: string }) {
+    return this.prisma.auxiliar.create({
+      data: { ...dto, id: dto.id ?? `AX-${Date.now()}`, isDemo: false },
+    });
+  }
+
+  // ── MAESTROS — UPDATE ──
+  updateCliente(id: string, dto: Partial<{ nombre: string; tipo: string; ciudad: string; region: string; telefono: string; email: string; direccion: string; activo: boolean }>) {
+    return this.prisma.cliente.update({ where: { id }, data: dto });
+  }
+  updateRuta(id: string, dto: Partial<{ codigo: string; nombre: string; ciudad: string; region: string; activa: boolean }>) {
+    return this.prisma.ruta.update({ where: { id }, data: dto });
+  }
+  updateVehiculo(id: string, dto: Partial<{ placa: string; tipo: string; capacidadKg: number; color: string; activo: boolean }>) {
+    return this.prisma.vehiculo.update({ where: { id }, data: dto });
+  }
+  updateConductor(id: string, dto: Partial<{ nombre: string; documento: string; licencia: string; telefono: string; activo: boolean }>) {
+    return this.prisma.conductor.update({ where: { id }, data: dto });
+  }
+  updateAuxiliar(id: string, dto: Partial<{ nombre: string; documento: string; telefono: string; activo: boolean }>) {
+    return this.prisma.auxiliar.update({ where: { id }, data: dto });
+  }
+
+  // ── MAESTROS — SOFT DELETE (marca inactivo · preserva foreign keys) ──
+  async removeCliente(id: string)    { return this.prisma.cliente.update({ where: { id }, data: { activo: false } }); }
+  async removeRuta(id: string)       { return this.prisma.ruta.update({ where: { id }, data: { activa: false } }); }
+  async removeVehiculo(id: string)   { return this.prisma.vehiculo.update({ where: { id }, data: { activo: false } }); }
+  async removeConductor(id: string)  { return this.prisma.conductor.update({ where: { id }, data: { activo: false } }); }
+  async removeAuxiliar(id: string)   { return this.prisma.auxiliar.update({ where: { id }, data: { activo: false } }); }
 
   // ── DASHBOARD STATS ──
   async getDashboardStats() {

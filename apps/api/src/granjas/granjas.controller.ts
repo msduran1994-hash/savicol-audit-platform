@@ -69,6 +69,21 @@ export class GranjasController {
     return this.svc.createHallazgo(dto, req.user.id);
   }
 
+  @Patch("hallazgos/:id")
+  updateHallazgo(
+    @Param("id") id: string,
+    @Body() dto: Partial<CreateHallazgoDto>,
+    @Req() req: AuthRequest,
+  ) {
+    return this.svc.updateHallazgo(id, dto, req.user.id);
+  }
+
+  @Delete("hallazgos/:id")
+  @HttpCode(HttpStatus.OK)
+  removeHallazgo(@Param("id") id: string, @Req() req: AuthRequest) {
+    return this.svc.removeHallazgo(id, req.user.id);
+  }
+
   // ── KPIs ──
   @Get("kpis/list")
   findAllKPIs(@Query("granjaId") granjaId?: string, @Query("estado") estado?: any) {

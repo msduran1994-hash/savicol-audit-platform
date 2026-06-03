@@ -7,6 +7,10 @@ import { UsersModule } from "./users/users.module";
 import { GranjasModule } from "./granjas/granjas.module";
 import { RutasModule } from "./rutas/rutas.module";
 import { CedisModule } from "./cedis/cedis.module";
+import { InventarioModule } from "./inventario/inventario.module";
+import { DocumentosModule } from "./documentos/documentos.module";
+import { EvidenciasModule } from "./evidencias/evidencias.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
 
 @Module({
   imports: [
@@ -18,6 +22,10 @@ import { CedisModule } from "./cedis/cedis.module";
     GranjasModule,
     RutasModule,
     CedisModule,
+    InventarioModule,
+    DocumentosModule,
+    EvidenciasModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}
