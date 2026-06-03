@@ -28,6 +28,8 @@ async function main() {
   const adminName     = process.env.ADMIN_NAME     ?? "Administrador Savicol";
 
   const existing = await prisma.user.findUnique({ where: { email: adminEmail } });
+  const forceReset = process.env.SEED_RESET_ADMIN === "true";
+
   if (!existing) {
     const passwordHash = await bcrypt.hash(adminPassword, 10);
     await prisma.user.create({
@@ -41,6 +43,22 @@ async function main() {
       },
     });
     console.log(`✅ ADMIN creado: ${adminEmail}`);
+  } else if (forceReset) {
+    // Reset password + role + isActive (emergency recovery via env var)
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
+    await prisma.user.update({
+      where: { email: adminEmail },
+      data: {
+        passwordHash,
+        role: "ADMIN",
+        isActive: true,
+      },
+    });
+    // Invalidar todas las sesiones activas del admin
+    await prisma.session.deleteMany({
+      where: { userId: existing.id },
+    });
+    console.log(`🔐 ADMIN reseteado: ${adminEmail} · pwd=${adminPassword.slice(0,4)}*** · sesiones invalidadas`);
   } else {
     console.log(`ℹ️  ADMIN ya existe: ${adminEmail}`);
   }
