@@ -6,6 +6,7 @@ import {
   UsersService, CreateUserDto, UpdateUserDto,
 } from "./users.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
 
 interface AuthRequest extends Request {
@@ -13,7 +14,7 @@ interface AuthRequest extends Request {
 }
 
 @Controller("users")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)  // orden importa · JWT primero (setea user), Roles después (lee user)
 export class UsersController {
   constructor(private svc: UsersService) {}
 

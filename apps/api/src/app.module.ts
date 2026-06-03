@@ -13,7 +13,9 @@ import { InventarioModule } from "./inventario/inventario.module";
 import { DocumentosModule } from "./documentos/documentos.module";
 import { EvidenciasModule } from "./evidencias/evidencias.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
-import { RolesGuard } from "./auth/guards/roles.guard";
+// RolesGuard se aplica a nivel de controller junto a JwtAuthGuard
+// (NestJS ejecuta global guards ANTES que controller guards · user no estaría
+// disponible si RolesGuard se aplica globalmente)
 
 @Module({
   imports: [
@@ -42,8 +44,6 @@ import { RolesGuard } from "./auth/guards/roles.guard";
   providers: [
     // Rate limiting global
     { provide: APP_GUARD, useClass: ThrottlerGuard },
-    // RBAC global — solo aplica si endpoint tiene @Roles()
-    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}
