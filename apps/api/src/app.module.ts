@@ -13,6 +13,8 @@ import { InventarioModule } from "./inventario/inventario.module";
 import { DocumentosModule } from "./documentos/documentos.module";
 import { EvidenciasModule } from "./evidencias/evidencias.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
+import { SettingsModule } from "./settings/settings.module";
+import { ReportsModule } from "./reports/reports.module";
 // RolesGuard se aplica a nivel de controller junto a JwtAuthGuard
 // (NestJS ejecuta global guards ANTES que controller guards · user no estaría
 // disponible si RolesGuard se aplica globalmente)
@@ -40,6 +42,8 @@ import { DashboardModule } from "./dashboard/dashboard.module";
     DocumentosModule,
     EvidenciasModule,
     DashboardModule,
+    SettingsModule,
+    ReportsModule,
   ],
   providers: [
     // Rate limiting global

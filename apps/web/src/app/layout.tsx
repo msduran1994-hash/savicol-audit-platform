@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { Providers } from "./providers";
+import { GoogleAnalytics } from "@/components/system/google-analytics";
 
 export const metadata: Metadata = {
   title: { default: "Audit Platform Savicol", template: "%s | Savicol" },
@@ -16,6 +18,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body className="bg-[#070B14] text-[#F8FAFC] antialiased">
+        <Suspense fallback={null}>
+          <GoogleAnalytics />
+        </Suspense>
         <Providers>{children}</Providers>
       </body>
     </html>

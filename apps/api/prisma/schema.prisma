@@ -620,3 +620,25 @@ model AccionCumplimiento {
   @@index([acompanamientoId])
   @@index([estado])
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MÓDULO SETTINGS · Configuración global key/value
+// ═══════════════════════════════════════════════════════════════════════════════
+// Patrón key/value para evitar migraciones cada vez que se agrega un setting.
+// Categoría agrupa visualmente en la UI.
+// type: STRING | BOOLEAN | NUMBER | JSON | IMAGE_URL
+model Setting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String                           // serializado según type
+  type        String   @default("STRING")
+  category    String   @default("general")     // general · branding · notifications · integrations
+  label       String?                          // display name
+  description String?
+  isPublic    Boolean  @default(false)         // true = legible sin auth (logo, theme)
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+
+  @@index([category])
+  @@index([isPublic])
+}

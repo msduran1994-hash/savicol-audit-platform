@@ -4,12 +4,16 @@ import { useAuditStore } from "@/store/audit.store";
 import { useShallow } from "zustand/react/shallow";
 import { AUDITORS, AUDIT_AREAS, MONTHS_2026 } from "@/lib/constants";
 import { calculateCompletionRate } from "@/lib/utils";
+import { useDashboardEjecutivo } from "@/hooks/useDashboardEjecutivo";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, RadarChart, PolarGrid,
   PolarAngleAxis, Radar,
 } from "recharts";
-import { TrendingUp, BarChart2, Target } from "lucide-react";
+import {
+  TrendingUp, BarChart2, Target, Tractor, Truck, Warehouse,
+  AlertTriangle, ShieldCheck, Activity, Loader2,
+} from "lucide-react";
 
 const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
@@ -28,6 +32,8 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 
 export default function IndicadoresPage() {
   const activities = useAuditStore(useShallow((s) => s.activities));
+  const ejecutivoQ = useDashboardEjecutivo();
+  const ejec       = ejecutivoQ.data;
 
   // Monthly completion
   const monthlyData = MONTHS_2026.map(m => {
@@ -80,19 +86,41 @@ export default function IndicadoresPage() {
       />
 
       <div className="flex-1 p-6 space-y-6">
-        {/* Summary KPIs row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: "Tasa de Cumplimiento", value: `${totalRate}%`, icon: <Target />, color: "blue" },
-            { label: "Total Actividades", value: activities.length, icon: <BarChart2 />, color: "amber" },
-            { label: "Auditores Activos", value: AUDITORS.filter(a => activities.some(act => act.auditorId === a.id)).length, icon: <TrendingUp />, color: "green" },
-            { label: "Áreas Cubiertas", value: new Set(activities.map(a => a.area)).size, icon: <Target />, color: "cyan" },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="card-base">
-              <p className="text-xs text-[#475569] mb-1">{label}</p>
-              <p className="font-display text-3xl font-bold text-white">{value}</p>
-            </div>
-          ))}
+        {/* Dashboard Ejecutivo · cross-workspace (NUEVO · desde API) */}
+        <div>
+          <h2 className="text-xs uppercase tracking-wider text-amber-400 font-semibold mb-3 flex items-center gap-2">
+            <Activity className="w-3.5 h-3.5"/>
+            Dashboard Ejecutivo · cross-workspace
+            {ejecutivoQ.isFetching && <Loader2 className="w-3 h-3 animate-spin"/>}
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <KpiCard label="Granjas"        value={ejec?.workspaces.granjas.total ?? "—"}     sub={ejec ? `${ejec.workspaces.granjas.enRiesgo} en riesgo` : ""}   icon={<Tractor/>}       color="#3B82F6"/>
+            <KpiCard label="Rutas"          value={ejec?.workspaces.rutas.total ?? "—"}       sub={ejec ? `${ejec.workspaces.rutas.activas} activas`     : ""}   icon={<Truck/>}         color="#10B981"/>
+            <KpiCard label="CEDIS"          value={ejec?.workspaces.cedis.total ?? "—"}       sub={ejec ? `${ejec.workspaces.cedis.activos} activos`     : ""}   icon={<Warehouse/>}     color="#F59E0B"/>
+            <KpiCard label="Hallazgos"      value={ejec?.hallazgos.total ?? "—"}              sub={ejec ? `${ejec.hallazgos.criticos} críticos`          : ""}   icon={<AlertTriangle/>} color="#EF4444"/>
+            <KpiCard label="KPI Cumplim."   value={ejec ? `${ejec.kpi.cumplimiento}%` : "—"}  sub={ejec ? `${ejec.kpi.completados} completados`          : ""}   icon={<Target/>}        color="#8B5CF6"/>
+            <KpiCard label="Cronograma"     value={ejec ? `${ejec.cronograma.progreso}%` : "—"} sub={ejec ? `${ejec.cronograma.completadas}/${ejec.cronograma.total}` : ""} icon={<ShieldCheck/>} color="#06B6D4"/>
+          </div>
+        </div>
+
+        {/* Summary KPIs cronograma (legacy · datos locales) */}
+        <div>
+          <h2 className="text-xs uppercase tracking-wider text-[#94A3B8] font-semibold mb-3">
+            Cronograma 2026 · análisis local
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: "Tasa de Cumplimiento", value: `${totalRate}%`, icon: <Target />, color: "blue" },
+              { label: "Total Actividades", value: activities.length, icon: <BarChart2 />, color: "amber" },
+              { label: "Auditores Activos", value: AUDITORS.filter(a => activities.some(act => act.auditorId === a.id)).length, icon: <TrendingUp />, color: "green" },
+              { label: "Áreas Cubiertas", value: new Set(activities.map(a => a.area)).size, icon: <Target />, color: "cyan" },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="card-base">
+                <p className="text-xs text-[#475569] mb-1">{label}</p>
+                <p className="font-display text-3xl font-bold text-white">{value}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Monthly trend */}
@@ -182,6 +210,31 @@ export default function IndicadoresPage() {
             </p>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ── KpiCard · tarjeta compacta del Dashboard Ejecutivo ── */
+function KpiCard({
+  label, value, sub, icon, color,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  icon: React.ReactNode;
+  color: string;
+}) {
+  return (
+    <div className="card-base flex items-start gap-3 p-3" style={{ borderColor: `${color}30` }}>
+      <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+           style={{ background: `${color}18`, color }}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider truncate">{label}</p>
+        <p className="font-display text-xl font-bold text-white leading-tight mt-0.5">{value}</p>
+        {sub && <p className="text-[10px] text-[#475569] mt-0.5 truncate">{sub}</p>}
       </div>
     </div>
   );
