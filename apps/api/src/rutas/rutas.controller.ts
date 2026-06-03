@@ -5,6 +5,8 @@ import {
 import {
   RutasService, CreateAcompanamientoDto, CreateAccionCumplimientoDto,
 } from "./rutas.service";
+import { RutasExecutiveService, RutasExecutiveFilters } from "./rutas-executive.service";
+import { AuditActivitiesAiService } from "../audit-activities/audit-activities-ai.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 
 interface AuthRequest extends Request {
@@ -14,7 +16,61 @@ interface AuthRequest extends Request {
 @Controller("rutas")
 @UseGuards(JwtAuthGuard)
 export class RutasController {
-  constructor(private svc: RutasService) {}
+  constructor(
+    private svc: RutasService,
+    private exec: RutasExecutiveService,
+    private ai: AuditActivitiesAiService,
+  ) {}
+
+  // ── DASHBOARD EJECUTIVO ──
+  @Get("executive")
+  executive(
+    @Query("year")       year?: string,
+    @Query("auditorId")  auditorId?: string,
+    @Query("rutaId")     rutaId?: string,
+    @Query("clienteId")  clienteId?: string,
+    @Query("ciudad")     ciudad?: string,
+    @Query("estado")     estado?: string,
+    @Query("motivo")     motivo?: string,
+    @Query("criticidad") criticidad?: string,
+    @Query("mes")        mes?: string,
+  ) {
+    const filters: RutasExecutiveFilters = {
+      year: year ? +year : undefined,
+      auditorId, rutaId, clienteId, ciudad, estado, motivo, criticidad,
+      mes: mes ? +mes : undefined,
+    };
+    return this.exec.getExecutive(filters);
+  }
+
+  @Get("ai-summary")
+  async aiSummary(
+    @Query("year")       year?: string,
+    @Query("auditorId")  auditorId?: string,
+    @Query("rutaId")     rutaId?: string,
+    @Query("clienteId")  clienteId?: string,
+    @Query("estado")     estado?: string,
+    @Query("motivo")     motivo?: string,
+    @Query("criticidad") criticidad?: string,
+  ) {
+    const filters: RutasExecutiveFilters = {
+      year: year ? +year : undefined,
+      auditorId, rutaId, clienteId, estado, motivo, criticidad,
+    };
+    const exec = await this.exec.getExecutive(filters);
+    return this.ai.generateSummary({
+      kpis:         exec.kpis as any,
+      alertas:      exec.alertas as any,
+      topAreas:     exec.charts.clientesRanking.slice(0, 5).map((c: any) => ({
+        area: c.nombre, Cumplimiento: c.participacion, Actividades: c.total,
+      })),
+      ranking:      exec.charts.auditores.slice(0, 10).map((a: any) => ({
+        auditorName: a.auditorNombre, completionRate: a.participacion, totalAssigned: a.total,
+      })),
+      calidadDatos: { score: exec.calidadDatos.score, issuesTotal: 0, duplicados: 0 },
+      heuristico:   exec.resumenHeuristico,
+    });
+  }
 
   // ── DASHBOARD ──
   @Get("dashboard")

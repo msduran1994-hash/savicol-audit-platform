@@ -5,14 +5,16 @@ import { useRutasStore, selectFilteredAcompanamientos } from "@/store/rutas.stor
 import { useShallow } from "zustand/react/shallow";
 import {
   MOTIVOS_DEVOLUCION, CRITICIDAD_OPERACIONAL, ESTADO_ACOMPANAMIENTO,
-  TIPO_RIESGO_RUTA, RUTAS_DEMO, VEHICULOS_DEMO, CLIENTES_DEMO,
-  CONDUCTORES_DEMO, AUXILIARES_DEMO, formatCOP, formatKg,
+  TIPO_RIESGO_RUTA, formatCOP, formatKg,
 } from "@/lib/rutas.constants";
 import { AUDITORS } from "@/lib/constants";
+import {
+  useClientes, useRutasCat, useVehiculos, useConductores, useAuxiliares,
+} from "@/hooks/useRutas";
 import type { Acompanamiento } from "@/lib/rutas.types";
 import {
   Plus, Search, Filter, RefreshCw, Download, Mail,
-  Truck, Edit2, Trash2, X, AlertTriangle, MapPin,
+  Truck, Edit2, Trash2, X, AlertTriangle, MapPin, Loader2,
 } from "lucide-react";
 
 export default function ConsolidadoPage() {
@@ -25,8 +27,22 @@ export default function ConsolidadoPage() {
   const updateItem   = useRutasStore((s) => s.updateAcompanamiento);
   const removeItem   = useRutasStore((s) => s.removeAcompanamiento);
 
+  // Catálogos desde API (no DEMO arrays · funcionan en producción)
+  const clientesQ    = useClientes();
+  const rutasCatQ    = useRutasCat();
+  const vehiculosQ   = useVehiculos();
+  const conductoresQ = useConductores();
+  const auxiliaresQ  = useAuxiliares();
+
+  const clientes    = clientesQ.data    ?? [];
+  const rutasCat    = rutasCatQ.data    ?? [];
+  const vehiculos   = vehiculosQ.data   ?? [];
+  const conductores = conductoresQ.data ?? [];
+  const auxiliares  = auxiliaresQ.data  ?? [];
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Acompanamiento | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const totalValor = filtered.reduce((s, a) => s + a.valorDevueltoCOP, 0);
   const totalKg    = filtered.reduce((s, a) => s + a.cantidadKgDevueltos, 0);
@@ -51,9 +67,9 @@ export default function ConsolidadoPage() {
                 className="w-full pl-10 pr-3 py-2 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-sm text-white placeholder:text-[#475569] focus:outline-none focus:border-cyan-500/40"
               />
             </div>
-            <Sel value={filters.rutaId}      onChange={(v) => setFilters({ rutaId: v })}      placeholder="Ruta"      options={RUTAS_DEMO.map(r => ({ value: r.id, label: r.nombre }))} />
-            <Sel value={filters.vehiculoId}  onChange={(v) => setFilters({ vehiculoId: v })}  placeholder="Vehículo"  options={VEHICULOS_DEMO.map(v => ({ value: v.id, label: v.placa }))} />
-            <Sel value={filters.clienteId}   onChange={(v) => setFilters({ clienteId: v })}   placeholder="Cliente"   options={CLIENTES_DEMO.map(c => ({ value: c.id, label: c.nombre }))} />
+            <Sel value={filters.rutaId}      onChange={(v) => setFilters({ rutaId: v })}      placeholder="Ruta"      options={rutasCat.map((r: any) => ({ value: r.id, label: r.nombre }))} />
+            <Sel value={filters.vehiculoId}  onChange={(v) => setFilters({ vehiculoId: v })}  placeholder="Vehículo"  options={vehiculos.map((v: any) => ({ value: v.id, label: v.placa }))} />
+            <Sel value={filters.clienteId}   onChange={(v) => setFilters({ clienteId: v })}   placeholder="Cliente"   options={clientes.map((c: any) => ({ value: c.id, label: c.nombre }))} />
             <Sel value={filters.auditorId}   onChange={(v) => setFilters({ auditorId: v })}   placeholder="Auditor"   options={AUDITORS.map(a => ({ value: a.id, label: a.name }))} />
             <Sel value={filters.motivo}      onChange={(v) => setFilters({ motivo: v })}      placeholder="Motivo"    options={MOTIVOS_DEVOLUCION.map(m => ({ value: m, label: m }))} />
             <Sel value={filters.criticidad}  onChange={(v) => setFilters({ criticidad: v })}  placeholder="Criticidad" options={CRITICIDAD_OPERACIONAL.map(c => ({ value: c, label: c }))} />
@@ -168,12 +184,19 @@ export default function ConsolidadoPage() {
       {modalOpen && (
         <AcompanamientoModal
           item={editing}
-          onClose={() => setModalOpen(false)}
-          onSave={(a) => {
-            if (editing) updateItem(editing.id, a);
-            else         addItem(a as any);
-            setModalOpen(false);
+          catalogos={{ clientes, rutas: rutasCat, vehiculos, conductores, auxiliares }}
+          onClose={() => { setModalOpen(false); setSaveError(null); }}
+          onSave={async (a) => {
+            try {
+              setSaveError(null);
+              if (editing) await updateItem(editing.id, a);
+              else         await addItem(a as any);
+              setModalOpen(false);
+            } catch (e: any) {
+              setSaveError(e?.response?.data?.message ?? e?.message ?? "Error al guardar");
+            }
           }}
+          error={saveError}
         />
       )}
     </div>
@@ -195,18 +218,32 @@ function Sel({ value, onChange, placeholder, options }: {
 }
 
 // ─── MODAL ───────────────────────────────────────────────────────────────────
-function AcompanamientoModal({ item, onClose, onSave }: {
+function AcompanamientoModal({ item, catalogos, onClose, onSave, error }: {
   item: Acompanamiento | null;
+  catalogos: {
+    clientes: any[]; rutas: any[]; vehiculos: any[];
+    conductores: any[]; auxiliares: any[];
+  };
   onClose: () => void;
-  onSave: (a: Partial<Acompanamiento>) => void;
+  onSave: (a: Partial<Acompanamiento>) => Promise<void> | void;
+  error?: string | null;
 }) {
+  // Defaults seguros · NO accede a array[0] sin verificar
+  const safeDefault = <T,>(arr: T[], picker: (x: T) => any, fallback = ""): string =>
+    arr.length > 0 ? String(picker(arr[0]) ?? fallback) : fallback;
+
   const [form, setForm] = useState<Partial<Acompanamiento>>(item ?? {
     fecha: new Date().toISOString().slice(0, 10),
-    auditorId: AUDITORS[0].id, auditorNombre: AUDITORS[0].name,
-    clienteId: CLIENTES_DEMO[0].id, clienteNombre: CLIENTES_DEMO[0].nombre,
-    rutaId: RUTAS_DEMO[0].id, rutaNombre: RUTAS_DEMO[0].nombre,
-    vehiculoId: VEHICULOS_DEMO[0].id, vehiculoPlaca: VEHICULOS_DEMO[0].placa,
-    conductorId: CONDUCTORES_DEMO[0].id, conductorNombre: CONDUCTORES_DEMO[0].nombre,
+    auditorId:       AUDITORS[0]?.id   ?? "",
+    auditorNombre:   AUDITORS[0]?.name ?? "",
+    clienteId:       safeDefault(catalogos.clientes,    (c: any) => c.id),
+    clienteNombre:   safeDefault(catalogos.clientes,    (c: any) => c.nombre),
+    rutaId:          safeDefault(catalogos.rutas,       (r: any) => r.id),
+    rutaNombre:      safeDefault(catalogos.rutas,       (r: any) => r.nombre),
+    vehiculoId:      safeDefault(catalogos.vehiculos,   (v: any) => v.id),
+    vehiculoPlaca:   safeDefault(catalogos.vehiculos,   (v: any) => v.placa),
+    conductorId:     safeDefault(catalogos.conductores, (c: any) => c.id),
+    conductorNombre: safeDefault(catalogos.conductores, (c: any) => c.nombre),
     motivo: "Producto Vencido",
     valorDevueltoCOP: 0,
     cantidadKgDevueltos: 0,
@@ -215,6 +252,7 @@ function AcompanamientoModal({ item, onClose, onSave }: {
     criticidad: "Medio",
     estado: "Programado",
   });
+  const [submitting, setSubmitting] = useState(false);
 
   function toggleRiesgo(r: typeof TIPO_RIESGO_RUTA[number]) {
     setForm((f) => {
@@ -223,15 +261,31 @@ function AcompanamientoModal({ item, onClose, onSave }: {
     });
   }
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     // Validación mínima: cliente y ruta (por nombre) + motivo
-    if (!(form.clienteNombre?.trim() || form.clienteId) || !(form.rutaNombre?.trim() || form.rutaId)) return;
+    if (!(form.clienteNombre?.trim() || form.clienteId)) {
+      alert("Cliente es obligatorio");
+      return;
+    }
+    if (!(form.rutaNombre?.trim() || form.rutaId)) {
+      alert("Ruta es obligatoria");
+      return;
+    }
+    if (!form.motivo?.trim()) {
+      alert("Motivo es obligatorio");
+      return;
+    }
     const auditor = AUDITORS.find(a => a.id === form.auditorId);
-    onSave({
-      ...form,
-      auditorNombre: auditor?.name ?? form.auditorNombre,
-    });
+    setSubmitting(true);
+    try {
+      await onSave({
+        ...form,
+        auditorNombre: auditor?.name ?? form.auditorNombre,
+      });
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -254,28 +308,30 @@ function AcompanamientoModal({ item, onClose, onSave }: {
                   {AUDITORS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </F>
-              <F label="Cliente">
+              <F label="Cliente *">
                 <input
                   value={form.clienteNombre ?? ""}
                   onChange={(e) => setForm({ ...form, clienteNombre: e.target.value, clienteId: "" })}
                   placeholder="Escribe el nombre del cliente"
                   list="rutas-clientes"
                   className="input-base"
+                  required
                 />
                 <datalist id="rutas-clientes">
-                  {CLIENTES_DEMO.map(c => <option key={c.id} value={c.nombre} />)}
+                  {catalogos.clientes.map((c: any) => <option key={c.id} value={c.nombre} />)}
                 </datalist>
               </F>
-              <F label="Ruta">
+              <F label="Ruta *">
                 <input
                   value={form.rutaNombre ?? ""}
                   onChange={(e) => setForm({ ...form, rutaNombre: e.target.value, rutaId: "" })}
                   placeholder="Ej. Medellín Norte"
                   list="rutas-rutas"
                   className="input-base"
+                  required
                 />
                 <datalist id="rutas-rutas">
-                  {RUTAS_DEMO.map(r => <option key={r.id} value={`${r.nombre}`} />)}
+                  {catalogos.rutas.map((r: any) => <option key={r.id} value={r.nombre} />)}
                 </datalist>
               </F>
             </Grid>
@@ -292,7 +348,7 @@ function AcompanamientoModal({ item, onClose, onSave }: {
                   className="input-base"
                 />
                 <datalist id="rutas-vehiculos">
-                  {VEHICULOS_DEMO.map(v => <option key={v.id} value={v.placa} />)}
+                  {catalogos.vehiculos.map((v: any) => <option key={v.id} value={v.placa} />)}
                 </datalist>
               </F>
               <F label="Conductor">
@@ -304,7 +360,7 @@ function AcompanamientoModal({ item, onClose, onSave }: {
                   className="input-base"
                 />
                 <datalist id="rutas-conductores">
-                  {CONDUCTORES_DEMO.map(c => <option key={c.id} value={c.nombre} />)}
+                  {catalogos.conductores.map((c: any) => <option key={c.id} value={c.nombre} />)}
                 </datalist>
               </F>
               <F label="Auxiliar (opcional)">
@@ -316,7 +372,7 @@ function AcompanamientoModal({ item, onClose, onSave }: {
                   className="input-base"
                 />
                 <datalist id="rutas-auxiliares">
-                  {AUXILIARES_DEMO.map(a => <option key={a.id} value={a.nombre} />)}
+                  {catalogos.auxiliares.map((a: any) => <option key={a.id} value={a.nombre} />)}
                 </datalist>
               </F>
               <F label="Motivo">
@@ -394,11 +450,20 @@ function AcompanamientoModal({ item, onClose, onSave }: {
           </Section>
         </form>
 
+        {error && (
+          <div className="mx-6 mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0"/>
+            <span>Error guardando: {error}</span>
+          </div>
+        )}
         <footer className="flex items-center justify-between px-6 py-3 border-t border-[#1E2D4A]">
           <p className="text-xs text-[#475569]">{item ? `ID: ${item.id}` : "Nuevo registro"}</p>
           <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="btn-ghost text-xs">Cancelar</button>
-            <button type="submit" onClick={submit} className="btn-primary text-xs">{item ? "Guardar cambios" : "Crear acompañamiento"}</button>
+            <button type="button" onClick={onClose} className="btn-ghost text-xs" disabled={submitting}>Cancelar</button>
+            <button type="submit" onClick={submit} className="btn-primary text-xs flex items-center gap-2" disabled={submitting}>
+              {submitting && <Loader2 className="w-3 h-3 animate-spin"/>}
+              {submitting ? "Guardando..." : (item ? "Guardar cambios" : "Crear acompañamiento")}
+            </button>
           </div>
         </footer>
       </div>
