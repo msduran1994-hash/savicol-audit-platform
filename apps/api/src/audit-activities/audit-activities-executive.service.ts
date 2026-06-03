@@ -93,12 +93,12 @@ export class AuditActivitiesExecutiveService {
 
     const totalIncidencias = overdue + reprogramed;
 
-    // Calidad del cronograma: completed on-time / (completed + overdue)
-    const completedOnTime = activities.filter(a =>
-      a.status === "COMPLETED" && a.endDate >= now
-    ).length;
+    // Calidad del cronograma: % de actividades cerradas que NO terminaron vencidas
+    // Fórmula: completed / (completed + overdue)
+    //   100% = ninguna vencida · 0% = todas vencidas
+    //   Independiente de si endDate ya pasó (lo que importa es status final, no calendario)
     const indiceCalidad = (completed + overdue) > 0
-      ? Math.round((completedOnTime / (completed + overdue)) * 100)
+      ? Math.round((completed / (completed + overdue)) * 100)
       : 100;
 
     // Ejecución operativa: (completed + inProgress) / total
