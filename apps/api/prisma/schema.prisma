@@ -642,3 +642,24 @@ model Setting {
   @@index([category])
   @@index([isPublic])
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MÓDULO API TOKENS · Tokens de larga vida para integraciones externas (Power BI)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Token plano = bcrypt(tokenHash) almacenado · solo se muestra UNA vez al crear.
+// scopes: JSON array · ej. ["powerbi:read","reports:read"]
+model ApiToken {
+  id           String    @id @default(cuid())
+  name         String                              // nombre descriptivo · "Power BI prod"
+  tokenHash    String    @unique                   // bcrypt hash
+  tokenPrefix  String                              // primeros 8 chars del token · para identificar en UI
+  scopes       String    @default("[]")            // JSON array de scopes
+  isActive     Boolean   @default(true)
+  expiresAt    DateTime?
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  createdById  String?
+
+  @@index([isActive])
+  @@index([tokenPrefix])
+}

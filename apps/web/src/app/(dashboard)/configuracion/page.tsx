@@ -1,9 +1,9 @@
 "use client";
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   Shield, User, Bell, Palette, Database, Key, ChevronRight, CheckCircle2,
   Users, Plus, Mail, Edit2, Trash2, Power, KeyRound, Copy, X, AlertCircle,
-  Loader2, RefreshCw,
+  Loader2, RefreshCw, Activity,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,11 @@ import {
   useToggleUserActive, useDeleteUser, useResetUserPassword,
   useChangePassword, type AppUser, type CreateUserPayload,
 } from "@/hooks/useUsers";
+import {
+  useSettings, useUpsertSetting, useApiTokens, useCreateApiToken,
+  useRevokeApiToken, useDeleteApiToken, getSetting,
+  type ApiToken,
+} from "@/hooks/useSettings";
 
 const sections = [
   { id: "perfil",       label: "Perfil",          icon: User,      description: "Información personal y credenciales" },
@@ -260,39 +265,471 @@ function DatosSection() {
   );
 }
 
-/* ── API & Tokens ───────────────────────────────────────── */
+/* ── API & Tokens · CONECTADO AL API ─────────────────── */
 function ApiSection() {
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === "ADMIN";
+  const integrationsQ = useSettings("integrations");
+  const upsertSetting = useUpsertSetting();
+  const tokensQ       = useApiTokens();
+  const createToken   = useCreateApiToken();
+  const revokeToken   = useRevokeApiToken();
+  const deleteToken   = useDeleteApiToken();
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [newToken, setNewToken]     = useState<{ name: string; token: string } | null>(null);
+  const [pbiUrl, setPbiUrl]         = useState("");
+  const [gaId, setGaId]             = useState("");
+  const [savedMsg, setSavedMsg]     = useState<{ key: string; ok: boolean } | null>(null);
+
+  // Hidratar valores desde Settings
+  React.useEffect(() => {
+    if (integrationsQ.data) {
+      setPbiUrl(getSetting(integrationsQ.data, "integrations.powerBiEmbedUrl") ?? "");
+      setGaId(getSetting(integrationsQ.data, "integrations.googleAnalyticsId") ?? "");
+    }
+  }, [integrationsQ.data]);
+
+  const saveSetting = async (key: string, value: string, isPublic: boolean) => {
+    try {
+      await upsertSetting.mutateAsync({
+        key,
+        value,
+        type: "STRING",
+        category: "integrations",
+        isPublic,
+      });
+      setSavedMsg({ key, ok: true });
+      setTimeout(() => setSavedMsg(null), 3000);
+    } catch {
+      setSavedMsg({ key, ok: false });
+    }
+  };
+
+  const tokens = tokensQ.data ?? [];
+  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
+
   return (
     <div className="space-y-6">
-      <h2 className="font-display font-bold text-lg text-white">API & Tokens de integración</h2>
+      <h2 className="font-display font-bold text-lg text-white">API · Power BI · Google Analytics</h2>
 
+      {/* Banner informativo */}
       <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
-        <p className="text-sm text-blue-300 font-medium mb-1">Integraciones planificadas</p>
+        <p className="text-sm text-blue-300 font-medium mb-1">Integraciones activas</p>
         <ul className="text-xs text-[#94A3B8] space-y-1 list-disc list-inside">
-          <li>Power BI — acceso directo a datasets de auditoría</li>
-          <li>Google Analytics — métricas de uso de la plataforma</li>
-          <li>Webhook saliente — notificaciones a sistemas externos</li>
+          <li>Power BI · acceso directo a 8 datasets vía X-API-Token</li>
+          <li>Google Analytics 4 · tracking pageviews + eventos custom</li>
+          <li>Power BI embed · iframe configurable desde aquí</li>
         </ul>
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between p-4 bg-[#1A2540] rounded-xl border border-[#2A3F6A]">
-          <div>
-            <p className="text-sm font-semibold text-white">Token de acceso API</p>
-            <p className="text-xs text-[#64748B]">Para integraciones externas y Power BI</p>
+      {/* ── Power BI embed URL ── */}
+      <div className="card-base p-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+            <Database className="w-4 h-4 text-amber-400"/>
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-white">Power BI · URL de embed</p>
+            <p className="text-xs text-[#64748B] mt-0.5">
+              Pega aquí la URL de Power BI "Publish to web" o "Embed in app"
+            </p>
+          </div>
+        </div>
+        <input
+          type="url"
+          value={pbiUrl}
+          onChange={e => setPbiUrl(e.target.value)}
+          placeholder="https://app.powerbi.com/view?r=eyJrIjoi..."
+          className="w-full bg-[#1A2540] border border-[#2A3F6A] rounded-lg px-3 py-2 text-sm text-white"
+          disabled={!isAdmin}
+        />
+        <div className="flex items-center gap-2">
           <button
-            disabled
-            className="px-3 py-1.5 text-xs rounded-lg bg-[#0D1526] border border-[#2A3F6A] text-[#475569] cursor-not-allowed"
+            onClick={() => saveSetting("integrations.powerBiEmbedUrl", pbiUrl, false)}
+            disabled={!isAdmin || upsertSetting.isPending}
+            className="px-3 py-1.5 rounded-lg bg-amber-500 text-[#0A111F] text-xs font-bold disabled:opacity-50"
           >
-            Generar token
+            Guardar
           </button>
+          {pbiUrl && (
+            <a
+              href="/indicadores/powerbi"
+              className="px-3 py-1.5 rounded-lg bg-[#1A2540] border border-[#2A3F6A] text-xs text-[#94A3B8] hover:text-white"
+            >
+              Ver embed →
+            </a>
+          )}
+          {savedMsg?.key === "integrations.powerBiEmbedUrl" && (
+            <span className={cn("text-xs", savedMsg.ok ? "text-emerald-400" : "text-red-400")}>
+              {savedMsg.ok ? "✓ Guardado" : "✗ Error"}
+            </span>
+          )}
         </div>
       </div>
 
-      <p className="text-xs text-[#475569] border border-[#1E2D4A] rounded-lg px-3 py-2">
-        ℹ️ La generación de tokens requerirá autenticación de administrador. Funcionalidad pendiente de conexión con el API.
-      </p>
+      {/* ── Google Analytics ID ── */}
+      <div className="card-base p-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+            <Activity className="w-4 h-4 text-blue-400"/>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-white">Google Analytics 4 · Measurement ID</p>
+            <p className="text-xs text-[#64748B] mt-0.5">
+              Formato G-XXXXXXXXXX (lo encuentras en Admin → Data Streams)
+            </p>
+          </div>
+        </div>
+        <input
+          type="text"
+          value={gaId}
+          onChange={e => setGaId(e.target.value)}
+          placeholder="G-XXXXXXXXXX"
+          pattern="^G-[A-Z0-9]+$"
+          className="w-full bg-[#1A2540] border border-[#2A3F6A] rounded-lg px-3 py-2 text-sm text-white font-mono"
+          disabled={!isAdmin}
+        />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => saveSetting("integrations.googleAnalyticsId", gaId, true)}
+            disabled={!isAdmin || upsertSetting.isPending}
+            className="px-3 py-1.5 rounded-lg bg-amber-500 text-[#0A111F] text-xs font-bold disabled:opacity-50"
+          >
+            Guardar
+          </button>
+          {savedMsg?.key === "integrations.googleAnalyticsId" && (
+            <span className={cn("text-xs", savedMsg.ok ? "text-emerald-400" : "text-red-400")}>
+              {savedMsg.ok ? "✓ Guardado · refrescá la página para activar" : "✗ Error"}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ── API Tokens ── */}
+      <div className="card-base p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Key className="w-4 h-4 text-amber-400"/> Tokens API · Power BI / scripts externos
+            </h3>
+            <p className="text-xs text-[#64748B] mt-0.5">
+              Tokens permanentes para servicios que no inician sesión humana
+            </p>
+          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            disabled={!isAdmin}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2",
+              isAdmin
+                ? "bg-amber-500 text-[#0A111F] hover:bg-amber-400"
+                : "bg-[#1A2540] text-[#475569] cursor-not-allowed border border-[#2A3F6A]"
+            )}
+          >
+            <Plus className="w-3.5 h-3.5"/> Generar token
+          </button>
+        </div>
+
+        {tokensQ.isLoading ? (
+          <div className="py-6 flex items-center justify-center text-[#475569]">
+            <Loader2 className="w-4 h-4 animate-spin"/>
+            <span className="ml-2 text-xs">Cargando...</span>
+          </div>
+        ) : tokens.length === 0 ? (
+          <div className="py-6 text-center text-xs text-[#475569]">
+            Sin tokens generados aún. Click en "Generar token" para crear uno.
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wider text-[#475569] border-b border-[#1E2D4A]">
+                <th className="text-left p-2">Nombre</th>
+                <th className="text-left p-2">Prefix</th>
+                <th className="text-left p-2">Scopes</th>
+                <th className="text-center p-2">Estado</th>
+                <th className="text-left p-2">Último uso</th>
+                <th className="text-center p-2 w-20">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tokens.map((t: ApiToken) => {
+                const scopesArr: string[] = (() => { try { return JSON.parse(t.scopes); } catch { return []; } })();
+                return (
+                  <tr key={t.id} className="border-b border-[#1E2D4A]/50">
+                    <td className="p-2 text-white">{t.name}</td>
+                    <td className="p-2 text-[#94A3B8] font-mono text-xs">{t.tokenPrefix}…</td>
+                    <td className="p-2">
+                      <div className="flex flex-wrap gap-1">
+                        {scopesArr.map(s => (
+                          <code key={s} className="text-[9px] px-1.5 py-0.5 rounded bg-[#1A2540] text-[#94A3B8] border border-[#2A3F6A]">
+                            {s}
+                          </code>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="p-2 text-center">
+                      <span className={cn(
+                        "text-[10px] px-2 py-0.5 rounded-full border",
+                        t.isActive
+                          ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                          : "bg-red-500/15 text-red-300 border-red-500/30"
+                      )}>
+                        {t.isActive ? "Activo" : "Revocado"}
+                      </span>
+                    </td>
+                    <td className="p-2 text-[#94A3B8] text-xs">
+                      {t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleString("es-CO") : "Nunca"}
+                    </td>
+                    <td className="p-2 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        {t.isActive && (
+                          <button
+                            onClick={async () => {
+                              if (confirm(`¿Revocar token "${t.name}"? Power BI dejará de tener acceso.`)) {
+                                await revokeToken.mutateAsync(t.id);
+                              }
+                            }}
+                            disabled={!isAdmin}
+                            className="p-1.5 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-orange-400 disabled:text-[#475569]"
+                            title="Revocar"
+                          >
+                            <Power className="w-3 h-3"/>
+                          </button>
+                        )}
+                        <button
+                          onClick={async () => {
+                            if (confirm(`¿Eliminar definitivamente el token "${t.name}"?`)) {
+                              await deleteToken.mutateAsync(t.id);
+                            }
+                          }}
+                          disabled={!isAdmin}
+                          className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400 disabled:text-[#475569]"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-3 h-3"/>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* ── Instrucciones Power BI Desktop ── */}
+      <div className="card-base p-4 bg-blue-500/5 border-blue-500/20">
+        <h3 className="text-sm font-semibold text-blue-300 mb-2">📊 Conectar Power BI Desktop</h3>
+        <ol className="text-xs text-[#94A3B8] space-y-2 list-decimal list-inside">
+          <li>En Power BI Desktop · <code className="text-amber-400">Obtener datos → Web</code></li>
+          <li>Elegí <code className="text-amber-400">Avanzado</code> e ingresá:
+            <div className="ml-4 mt-1 space-y-1">
+              <p>URL: <code className="text-emerald-300">{apiBase}/api/v1/powerbi/granjas</code></p>
+              <p>HTTP request header parameters:</p>
+              <p className="ml-3"><code className="text-emerald-300">X-API-Token = savicol_pk_XXXXXXXX</code></p>
+            </div>
+          </li>
+          <li>Cargar · Power BI ingiere el JSON automáticamente</li>
+          <li>Repetir para cada dataset: rutas, cedis, hallazgos-granjas, hallazgos-cedis, kpis, cronograma, summary</li>
+          <li>Programar refresh en Power BI Service para datos actualizados</li>
+        </ol>
+        <p className="text-[10px] text-[#475569] mt-3">
+          📚 Discovery endpoint: <code className="text-amber-400">GET /api/v1/powerbi/metadata</code> · lista todos los datasets disponibles
+        </p>
+      </div>
+
+      {/* Modal: Crear token */}
+      {showCreate && (
+        <CreateTokenModal
+          onClose={() => setShowCreate(false)}
+          onCreated={(result) => {
+            setShowCreate(false);
+            setNewToken({ name: result.name, token: (result as any).token });
+          }}
+          mutation={createToken}
+        />
+      )}
+
+      {/* Modal: Token recién creado (solo se ve una vez) */}
+      {newToken && (
+        <TokenRevealModal data={newToken} onClose={() => setNewToken(null)} />
+      )}
+    </div>
+  );
+}
+
+/* ── Modal: Crear API Token ──────────────────────────── */
+function CreateTokenModal({ onClose, onCreated, mutation }: {
+  onClose: () => void;
+  onCreated: (r: any) => void;
+  mutation: ReturnType<typeof useCreateApiToken>;
+}) {
+  const [name, setName]       = useState("");
+  const [scopes, setScopes]   = useState<string[]>(["powerbi:read"]);
+  const [expDays, setExpDays] = useState<number | "">("");
+  const [error, setError]     = useState("");
+
+  const SCOPE_OPTIONS = [
+    { id: "powerbi:read",     label: "Power BI · lectura de datasets" },
+    { id: "reports:read",     label: "Reports · descarga Excel/CSV" },
+    { id: "dashboards:read",  label: "Dashboards · KPIs ejecutivos" },
+    { id: "granjas:read",     label: "Granjas · solo este módulo" },
+    { id: "rutas:read",       label: "Rutas · solo este módulo" },
+    { id: "cedis:read",       label: "CEDIS · solo este módulo" },
+    { id: "hallazgos:read",   label: "Hallazgos · solo este módulo" },
+    { id: "all:read",         label: "Todo · lectura completa" },
+  ];
+
+  const submit = async () => {
+    setError("");
+    if (!name || name.length < 3) {
+      setError("Nombre debe tener al menos 3 caracteres");
+      return;
+    }
+    if (scopes.length === 0) {
+      setError("Elegí al menos un scope");
+      return;
+    }
+    try {
+      const t = await mutation.mutateAsync({
+        name,
+        scopes,
+        expiresInDays: expDays ? +expDays : undefined,
+      });
+      onCreated(t);
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? "Error al crear token");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display font-bold text-white text-lg flex items-center gap-2">
+            <Key className="w-4 h-4 text-amber-400"/> Generar API Token
+          </h3>
+          <button onClick={onClose} className="text-[#475569] hover:text-white"><X className="w-4 h-4"/></button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-[#64748B]">Nombre descriptivo *</label>
+            <input
+              type="text" value={name} onChange={e => setName(e.target.value)}
+              placeholder="Power BI Producción"
+              className="w-full bg-[#1A2540] border border-[#2A3F6A] rounded-lg px-3 py-2 text-sm text-white mt-1"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-[#64748B]">Permisos (scopes)</label>
+            <div className="grid grid-cols-1 gap-1 mt-1 max-h-40 overflow-y-auto bg-[#1A2540] border border-[#2A3F6A] rounded-lg p-2">
+              {SCOPE_OPTIONS.map(opt => (
+                <label key={opt.id} className="flex items-center gap-2 text-xs text-white py-1 cursor-pointer hover:bg-[#0D1526] rounded px-2">
+                  <input
+                    type="checkbox"
+                    checked={scopes.includes(opt.id)}
+                    onChange={e => {
+                      if (e.target.checked) setScopes([...scopes, opt.id]);
+                      else setScopes(scopes.filter(s => s !== opt.id));
+                    }}
+                  />
+                  <code className="text-amber-400 text-[10px]">{opt.id}</code>
+                  <span className="text-[#94A3B8] truncate">{opt.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-[#64748B]">Expiración (días · dejar vacío = sin expiración)</label>
+            <input
+              type="number" min="1" max="365"
+              value={expDays}
+              onChange={e => setExpDays(e.target.value ? +e.target.value : "")}
+              placeholder="Ej: 90"
+              className="w-full bg-[#1A2540] border border-[#2A3F6A] rounded-lg px-3 py-2 text-sm text-white mt-1"
+            />
+          </div>
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs rounded-lg px-3 py-2 flex items-center gap-2">
+              <AlertCircle className="w-3.5 h-3.5"/> {error}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} className="flex-1 px-3 py-2 rounded-lg bg-[#1A2540] border border-[#2A3F6A] text-[#94A3B8] text-sm">
+            Cancelar
+          </button>
+          <button
+            onClick={submit}
+            disabled={mutation.isPending}
+            className="flex-1 px-3 py-2 rounded-lg bg-amber-500 text-[#0A111F] text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {mutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Key className="w-3.5 h-3.5"/>}
+            Generar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Modal: Token recién creado ─────────────────────── */
+function TokenRevealModal({ data, onClose }: {
+  data: { name: string; token: string };
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-[#0D1526] border border-amber-500/40 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display font-bold text-white text-lg flex items-center gap-2">
+            <Key className="w-4 h-4 text-amber-400"/> Token generado · "{data.name}"
+          </h3>
+          <button onClick={onClose} className="text-[#475569] hover:text-white"><X className="w-4 h-4"/></button>
+        </div>
+
+        <div className="space-y-3">
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 text-xs text-amber-300 flex items-start gap-2">
+            <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0"/>
+            <span>
+              Esta es la <strong>ÚNICA vez</strong> que verás este token completo.
+              Si lo perdés, deberás generar uno nuevo. Cópialo y configurálo en Power BI ahora.
+            </span>
+          </div>
+
+          <div className="bg-[#1A2540] border border-[#2A3F6A] rounded-lg p-3">
+            <p className="text-[10px] text-[#64748B] uppercase tracking-wider mb-2">Token</p>
+            <p className="font-mono text-sm text-amber-400 break-all py-2">{data.token}</p>
+          </div>
+
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(data.token);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            className="w-full px-3 py-2 rounded-lg bg-amber-500 text-[#0A111F] text-sm font-bold flex items-center justify-center gap-2"
+          >
+            <Copy className="w-3.5 h-3.5"/>
+            {copied ? "¡Copiado!" : "Copiar token"}
+          </button>
+
+          <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg px-3 py-2 text-xs text-[#94A3B8]">
+            <p className="font-semibold text-blue-300 mb-1">Header HTTP en Power BI:</p>
+            <code className="block text-emerald-300 bg-[#070B14] rounded px-2 py-1 mt-1 text-[10px] break-all">
+              X-API-Token: {data.token}
+            </code>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

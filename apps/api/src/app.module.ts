@@ -15,6 +15,8 @@ import { EvidenciasModule } from "./evidencias/evidencias.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { SettingsModule } from "./settings/settings.module";
 import { ReportsModule } from "./reports/reports.module";
+import { ApiTokensModule } from "./api-tokens/api-tokens.module";
+import { PowerbiModule } from "./powerbi/powerbi.module";
 // RolesGuard se aplica a nivel de controller junto a JwtAuthGuard
 // (NestJS ejecuta global guards ANTES que controller guards · user no estaría
 // disponible si RolesGuard se aplica globalmente)
@@ -44,6 +46,8 @@ import { ReportsModule } from "./reports/reports.module";
     DashboardModule,
     SettingsModule,
     ReportsModule,
+    ApiTokensModule,   // global · provee ApiTokensService al guard híbrido
+    PowerbiModule,
   ],
   providers: [
     // Rate limiting global
