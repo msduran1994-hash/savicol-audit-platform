@@ -54,6 +54,21 @@ export class ReportsController {
     this.sendXlsx(res, "savicol-auditorias-cedis", buf);
   }
 
+  @Get("cronograma/excel")
+  async cronogramaExcel(
+    @Res() res: Response,
+    @Query("year")      year?: string,
+    @Query("auditorId") auditorId?: string,
+    @Query("status")    status?: string,
+    @Query("area")      area?: string,
+  ) {
+    const buf = await this.svc.exportCronogramaExcel({
+      year: year ? +year : undefined,
+      auditorId, status, area,
+    });
+    this.sendXlsx(res, "savicol-cronograma-ejecutivo", buf);
+  }
+
   // ── CSV ──
   @Get(":entity/csv")
   async csv(

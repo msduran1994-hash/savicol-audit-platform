@@ -216,6 +216,118 @@ export class ReportsService {
   }
 
   // ════════════════════════════════════════════════════════════════════════
+  //  EXCEL · CRONOGRAMA EJECUTIVO (con filtros)
+  // ════════════════════════════════════════════════════════════════════════
+  async exportCronogramaExcel(filters: {
+    year?: number;
+    auditorId?: string;
+    status?: string;
+    area?: string;
+  } = {}) {
+    const year = filters.year ?? 2026;
+    const where: any = { year };
+    if (filters.auditorId) where.auditorId = filters.auditorId;
+    if (filters.status)    where.status    = filters.status;
+    if (filters.area)      where.area      = filters.area;
+
+    const activities = await this.prisma.auditActivity.findMany({
+      where,
+      orderBy: [{ startDate: "asc" }, { item: "asc" }],
+    });
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Savicol Audit Platform";
+    wb.created = new Date();
+
+    // ── Sheet 1: Resumen ejecutivo ──
+    const wsResumen = wb.addWorksheet("Resumen Ejecutivo");
+    this.applyBrandHeader(wsResumen, `Cronograma Anual ${year} · Resumen Ejecutivo`, activities.length);
+
+    const total      = activities.length;
+    const completed  = activities.filter(a => a.status === "COMPLETED").length;
+    const inProgress = activities.filter(a => a.status === "IN_PROGRESS").length;
+    const overdue    = activities.filter(a => a.status === "OVERDUE").length;
+    const cumplim    = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    wsResumen.columns = [
+      { header: "Indicador", key: "kpi",   width: 35 },
+      { header: "Valor",     key: "value", width: 18 },
+    ];
+    this.styleHeader(wsResumen.getRow(3));
+    const kpiRows = [
+      { kpi: "Actividades planificadas",           value: total },
+      { kpi: "Actividades completadas",            value: completed },
+      { kpi: "Actividades en curso",               value: inProgress },
+      { kpi: "Actividades vencidas",               value: overdue },
+      { kpi: "% Cumplimiento general",             value: `${cumplim}%` },
+      { kpi: "Áreas auditadas (únicas)",           value: new Set(activities.map(a => a.area)).size },
+      { kpi: "Auditores activos",                  value: new Set(activities.map(a => a.auditorId)).size },
+    ];
+    kpiRows.forEach(r => wsResumen.addRow(r));
+
+    // ── Sheet 2: Detalle de actividades ──
+    const wsDet = wb.addWorksheet("Detalle Actividades");
+    this.applyBrandHeader(wsDet, `Cronograma ${year} · Detalle Operativo`, activities.length);
+    wsDet.columns = [
+      { header: "Ítem",         key: "item",         width: 8 },
+      { header: "Área",         key: "area",         width: 28 },
+      { header: "Actividad",    key: "activity",     width: 50 },
+      { header: "Tipo",         key: "activityType", width: 18 },
+      { header: "Auditor",      key: "auditorName",  width: 24 },
+      { header: "Inicio",       key: "startDate",    width: 12 },
+      { header: "Fin",          key: "endDate",      width: 12 },
+      { header: "Estado",       key: "status",       width: 14 },
+      { header: "Notas",        key: "notes",        width: 40 },
+    ];
+    this.styleHeader(wsDet.getRow(3));
+    activities.forEach(a => wsDet.addRow({
+      item:         a.item,
+      area:         a.area,
+      activity:     a.activity,
+      activityType: a.activityType,
+      auditorName:  a.auditorName,
+      startDate:    this.fmtDate(a.startDate),
+      endDate:      this.fmtDate(a.endDate),
+      status:       a.status,
+      notes:        a.notes ?? "",
+    }));
+    this.styleZebra(wsDet, 3);
+
+    // ── Sheet 3: Cumplimiento por auditor ──
+    const wsAud = wb.addWorksheet("Auditores");
+    this.applyBrandHeader(wsAud, "Cumplimiento por Auditor", 0);
+    wsAud.columns = [
+      { header: "Auditor",       key: "name",  width: 28 },
+      { header: "Asignadas",     key: "total", width: 12 },
+      { header: "Completadas",   key: "done",  width: 12 },
+      { header: "En Curso",      key: "wip",   width: 12 },
+      { header: "Vencidas",      key: "over",  width: 12 },
+      { header: "% Cumplimiento",key: "rate",  width: 14 },
+    ];
+    this.styleHeader(wsAud.getRow(3));
+    const auditorMap: Record<string, { name: string; total: number; done: number; wip: number; over: number }> = {};
+    for (const a of activities) {
+      if (!auditorMap[a.auditorId]) {
+        auditorMap[a.auditorId] = { name: a.auditorName, total: 0, done: 0, wip: 0, over: 0 };
+      }
+      auditorMap[a.auditorId].total += 1;
+      if (a.status === "COMPLETED")   auditorMap[a.auditorId].done += 1;
+      if (a.status === "IN_PROGRESS") auditorMap[a.auditorId].wip  += 1;
+      if (a.status === "OVERDUE")     auditorMap[a.auditorId].over += 1;
+    }
+    Object.values(auditorMap).forEach(a => wsAud.addRow({
+      name:  a.name,
+      total: a.total,
+      done:  a.done,
+      wip:   a.wip,
+      over:  a.over,
+      rate:  a.total > 0 ? `${Math.round((a.done / a.total) * 100)}%` : "0%",
+    }));
+
+    return wb.xlsx.writeBuffer() as unknown as Buffer;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
   //  CSV · genérico para cualquier endpoint
   // ════════════════════════════════════════════════════════════════════════
   async exportGenericCSV(entity: "granjas" | "rutas" | "cedis" | "hallazgos" | "users") {
