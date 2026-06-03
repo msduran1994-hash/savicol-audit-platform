@@ -6,6 +6,7 @@ import {
   UsersService, CreateUserDto, UpdateUserDto,
 } from "./users.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { Roles } from "../auth/decorators/roles.decorator";
 
 interface AuthRequest extends Request {
   user: { id: string; email: string; role: string; name: string };
@@ -31,8 +32,9 @@ export class UsersController {
     return this.svc.findOne(id);
   }
 
-  // ── CREAR ──
+  // ── CREAR ── (solo ADMIN)
   @Post()
+  @Roles("ADMIN")
   create(@Body() dto: CreateUserDto, @Req() req: AuthRequest) {
     return this.svc.create(dto, req.user.role);
   }
@@ -48,6 +50,7 @@ export class UsersController {
   }
 
   @Patch(":id/role")
+  @Roles("ADMIN")
   updateRole(
     @Param("id") id: string,
     @Body("role") role: string,
@@ -57,12 +60,14 @@ export class UsersController {
   }
 
   @Patch(":id/toggle-active")
+  @Roles("ADMIN")
   toggleActive(@Param("id") id: string, @Req() req: AuthRequest) {
     return this.svc.toggleActive(id, req.user.role);
   }
 
   // ── PASSWORD ──
   @Post(":id/reset-password")
+  @Roles("ADMIN")
   @HttpCode(HttpStatus.OK)
   resetPassword(@Param("id") id: string, @Req() req: AuthRequest) {
     return this.svc.resetPassword(id, req.user.role);
@@ -80,6 +85,7 @@ export class UsersController {
 
   // ── ELIMINAR ──
   @Delete(":id")
+  @Roles("ADMIN")
   @HttpCode(HttpStatus.OK)
   remove(@Param("id") id: string, @Req() req: AuthRequest) {
     return this.svc.remove(id, req.user.id, req.user.role);
