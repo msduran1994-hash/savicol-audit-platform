@@ -112,6 +112,25 @@ export default function CedisDashboardPage() {
       />
 
       <div className="flex-1 p-6 space-y-6">
+        {/* Banner: link al nuevo dashboard ejecutivo CEDIS */}
+        <a
+          href="/cedis/ejecutivo"
+          className="card-base p-4 flex items-center justify-between bg-gradient-to-r from-purple-500/10 via-emerald-500/5 to-transparent border-emerald-500/30 hover:border-amber-500/40 transition-all group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-purple-500/30 to-emerald-500/30 border border-emerald-500/40 flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-emerald-400"/>
+            </div>
+            <div>
+              <p className="font-display font-bold text-white text-sm">Dashboard Ejecutivo Avanzado · CEDIS</p>
+              <p className="text-xs text-[#94A3B8] mt-0.5">
+                15 KPIs · 6 charts · Heatmap subtema×CEDI · Análisis IA · Semaforización · Trazabilidad
+              </p>
+            </div>
+          </div>
+          <span className="text-amber-400 text-sm font-semibold group-hover:translate-x-1 transition-transform">Ver dashboard →</span>
+        </a>
+
         {/* Banner */}
         <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-[#0A2D1F] via-[#0F4A3A] to-[#0A2D1F] border border-emerald-900/40 px-6 py-5">
           <div className="absolute right-0 top-0 bottom-0 w-48 opacity-[0.08]"

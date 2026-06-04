@@ -517,6 +517,7 @@ model AuditoriaCedi {
   auditorNombre            String
   administrador            String
   tipoRiesgo               String
+  subtema                  String?                 // Inventario · Caja · Cartera · Logística · Bioseguridad · Infraestructura · Procedimientos
   observacionRiesgo        String
   observacionInventario    String?
   observacionCaja          String?
@@ -550,6 +551,7 @@ model HallazgoCedi {
   cediId            String
   titulo            String
   categoria         String
+  subtema           String?                       // Inventario · Caja · Cartera · Logística · Bioseguridad · Infraestructura · Procedimientos
   subItem           String?
   descripcion       String
   tipoRiesgo        String

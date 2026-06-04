@@ -54,6 +54,18 @@ export class ReportsController {
     this.sendXlsx(res, "savicol-auditorias-cedis", buf);
   }
 
+  @Get("cedis/hallazgos/excel")
+  async cedisHallazgosExcel(
+    @Res() res: Response,
+    @Query("cediId")     cediId?: string,
+    @Query("subtema")    subtema?: string,
+    @Query("criticidad") criticidad?: string,
+    @Query("estado")     estado?: string,
+  ) {
+    const buf = await this.svc.exportCedisHallazgosExcel({ cediId, subtema, criticidad, estado });
+    this.sendXlsx(res, "savicol-cedis-hallazgos", buf);
+  }
+
   @Get("cronograma/excel")
   async cronogramaExcel(
     @Res() res: Response,

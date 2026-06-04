@@ -86,6 +86,25 @@ export default function IndicadoresPage() {
       />
 
       <div className="flex-1 p-6 space-y-6">
+        {/* Banner · Informe Ejecutivo Gerencial (top of pyramid) */}
+        <a
+          href="/indicadores/gerencial"
+          className="card-base p-4 flex items-center justify-between bg-gradient-to-r from-amber-500/15 via-purple-500/10 to-transparent border-amber-500/40 hover:border-amber-500/60 transition-all group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500/30 to-purple-500/30 border border-amber-500/40 flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-amber-400"/>
+            </div>
+            <div>
+              <p className="font-display font-bold text-white text-sm">Informe Ejecutivo Gerencial · Vista C-Level</p>
+              <p className="text-xs text-[#94A3B8] mt-0.5">
+                Agrega 4 workspaces · KPIs estratégicos · Resumen IA · Drill-through a cada dashboard
+              </p>
+            </div>
+          </div>
+          <span className="text-amber-400 text-sm font-semibold group-hover:translate-x-1 transition-transform">Ver informe →</span>
+        </a>
+
         {/* Banner · Dashboard Ejecutivo avanzado */}
         <a
           href="/indicadores/ejecutivo"

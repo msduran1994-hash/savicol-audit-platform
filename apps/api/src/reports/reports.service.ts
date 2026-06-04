@@ -328,6 +328,68 @@ export class ReportsService {
   }
 
   // ════════════════════════════════════════════════════════════════════════
+  //  EXCEL · CEDIS · Hallazgos detallados con Subtema
+  // ════════════════════════════════════════════════════════════════════════
+  async exportCedisHallazgosExcel(filters: {
+    cediId?: string;
+    subtema?: string;
+    criticidad?: string;
+    estado?: string;
+  } = {}) {
+    const where: any = {};
+    if (filters.cediId)     where.cediId     = filters.cediId;
+    if (filters.subtema)    where.subtema    = filters.subtema;
+    if (filters.criticidad) where.criticidad = filters.criticidad;
+    if (filters.estado)     where.estado     = filters.estado;
+
+    const items = await this.prisma.hallazgoCedi.findMany({
+      where,
+      include: { cedi: { select: { codigo: true, nombre: true, ciudad: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Hallazgos CEDI");
+    this.applyBrandHeader(ws, "Hallazgos · CEDIS", items.length);
+
+    ws.columns = [
+      { header: "CEDI",            key: "cedi",       width: 26 },
+      { header: "Ciudad",          key: "ciudad",     width: 16 },
+      { header: "Título",          key: "titulo",     width: 40 },
+      { header: "Subtema",         key: "subtema",    width: 16 },
+      { header: "Categoría",       key: "categoria",  width: 18 },
+      { header: "Sub-ítem",        key: "subItem",    width: 24 },
+      { header: "Tipo riesgo",     key: "tipoRiesgo", width: 14 },
+      { header: "Criticidad",      key: "criticidad", width: 12 },
+      { header: "Estado",          key: "estado",     width: 16 },
+      { header: "Responsable",     key: "responsable",width: 22 },
+      { header: "Fecha compromiso",key: "fechaComp",  width: 14 },
+      { header: "% Avance",        key: "avance",     width: 10 },
+      { header: "Reincidente",     key: "reincidente",width: 12 },
+      { header: "Descripción",     key: "descripcion",width: 50 },
+    ];
+    this.styleHeader(ws.getRow(3));
+    items.forEach(h => ws.addRow({
+      cedi:        h.cedi?.nombre ?? "—",
+      ciudad:      h.cedi?.ciudad ?? "—",
+      titulo:      h.titulo,
+      subtema:     h.subtema ?? "—",
+      categoria:   h.categoria,
+      subItem:     h.subItem ?? "—",
+      tipoRiesgo:  h.tipoRiesgo,
+      criticidad:  h.criticidad,
+      estado:      h.estado,
+      responsable: h.responsable ?? "—",
+      fechaComp:   h.fechaCompromiso ? this.fmtDate(h.fechaCompromiso) : "—",
+      avance:      `${h.porcentajeAvance ?? 0}%`,
+      reincidente: h.reincidente ? "Sí" : "No",
+      descripcion: h.descripcion,
+    }));
+    this.styleZebra(ws, 3);
+    return wb.xlsx.writeBuffer() as unknown as Buffer;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
   //  CSV · genérico para cualquier endpoint
   // ════════════════════════════════════════════════════════════════════════
   async exportGenericCSV(entity: "granjas" | "rutas" | "cedis" | "hallazgos" | "users") {

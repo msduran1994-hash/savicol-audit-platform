@@ -251,41 +251,56 @@ async function main() {
   console.log(`✅ ${accionesData.length} acciones de cumplimiento demo`);
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 9. CEDIS demo + auditorías + hallazgos
+  // 9. CEDIS OFICIALES Savicol (5 reales · isDemo:false)
   // ─────────────────────────────────────────────────────────────────────────
+  // Si existieran CEDIS demo de versiones anteriores, los limpiamos para evitar
+  // que aparezcan junto a los oficiales en la UI.
+  await prisma.cedi.deleteMany({ where: { isDemo: true } }).catch(() => {});
+
   const cedisData = [
-    { id: "DEMO_CED_001", codigo: "CEDI-BOG-01", nombre: "CEDI Bogotá Norte",     ciudad: "Bogotá",      region: "Cundinamarca",     administrador: "Camilo Andrés Rojas",     telefono: "+57 311 100 1001", direccion: "Calle 80 #45-22",   capacidad: 8500 },
-    { id: "DEMO_CED_002", codigo: "CEDI-MED-01", nombre: "CEDI Medellín Central", ciudad: "Medellín",    region: "Antioquia",         administrador: "Patricia Elena Ramos",    telefono: "+57 314 200 2002", direccion: "Cra 50 #65-30",     capacidad: 7200 },
-    { id: "DEMO_CED_003", codigo: "CEDI-CAL-01", nombre: "CEDI Cali Sur",         ciudad: "Cali",        region: "Valle del Cauca",   administrador: "Ricardo Alonso Pérez",    telefono: "+57 318 300 3003", direccion: "Av. Roosevelt #14", capacidad: 6500 },
-    { id: "DEMO_CED_004", codigo: "CEDI-BUC-01", nombre: "CEDI Bucaramanga",      ciudad: "Bucaramanga", region: "Santander",         administrador: "Adriana Lucía Sandoval",  telefono: "+57 313 400 4004", direccion: "Cl 56 #21-08",      capacidad: 4800 },
-    { id: "DEMO_CED_005", codigo: "CEDI-PER-01", nombre: "CEDI Pereira",          ciudad: "Pereira",     region: "Risaralda",         administrador: "Mauricio Andrés Cano",    telefono: "+57 320 500 5005", direccion: "Av. Circunvalar 28",capacidad: 3900 },
+    { id: "CEDI-CODABAS", codigo: "CEDI-CODABAS", nombre: "CEDI Codabas",        ciudad: "Bogotá",        region: "Cundinamarca",  administrador: "—", telefono: "—", direccion: "—", capacidad: 0 },
+    { id: "CEDI-TUNJA",   codigo: "CEDI-TUNJA",   nombre: "CEDI Tunja",          ciudad: "Tunja",         region: "Boyacá",         administrador: "—", telefono: "—", direccion: "—", capacidad: 0 },
+    { id: "CEDI-GIRARDOT",codigo: "CEDI-GIRARDOT",nombre: "CEDI Girardot",       ciudad: "Girardot",      region: "Cundinamarca",  administrador: "—", telefono: "—", direccion: "—", capacidad: 0 },
+    { id: "CEDI-VILLAVO", codigo: "CEDI-VILLAVO", nombre: "CEDI Villavicencio",  ciudad: "Villavicencio", region: "Meta",           administrador: "—", telefono: "—", direccion: "—", capacidad: 0 },
+    { id: "CEDI-PRINCIPAL",codigo: "CEDI-PRINCIPAL",nombre: "Principal Savicol", ciudad: "Bogotá",        region: "Cundinamarca",  administrador: "—", telefono: "—", direccion: "—", capacidad: 0 },
   ];
   for (const c of cedisData) {
-    await prisma.cedi.upsert({ where: { id: c.id }, create: { ...(c as any), isDemo: true }, update: {} });
+    await prisma.cedi.upsert({
+      where: { id: c.id },
+      create: { ...(c as any), activo: true, isDemo: false },
+      update: { nombre: c.nombre, codigo: c.codigo, ciudad: c.ciudad, region: c.region, activo: true, isDemo: false },
+    });
   }
-  console.log(`✅ ${cedisData.length} CEDIS demo`);
+  console.log(`✅ ${cedisData.length} CEDIS oficiales (Codabas, Tunja, Girardot, Villavicencio, Principal Savicol)`);
 
+  // Limpiar auditorías y hallazgos demo previos (apuntaban a CEDIS que ya no existen)
+  await prisma.hallazgoCedi.deleteMany({ where: { isDemo: true } }).catch(() => {});
+  await prisma.auditoriaCedi.deleteMany({ where: { isDemo: true } }).catch(() => {});
+
+  // Auditorías de ejemplo asociadas a los nuevos CEDIS oficiales (con subtema)
   const auditoriasCediData = [
-    { id: "DEMO_AUC_001", cediId: "DEMO_CED_001", fechaVisita: new Date("2026-05-10"), auditorId: "MD", auditorNombre: "Michael Duran",     administrador: "Camilo Andrés Rojas",   tipoRiesgo: "OPERATIVO",   observacionRiesgo: "Inconsistencias en inventario físico vs sistema",                                  observacionInventario: "Diferencias de 0.3% en stock de producto. Aceptable pero requiere ajuste.", observacionCaja: "Caja General correctamente cuadrada.", criticidad: "MEDIA",   estado: "EN_PLAN" },
-    { id: "DEMO_AUC_002", cediId: "DEMO_CED_003", fechaVisita: new Date("2026-05-18"), auditorId: "KH", auditorNombre: "Kerling Hernandez", administrador: "Ricardo Alonso Pérez",  tipoRiesgo: "CONTAGIO",    observacionRiesgo: "Pediluvio sin desinfectante adecuado durante 3 días",                              observacionBioseguridad: "Falla crítica en pediluvio. EPP del personal en buen estado.", observacionInfraestructura: "Cuartos fríos a temperatura correcta.", criticidad: "CRITICA", estado: "ABIERTO" },
-    { id: "DEMO_AUC_003", cediId: "DEMO_CED_002", fechaVisita: new Date("2026-05-22"), auditorId: "JG", auditorNombre: "Jaider Gonzalez",   administrador: "Patricia Elena Ramos",  tipoRiesgo: "FINANCIERO",  observacionRiesgo: "Cartera con vencidos a más de 60 días por COP 2.3M",                              observacionCartera: "Vencimientos por edades requieren plan de cobranza urgente.", observacionCaja: "Caja Vehículos con diferencia de COP 45.000.", criticidad: "ALTA",    estado: "EN_VERIFICACION" },
-    { id: "DEMO_AUC_004", cediId: "DEMO_CED_004", fechaVisita: new Date("2026-05-25"), auditorId: "HB", auditorNombre: "Hilary Basto",      administrador: "Adriana Lucía Sandoval",tipoRiesgo: "REPUTACIONAL",observacionRiesgo: "Encuestas cliente ruta muestran baja satisfacción (62%)",                          observacionLogistica: "Tiempos de entrega 22% por encima del estándar. Devoluciones en aumento.", criticidad: "ALTA",    estado: "EN_PLAN" },
+    { id: "DEMO_AUC_001", cediId: "CEDI-PRINCIPAL",fechaVisita: new Date("2026-05-10"), auditorId: "MD", auditorNombre: "Michael Duran",     administrador: "Principal Savicol",    tipoRiesgo: "OPERATIVO",   subtema: "Inventario",       observacionRiesgo: "Inconsistencias en inventario físico vs sistema",          observacionInventario: "Diferencias 0.3% requieren ajuste.",  criticidad: "MEDIA",   estado: "EN_PLAN" },
+    { id: "DEMO_AUC_002", cediId: "CEDI-CODABAS",  fechaVisita: new Date("2026-05-18"), auditorId: "KH", auditorNombre: "Kerling Hernandez", administrador: "CEDI Codabas",         tipoRiesgo: "CONTAGIO",    subtema: "Bioseguridad",     observacionRiesgo: "Pediluvio sin desinfectante 3 días",                       observacionBioseguridad: "Falla crítica en pediluvio.",       criticidad: "CRITICA", estado: "ABIERTO" },
+    { id: "DEMO_AUC_003", cediId: "CEDI-TUNJA",    fechaVisita: new Date("2026-05-22"), auditorId: "JG", auditorNombre: "Jaider Gonzalez",   administrador: "CEDI Tunja",           tipoRiesgo: "FINANCIERO",  subtema: "Cartera",          observacionRiesgo: "Cartera vencida > 60 días por COP 2.3M",                   observacionCartera: "Plan de cobranza urgente.",              criticidad: "ALTA",    estado: "EN_VERIFICACION" },
+    { id: "DEMO_AUC_004", cediId: "CEDI-VILLAVO",  fechaVisita: new Date("2026-05-25"), auditorId: "HB", auditorNombre: "Hilary Basto",      administrador: "CEDI Villavicencio",   tipoRiesgo: "REPUTACIONAL",subtema: "Logística",        observacionRiesgo: "Baja satisfacción cliente ruta (62%)",                     observacionLogistica: "Tiempos entrega +22% vs estándar.",    criticidad: "ALTA",    estado: "EN_PLAN" },
+    { id: "DEMO_AUC_005", cediId: "CEDI-GIRARDOT", fechaVisita: new Date("2026-05-28"), auditorId: "AT", auditorNombre: "Alexander Tellez",  administrador: "CEDI Girardot",        tipoRiesgo: "OPERATIVO",   subtema: "Procedimientos",   observacionRiesgo: "Procedimientos sin firma de responsable en 5 de 12 actas",  observacionProcedimientos: "Re-entrenar al equipo administrativo.", criticidad: "MEDIA", estado: "ABIERTO" },
   ];
   for (const a of auditoriasCediData) {
     await prisma.auditoriaCedi.upsert({ where: { id: a.id }, create: { ...(a as any), isDemo: true }, update: {} });
   }
-  console.log(`✅ ${auditoriasCediData.length} auditorías CEDIS demo`);
+  console.log(`✅ ${auditoriasCediData.length} auditorías CEDIS demo (con subtema)`);
 
   const hallazgosCediData = [
-    { id: "DEMO_HAC_001", auditoriaId: "DEMO_AUC_002", cediId: "DEMO_CED_003", titulo: "Pediluvio inoperante 3 días",        categoria: "BIOSEGURIDAD",   subItem: "Pediluvio",                    descripcion: "Pediluvio sin solución desinfectante. Riesgo de contagio cruzado.", tipoRiesgo: "CONTAGIO",     criticidad: "CRITICA", estado: "ABIERTO",         recomendacionIA: "Reabastecer solución de yodo activo al 2% inmediatamente.", responsable: "Ricardo Alonso Pérez",  fechaCompromiso: new Date("2026-06-01"), porcentajeAvance: 25, reincidente: true },
-    { id: "DEMO_HAC_002", auditoriaId: "DEMO_AUC_003", cediId: "DEMO_CED_002", titulo: "Cartera vencida > 60 días",          categoria: "CARTERA",        subItem: "Vencimiento por edades",       descripcion: "COP 2.300.000 en cartera vencida a más de 60 días.",               tipoRiesgo: "FINANCIERO",   criticidad: "ALTA",    estado: "EN_VERIFICACION", recomendacionIA: "Activar plan de cobranza estratégico con 3 niveles de seguimiento.", responsable: "Patricia Elena Ramos",  fechaCompromiso: new Date("2026-06-10"), porcentajeAvance: 60, reincidente: false },
-    { id: "DEMO_HAC_003", auditoriaId: "DEMO_AUC_004", cediId: "DEMO_CED_004", titulo: "Tiempos de entrega +22%",            categoria: "LOGISTICA",      subItem: "Tiempos Entrega",              descripcion: "Promedio de entrega 22% por encima del estándar Savicol.",          tipoRiesgo: "REPUTACIONAL", criticidad: "ALTA",    estado: "EN_PLAN",         recomendacionIA: "Replanificar rutas. Capacitación a conductores.",                       responsable: "Adriana Lucía Sandoval", fechaCompromiso: new Date("2026-06-15"), porcentajeAvance: 40, reincidente: false },
-    { id: "DEMO_HAC_004", auditoriaId: "DEMO_AUC_001", cediId: "DEMO_CED_001", titulo: "Diferencia inventario 0.3%",          categoria: "INVENTARIO",     subItem: "Inventario físico producto",   descripcion: "Diferencia físico vs sistema dentro del margen aceptable.",         tipoRiesgo: "OPERATIVO",    criticidad: "MEDIA",   estado: "EN_PLAN",         recomendacionIA: "Ajuste contable inmediato + análisis de causa raíz.",                  responsable: "Camilo Andrés Rojas",   fechaCompromiso: new Date("2026-06-05"), porcentajeAvance: 80, reincidente: false },
+    { id: "DEMO_HAC_001", auditoriaId: "DEMO_AUC_002", cediId: "CEDI-CODABAS",   titulo: "Pediluvio inoperante 3 días",        categoria: "BIOSEGURIDAD",  subtema: "Bioseguridad",   subItem: "Pediluvio",              descripcion: "Pediluvio sin solución desinfectante. Riesgo de contagio cruzado.", tipoRiesgo: "CONTAGIO",     criticidad: "CRITICA", estado: "ABIERTO",         recomendacionIA: "Reabastecer solución de yodo activo al 2% inmediatamente.", responsable: "CEDI Codabas",         fechaCompromiso: new Date("2026-06-01"), porcentajeAvance: 25, reincidente: true },
+    { id: "DEMO_HAC_002", auditoriaId: "DEMO_AUC_003", cediId: "CEDI-TUNJA",     titulo: "Cartera vencida > 60 días",          categoria: "CARTERA",       subtema: "Cartera",        subItem: "Vencimiento por edades", descripcion: "COP 2.300.000 en cartera vencida.",                                 tipoRiesgo: "FINANCIERO",   criticidad: "ALTA",    estado: "EN_VERIFICACION", recomendacionIA: "Plan de cobranza estratégico 3 niveles.",                    responsable: "CEDI Tunja",            fechaCompromiso: new Date("2026-06-10"), porcentajeAvance: 60, reincidente: false },
+    { id: "DEMO_HAC_003", auditoriaId: "DEMO_AUC_004", cediId: "CEDI-VILLAVO",   titulo: "Tiempos de entrega +22%",            categoria: "LOGISTICA",     subtema: "Logística",      subItem: "Tiempos Entrega",        descripcion: "Promedio entrega 22% sobre estándar Savicol.",                       tipoRiesgo: "REPUTACIONAL", criticidad: "ALTA",    estado: "EN_PLAN",         recomendacionIA: "Replanificar rutas. Capacitación conductores.",              responsable: "CEDI Villavicencio",    fechaCompromiso: new Date("2026-06-15"), porcentajeAvance: 40, reincidente: false },
+    { id: "DEMO_HAC_004", auditoriaId: "DEMO_AUC_001", cediId: "CEDI-PRINCIPAL", titulo: "Diferencia inventario 0.3%",         categoria: "INVENTARIO",    subtema: "Inventario",     subItem: "Inventario físico",      descripcion: "Diferencia físico vs sistema dentro del margen aceptable.",         tipoRiesgo: "OPERATIVO",    criticidad: "MEDIA",   estado: "EN_PLAN",         recomendacionIA: "Ajuste contable + análisis causa raíz.",                     responsable: "Principal Savicol",     fechaCompromiso: new Date("2026-06-05"), porcentajeAvance: 80, reincidente: false },
+    { id: "DEMO_HAC_005", auditoriaId: "DEMO_AUC_005", cediId: "CEDI-GIRARDOT",  titulo: "Procedimientos sin firmar",          categoria: "PROCEDIMIENTOS",subtema: "Procedimientos", subItem: "Actas con firma",        descripcion: "5 de 12 actas sin firma de responsable verificador.",                tipoRiesgo: "OPERATIVO",    criticidad: "MEDIA",   estado: "ABIERTO",         recomendacionIA: "Re-entrenar al equipo administrativo en cierre de actas.",   responsable: "CEDI Girardot",         fechaCompromiso: new Date("2026-06-20"), porcentajeAvance: 10, reincidente: false },
   ];
   for (const h of hallazgosCediData) {
     await prisma.hallazgoCedi.upsert({ where: { id: h.id }, create: { ...(h as any), isDemo: true }, update: {} });
   }
-  console.log(`✅ ${hallazgosCediData.length} hallazgos CEDIS demo`);
+  console.log(`✅ ${hallazgosCediData.length} hallazgos CEDIS demo (con subtema)`);
 
   console.log("\n🌱 Seed completado.\n");
   console.log(`   Login: ${adminEmail}`);
