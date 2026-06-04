@@ -11,7 +11,7 @@ import { AUDITORS } from "@/lib/constants";
 import type { AuditoriaCedi } from "@/lib/cedis.types";
 import {
   Plus, Search, Filter, RefreshCw, Download,
-  Warehouse, Edit2, Trash2, X, ChevronDown, ChevronUp,
+  Warehouse, Edit2, Trash2, X, ChevronDown, ChevronUp, AlertCircle, Loader2,
 } from "lucide-react";
 
 export default function ConsolidadoCedisPage() {
@@ -27,6 +27,7 @@ export default function ConsolidadoCedisPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AuditoriaCedi | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   return (
     <div className="flex flex-col min-h-full">
@@ -53,7 +54,7 @@ export default function ConsolidadoCedisPage() {
 
             <button onClick={resetFilters} className="btn-ghost text-xs"><RefreshCw className="w-3.5 h-3.5"/>Limpiar</button>
             <button disabled className="btn-secondary text-xs opacity-60 cursor-not-allowed"><Download className="w-3.5 h-3.5"/>Exportar</button>
-            <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary text-xs ml-auto bg-emerald-500 hover:bg-emerald-600">
+            <button onClick={() => { setSaveError(null); setEditing(null); setModalOpen(true); }} className="btn-primary text-xs ml-auto bg-emerald-500 hover:bg-emerald-600">
               <Plus className="w-3.5 h-3.5"/>Nueva Auditoría
             </button>
           </div>
@@ -100,10 +101,14 @@ export default function ConsolidadoCedisPage() {
                       <p className="text-xs text-[#94A3B8] mt-0.5">Auditor: {a.auditorNombre}</p>
                     </div>
                     <div className="flex gap-1">
-                      <button onClick={() => { setEditing(a); setModalOpen(true); }} className="p-1.5 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar">
+                      <button onClick={() => { setSaveError(null); setEditing(a); setModalOpen(true); }} className="p-1.5 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar">
                         <Edit2 className="w-3.5 h-3.5"/>
                       </button>
-                      <button onClick={() => { if (confirm(`¿Eliminar auditoría de ${a.cediNombre}?`)) removeAud(a.id); }}
+                      <button onClick={async () => {
+                        if (!confirm(`¿Eliminar auditoría de ${a.cediNombre}?`)) return;
+                        try { await removeAud(a.id); }
+                        catch (e: any) { alert("Error al eliminar: " + (e?.response?.data?.message ?? e?.message ?? "desconocido")); }
+                      }}
                               className="p-1.5 rounded hover:bg-red-950/30 text-[#94A3B8] hover:text-red-400" title="Eliminar">
                         <Trash2 className="w-3.5 h-3.5"/>
                       </button>
@@ -147,11 +152,29 @@ export default function ConsolidadoCedisPage() {
         <AuditoriaCediModal
           item={editing}
           cedis={cedis}
-          onClose={() => setModalOpen(false)}
-          onSave={(a) => {
-            if (editing) updateAud(editing.id, a);
-            else         addAuditoria(a as any);
-            setModalOpen(false);
+          error={saveError}
+          onClose={() => { setModalOpen(false); setSaveError(null); }}
+          onSave={async (a) => {
+            setSaveError(null);
+            try {
+              // Inyectar cediNombre desde el catálogo si vino vacío
+              const c = cedis.find(x => x.id === a.cediId);
+              const enriched = { ...a, cediNombre: c?.nombre ?? a.cediNombre ?? "" };
+              if (editing) await updateAud(editing.id, enriched);
+              else         await addAuditoria(enriched as any);
+              setModalOpen(false);
+            } catch (e: any) {
+              const raw = e?.response?.data;
+              let msg = editing ? "Error al actualizar la auditoría" : "Error al guardar la auditoría";
+              if (raw) {
+                if (typeof raw === "string") msg = raw;
+                else if (raw.message) msg = Array.isArray(raw.message) ? raw.message.join(" · ") : String(raw.message);
+                else if (raw.error)   msg = String(raw.error);
+              } else if (e?.message) msg = e.message;
+              if (e?.response?.status) msg = `HTTP ${e.response.status} · ${msg}`;
+              setSaveError(msg);
+              console.error("[CEDIS Consolidado] error:", e);
+            }
           }}
         />
       )}
@@ -172,11 +195,12 @@ function Sel({ value, onChange, placeholder, options }: {
 }
 
 // ─── MODAL CON 7 SECCIONES EXPANDIBLES ───────────────────────────────────────
-function AuditoriaCediModal({ item, cedis, onClose, onSave }: {
+function AuditoriaCediModal({ item, cedis, onClose, onSave, error }: {
   item: AuditoriaCedi | null;
   cedis: any[];
   onClose: () => void;
-  onSave: (a: Partial<AuditoriaCedi>) => void;
+  onSave: (a: Partial<AuditoriaCedi>) => Promise<void> | void;
+  error?: string | null;
 }) {
   const [form, setForm] = useState<Partial<AuditoriaCedi>>(item ?? {
     fechaVisita: new Date().toISOString().slice(0, 10),
@@ -189,6 +213,8 @@ function AuditoriaCediModal({ item, cedis, onClose, onSave }: {
     criticidad: "Media",
     estado: "Abierto",
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(["Inventario"]));
   const toggle = (s: string) => setOpenSections(prev => {
@@ -197,10 +223,37 @@ function AuditoriaCediModal({ item, cedis, onClose, onSave }: {
     return next;
   });
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.cediId) return;
-    onSave(form);
+    setValidationError(null);
+
+    if (cedis.length === 0) {
+      setValidationError("No hay CEDIS registrados. Crea uno primero en /cedis o el seed.");
+      return;
+    }
+    if (!form.cediId) {
+      setValidationError("Selecciona un CEDI del listado");
+      return;
+    }
+    if (!form.auditorId) {
+      setValidationError("Selecciona un auditor");
+      return;
+    }
+    if (!form.observacionRiesgo?.trim()) {
+      setValidationError("La observación general del riesgo es obligatoria");
+      return;
+    }
+
+    const payload: Partial<AuditoriaCedi> = {
+      ...form,
+      observacionRiesgo: form.observacionRiesgo.trim(),
+      administrador: form.administrador?.trim() || "—",
+    };
+
+    setSubmitting(true);
+    try { await onSave(payload); }
+    catch { /* error visible en banner padre */ }
+    finally { setSubmitting(false); }
   }
 
   return (
@@ -295,11 +348,22 @@ function AuditoriaCediModal({ item, cedis, onClose, onSave }: {
           })}
         </form>
 
+        {(validationError || error) && (
+          <div className="mx-6 mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start gap-2">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>
+            <span>{validationError ?? error}</span>
+          </div>
+        )}
+
         <footer className="flex items-center justify-between px-6 py-3 border-t border-[#1E2D4A]">
           <p className="text-xs text-[#475569]">{item ? `ID: ${item.id}` : "Nuevo registro"}</p>
           <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="btn-ghost text-xs">Cancelar</button>
-            <button type="submit" onClick={submit} className="btn-primary text-xs bg-emerald-500 hover:bg-emerald-600">{item ? "Guardar" : "Crear auditoría"}</button>
+            <button type="button" onClick={onClose} className="btn-ghost text-xs" disabled={submitting}>Cancelar</button>
+            <button type="submit" onClick={submit} disabled={submitting}
+              className="btn-primary text-xs bg-emerald-500 hover:bg-emerald-600 flex items-center gap-2 disabled:opacity-50">
+              {submitting && <Loader2 className="w-3 h-3 animate-spin"/>}
+              {submitting ? "Guardando..." : (item ? "Guardar cambios" : "Crear auditoría")}
+            </button>
           </div>
         </footer>
       </div>

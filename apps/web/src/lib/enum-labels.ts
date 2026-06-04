@@ -76,6 +76,24 @@ export const AUDIT_STATUS_DB: Dict = {
   NOT_STARTED: "No Iniciada", OVERDUE: "Vencida",
 };
 
+// ─── CEDIS ───────────────────────────────────────────────────────────────────
+// Tipo riesgo CEDI = mismo set que TIPO_RIESGO_DB
+export const TIPO_RIESGO_CEDI_DB: Dict = {
+  OPERATIVO: "Operativo", REPUTACIONAL: "Reputacional", FINANCIERO: "Financiero",
+  LEGAL: "Legal", CONTAGIO: "Contagio",
+};
+export const CRITICIDAD_CEDI_DB: Dict = {
+  BAJA: "Baja", MEDIA: "Media", ALTA: "Alta", CRITICA: "Crítica",
+};
+export const ESTADO_HALLAZGO_CEDI_DB: Dict = {
+  ABIERTO: "Abierto", EN_PLAN: "En Plan", EN_VERIFICACION: "En Verificación",
+  CERRADO: "Cerrado", REINCIDENTE: "Reincidente",
+};
+export const CATEGORIA_CEDI_DB: Dict = {
+  INVENTARIO: "Inventario", CAJA: "Caja", CARTERA: "Cartera", LOGISTICA: "Logística",
+  BIOSEGURIDAD: "Bioseguridad", INFRAESTRUCTURA: "Infraestructura", PROCEDIMIENTOS: "Procedimientos",
+};
+
 // ─── REVERSE MAPS (Display → DB) ─────────────────────────────────────────────
 export const TIPO_GRANJA_TO_DB        = reverse(TIPO_GRANJA_DB);
 export const TIPO_OPERATIVO_TO_DB     = reverse(TIPO_OPERATIVO_DB);
@@ -94,6 +112,10 @@ export const ESTADO_CUMPLIMIENTO_TO_DB = reverse(ESTADO_CUMPLIMIENTO_DB);
 export const AUDIT_STATUS_TO_DB       = reverse(AUDIT_STATUS_DB);
 export const TIPO_AUDITORIA_TO_DB      = reverse(TIPO_AUDITORIA_DB);
 export const ESTADO_AUDITORIA_TO_DB    = reverse(ESTADO_AUDITORIA_DB);
+export const TIPO_RIESGO_CEDI_TO_DB       = reverse(TIPO_RIESGO_CEDI_DB);
+export const CRITICIDAD_CEDI_TO_DB        = reverse(CRITICIDAD_CEDI_DB);
+export const ESTADO_HALLAZGO_CEDI_TO_DB   = reverse(ESTADO_HALLAZGO_CEDI_DB);
+export const CATEGORIA_CEDI_TO_DB         = reverse(CATEGORIA_CEDI_DB);
 
 // ─── HELPER GENÉRICO ─────────────────────────────────────────────────────────
 export const toDB = (val: any, dict: Dict): any =>

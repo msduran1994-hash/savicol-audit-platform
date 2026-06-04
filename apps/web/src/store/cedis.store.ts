@@ -7,6 +7,29 @@ import { CEDIS_DEMO } from "../lib/cedis.constants";
 import { DEMO_MODE } from "../lib/granjas.constants";
 import type { Cedi, AuditoriaCedi, HallazgoCedi, EvidenciaCedi } from "../lib/cedis.types";
 import { apiPost, apiPatch, apiDelete } from "../lib/api";
+import {
+  TIPO_RIESGO_CEDI_TO_DB, CRITICIDAD_CEDI_TO_DB, ESTADO_HALLAZGO_CEDI_TO_DB,
+  toDB,
+} from "../lib/enum-labels";
+
+// Whitelist UI → DB para AuditoriaCedi · descarta cediNombre, _demo, createdAt, etc.
+function auditoriaCediToDB(a: Partial<AuditoriaCedi>): any {
+  // string[] (no keyof) porque "subtema" existe en backend pero no en el type frontend
+  const ALLOWED: string[] = [
+    "cediId", "fechaVisita", "auditorId", "auditorNombre", "administrador",
+    "tipoRiesgo", "subtema", "observacionRiesgo", "observacionInventario",
+    "observacionCaja", "observacionCartera", "observacionLogistica",
+    "observacionBioseguridad", "observacionInfraestructura", "observacionProcedimientos",
+    "planMejoraMercadeo", "seguimientoCorrectivo", "checksJSON",
+    "criticidad", "estado",
+  ];
+  const out: any = {};
+  for (const k of ALLOWED) if ((a as any)[k] !== undefined) out[k] = (a as any)[k];
+  if (out.tipoRiesgo)  out.tipoRiesgo  = toDB(out.tipoRiesgo,  TIPO_RIESGO_CEDI_TO_DB);
+  if (out.criticidad)  out.criticidad  = toDB(out.criticidad,  CRITICIDAD_CEDI_TO_DB);
+  if (out.estado)      out.estado      = toDB(out.estado,      ESTADO_HALLAZGO_CEDI_TO_DB);
+  return out;
+}
 
 // ─── DATOS DEMO ──────────────────────────────────────────────────────────────
 const CEDIS_INIT: Cedi[] = CEDIS_DEMO.map(c => ({ ...c, activo: true, _demo: true }));
@@ -115,14 +138,21 @@ export const useCedisStore = create<CedisState>()(
 
       addAuditoria: async (a) => {
         const tempId = `tmp_${Date.now()}`;
+        const cediNombre = a.cediNombre ?? "";
         const optimistic = { ...a, id: tempId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as AuditoriaCedi;
         set((s) => ({ auditorias: [...s.auditorias, optimistic] }));
         try {
-          const real = await apiPost<AuditoriaCedi>("/cedis/auditorias", a);
-          set((s) => ({ auditorias: s.auditorias.map((x) => (x.id === tempId ? { ...optimistic, id: real.id, createdAt: real.createdAt, updatedAt: real.updatedAt } : x)) }));
+          const real = await apiPost<any>("/cedis/auditorias", auditoriaCediToDB(a));
+          set((s) => ({ auditorias: s.auditorias.map((x) => (x.id === tempId ? {
+            ...optimistic, id: real.id,
+            createdAt: real.createdAt, updatedAt: real.updatedAt,
+            // Mantener cediNombre del optimistic para que la UI no quede vacía
+            cediNombre: real.cedi?.nombre ?? cediNombre,
+          } : x)) }));
         } catch (e) {
           set((s) => ({ auditorias: s.auditorias.filter((x) => x.id !== tempId) }));
-          console.error("addAuditoriaCedi failed:", e);
+          console.error("[cedis-store] addAuditoria failed:", e);
+          throw e;
         }
       },
       updateAuditoria: async (id, patch) => {
@@ -137,10 +167,11 @@ export const useCedisStore = create<CedisState>()(
         });
         if (id.startsWith("tmp_") || id.startsWith("DEMO_AUC_")) return;
         try {
-          await apiPatch<AuditoriaCedi>(`/cedis/auditorias/${id}`, patch);
+          await apiPatch<AuditoriaCedi>(`/cedis/auditorias/${id}`, auditoriaCediToDB(patch));
         } catch (e) {
           if (snapshot) set((s) => ({ auditorias: s.auditorias.map((a) => (a.id === id ? snapshot! : a)) }));
-          console.error("updateAuditoriaCedi failed:", e);
+          console.error("[cedis-store] updateAuditoria failed:", e);
+          throw e;
         }
       },
       removeAuditoria: async (id) => {
@@ -151,7 +182,8 @@ export const useCedisStore = create<CedisState>()(
           await apiDelete(`/cedis/auditorias/${id}`);
         } catch (e) {
           set({ auditorias: snapshot });
-          console.error("removeAuditoriaCedi failed:", e);
+          console.error("[cedis-store] removeAuditoria failed:", e);
+          throw e;
         }
       },
 

@@ -91,15 +91,33 @@ export class CedisService {
     return c;
   }
 
-  createCedi(dto: CreateCediDto)         { return this.prisma.cedi.create({ data: dto }); }
+  createCedi(dto: CreateCediDto) {
+    return this.prisma.cedi.create({ data: this.sanitizeCediPayload(dto) });
+  }
   async updateCedi(id: string, dto: Partial<CreateCediDto>) {
     await this.findCedi(id);
-    return this.prisma.cedi.update({ where: { id }, data: dto });
+    return this.prisma.cedi.update({ where: { id }, data: this.sanitizeCediPayload(dto) });
   }
   async removeCedi(id: string) {
     await this.findCedi(id);
     await this.prisma.cedi.delete({ where: { id } });
     return { ok: true };
+  }
+
+  // Whitelist sanitize · Cedi
+  private sanitizeCediPayload(dto: Partial<CreateCediDto>): any {
+    const ALLOWED = ["codigo", "nombre", "ciudad", "region", "administrador", "telefono", "direccion", "capacidad"];
+    const data: any = {};
+    for (const k of ALLOWED) if ((dto as any)[k] !== undefined) data[k] = (dto as any)[k];
+    for (const k of ["direccion"]) {
+      if (typeof data[k] === "string" && data[k].trim() === "") delete data[k];
+    }
+    if (data.capacidad != null) {
+      const n = typeof data.capacidad === "number" ? data.capacidad : parseInt(String(data.capacidad), 10);
+      data.capacidad = isNaN(n) ? undefined : n;
+      if (data.capacidad === undefined) delete data.capacidad;
+    }
+    return data;
   }
 
   // ── AUDITORÍAS ──
@@ -116,19 +134,50 @@ export class CedisService {
   }
 
   createAuditoria(dto: CreateAuditoriaCediDto) {
-    return this.prisma.auditoriaCedi.create({
-      data: { ...dto, fechaVisita: new Date(dto.fechaVisita) },
-    });
+    return this.prisma.auditoriaCedi.create({ data: this.sanitizeAuditoriaCediPayload(dto, true) });
   }
 
   updateAuditoria(id: string, dto: Partial<CreateAuditoriaCediDto>) {
     return this.prisma.auditoriaCedi.update({
       where: { id },
-      data: {
-        ...dto,
-        ...(dto.fechaVisita && { fechaVisita: new Date(dto.fechaVisita) }),
-      },
+      data: this.sanitizeAuditoriaCediPayload(dto, false),
     });
+  }
+
+  // Whitelist sanitize · AuditoriaCedi
+  private sanitizeAuditoriaCediPayload(dto: Partial<CreateAuditoriaCediDto>, isCreate: boolean): any {
+    const ALLOWED = [
+      "cediId", "fechaVisita", "auditorId", "auditorNombre", "administrador",
+      "tipoRiesgo", "subtema", "observacionRiesgo", "observacionInventario",
+      "observacionCaja", "observacionCartera", "observacionLogistica",
+      "observacionBioseguridad", "observacionInfraestructura", "observacionProcedimientos",
+      "planMejoraMercadeo", "seguimientoCorrectivo", "checksJSON", "criticidad", "estado",
+    ];
+    const data: any = {};
+    for (const k of ALLOWED) if ((dto as any)[k] !== undefined) data[k] = (dto as any)[k];
+
+    // Trim + drop strings vacíos opcionales
+    const optionalStr = [
+      "subtema", "observacionInventario", "observacionCaja", "observacionCartera",
+      "observacionLogistica", "observacionBioseguridad", "observacionInfraestructura",
+      "observacionProcedimientos", "planMejoraMercadeo", "seguimientoCorrectivo", "checksJSON",
+    ];
+    for (const k of optionalStr) {
+      if (typeof data[k] === "string") {
+        data[k] = data[k].trim();
+        if (data[k] === "") delete data[k];
+      }
+    }
+    // fechaVisita: obligatoria en create, opcional en update
+    if (typeof data.fechaVisita === "string" && data.fechaVisita.trim() !== "") {
+      const d = new Date(data.fechaVisita);
+      if (!isNaN(d.getTime())) data.fechaVisita = d;
+      else delete data.fechaVisita;
+    } else if (data.fechaVisita === "" || data.fechaVisita === null) {
+      delete data.fechaVisita;
+    }
+    if (isCreate && !data.fechaVisita) data.fechaVisita = new Date();
+    return data;
   }
 
   async removeAuditoria(id: string) {
