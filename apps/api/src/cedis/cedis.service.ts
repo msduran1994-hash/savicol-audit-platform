@@ -21,6 +21,7 @@ export interface CreateAuditoriaCediDto {
   auditorNombre: string;
   administrador: string;
   tipoRiesgo: TipoRiesgoCedi;
+  subtema?: string;                            // Inventario · Caja · Cartera · Logística · Bioseguridad · Infraestructura · Procedimientos
   observacionRiesgo: string;
   observacionInventario?: string;
   observacionCaja?: string;
@@ -41,6 +42,7 @@ export interface CreateHallazgoCediDto {
   cediId: string;
   titulo: string;
   categoria: CategoriaCedi;
+  subtema?: string;                            // Subtema oficial
   subItem?: string;
   descripcion: string;
   tipoRiesgo: TipoRiesgoCedi;
@@ -49,6 +51,7 @@ export interface CreateHallazgoCediDto {
   recomendacionIA?: string;
   responsable?: string;
   fechaCompromiso?: string;
+  fechaCierre?: string;
   porcentajeAvance?: number;
   reincidente?: boolean;
 }
