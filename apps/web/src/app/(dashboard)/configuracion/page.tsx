@@ -235,26 +235,27 @@ function DatosSection() {
 
       <div className="grid gap-3">
         {[
-          { label: "Exportar cronograma 2026", desc: "Descarga el cronograma completo en formato Excel (.xlsx)", icon: "📊", ready: false },
-          { label: "Exportar reporte PDF", desc: "Genera un PDF ejecutivo con KPIs e indicadores", icon: "📄", ready: false },
-          { label: "Importar desde Excel", desc: "Carga actividades desde una plantilla Excel proporcionada", icon: "📥", ready: false },
-          { label: "Respaldo de datos", desc: "Genera un respaldo JSON de todas las actividades", icon: "💾", ready: false },
-        ].map(({ label, desc, icon, ready }) => (
-          <div key={label} className="flex items-center justify-between p-4 bg-[#1A2540] rounded-xl border border-[#2A3F6A]">
+          { label: "Importación masiva (CSV)", desc: "Carga lotes de granjas, hallazgos, KPIs, cronograma o CEDIS desde CSV", icon: "📥", href: "/configuracion/importar" },
+          { label: "Exportar Excel · módulos", desc: "Cada módulo (Granjas, Rutas, CEDIS, Cronograma) tiene su propio botón Excel/CSV", icon: "📊", href: "/cedis/reportes" },
+          { label: "Power BI · tokens API", desc: "Genera tokens externos para integración Power BI/datos en vivo", icon: "🔑", href: undefined, section: "api" as const },
+        ].map((it: any) => (
+          <a
+            key={it.label}
+            href={it.href ?? "#"}
+            onClick={(e) => { if (!it.href) { e.preventDefault(); } }}
+            className="flex items-center justify-between p-4 bg-[#1A2540] rounded-xl border border-[#2A3F6A] hover:border-cyan-500/40 transition-colors group"
+          >
             <div className="flex items-center gap-3">
-              <span className="text-xl">{icon}</span>
+              <span className="text-xl">{it.icon}</span>
               <div>
-                <p className="text-sm font-semibold text-white">{label}</p>
-                <p className="text-xs text-[#64748B]">{desc}</p>
+                <p className="text-sm font-semibold text-white">{it.label}</p>
+                <p className="text-xs text-[#64748B]">{it.desc}</p>
               </div>
             </div>
-            <button
-              disabled={!ready}
-              className="px-3 py-1.5 text-xs rounded-lg bg-[#0D1526] border border-[#2A3F6A] text-[#475569] cursor-not-allowed"
-            >
-              Próximamente
-            </button>
-          </div>
+            <span className="px-3 py-1.5 text-xs rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 group-hover:bg-cyan-500/20">
+              Abrir →
+            </span>
+          </a>
         ))}
       </div>
 
