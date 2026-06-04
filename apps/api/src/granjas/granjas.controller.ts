@@ -5,6 +5,8 @@ import {
 import {
   GranjasService, CreateGranjaDto, CreateHallazgoDto, CreateKPIDto, CreateAuditoriaDto,
 } from "./granjas.service";
+import { GranjasExecutiveService, GranjasExecutiveFilters } from "./granjas-executive.service";
+import { AuditActivitiesAiService } from "../audit-activities/audit-activities-ai.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 
 interface AuthRequest extends Request {
@@ -14,11 +16,62 @@ interface AuthRequest extends Request {
 @Controller("granjas")
 @UseGuards(JwtAuthGuard)
 export class GranjasController {
-  constructor(private svc: GranjasService) {}
+  constructor(
+    private svc: GranjasService,
+    private exec: GranjasExecutiveService,
+    private ai: AuditActivitiesAiService,
+  ) {}
 
-  // ── DASHBOARD ──
+  // ── DASHBOARD STATS (legacy) ──
   @Get("dashboard")
   dashboard() { return this.svc.getDashboardStats(); }
+
+  // ── DASHBOARD EJECUTIVO ──
+  @Get("executive")
+  executive(
+    @Query("year")          year?: string,
+    @Query("granjaId")      granjaId?: string,
+    @Query("auditorId")     auditorId?: string,
+    @Query("tipoGranja")    tipoGranja?: string,
+    @Query("tipoOperativo") tipoOperativo?: string,
+    @Query("estado")        estado?: string,
+    @Query("criticidad")    criticidad?: string,
+    @Query("tipoRiesgo")    tipoRiesgo?: string,
+    @Query("fechaDesde")    fechaDesde?: string,
+    @Query("fechaHasta")    fechaHasta?: string,
+    @Query("mes")           mes?: string,
+  ) {
+    const filters: GranjasExecutiveFilters = {
+      year: year ? +year : undefined,
+      granjaId, auditorId, tipoGranja, tipoOperativo, estado, criticidad, tipoRiesgo,
+      fechaDesde, fechaHasta,
+      mes: mes ? +mes : undefined,
+    };
+    return this.exec.getExecutive(filters);
+  }
+
+  @Get("ai-summary")
+  async aiSummary(
+    @Query("year")          year?: string,
+    @Query("granjaId")      granjaId?: string,
+    @Query("auditorId")     auditorId?: string,
+    @Query("criticidad")    criticidad?: string,
+  ) {
+    const filters: GranjasExecutiveFilters = { year: year ? +year : undefined, granjaId, auditorId, criticidad };
+    const exec = await this.exec.getExecutive(filters);
+    return this.ai.generateSummary({
+      kpis:         exec.kpis as any,
+      alertas:      exec.alertas as any,
+      topAreas:     exec.charts.hallazgosPorCategoria.slice(0, 5).map((c: any) => ({
+        area: c.categoria, Cumplimiento: 0, Actividades: c.count,
+      })),
+      ranking:      exec.charts.auditores.slice(0, 10).map((a: any) => ({
+        auditorName: a.auditorNombre, completionRate: 0, totalAssigned: a.visitas,
+      })),
+      calidadDatos: { score: exec.calidadDatos.score, issuesTotal: 0, duplicados: 0 },
+      heuristico:   exec.resumenHeuristico,
+    });
+  }
 
   // ── GRANJAS ──
   @Get()
@@ -100,6 +153,12 @@ export class GranjasController {
     return this.svc.updateKPI(id, dto, req.user.id);
   }
 
+  @Delete("kpis/:id")
+  @HttpCode(HttpStatus.OK)
+  removeKPI(@Param("id") id: string, @Req() req: AuthRequest) {
+    return this.svc.removeKPI(id, req.user.id);
+  }
+
   // ── AUDITORÍAS ──
   @Get("auditorias/list")
   findAllAuditorias(@Query("granjaId") granjaId?: string, @Query("estado") estado?: any) {
@@ -109,6 +168,17 @@ export class GranjasController {
   @Post("auditorias")
   createAuditoria(@Body() dto: CreateAuditoriaDto, @Req() req: AuthRequest) {
     return this.svc.createAuditoria(dto, req.user.id);
+  }
+
+  @Patch("auditorias/:id")
+  updateAuditoria(@Param("id") id: string, @Body() dto: Partial<CreateAuditoriaDto>, @Req() req: AuthRequest) {
+    return this.svc.updateAuditoria(id, dto, req.user.id);
+  }
+
+  @Delete("auditorias/:id")
+  @HttpCode(HttpStatus.OK)
+  removeAuditoria(@Param("id") id: string, @Req() req: AuthRequest) {
+    return this.svc.removeAuditoria(id, req.user.id);
   }
 
   // ── ACTIVIDAD ──

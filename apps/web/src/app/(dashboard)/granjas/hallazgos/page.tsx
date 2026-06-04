@@ -6,13 +6,14 @@ import { useShallow } from "zustand/react/shallow";
 import { CATEGORIA_HALLAZGO, CRITICIDAD, TIPO_RIESGO, TIPO_GRANJA, TIPO_OPERATIVO } from "@/lib/granjas.constants";
 import { AUDITORS } from "@/lib/constants";
 import type { Hallazgo } from "@/lib/granjas.types";
-import { AlertTriangle, Filter, Plus, Sparkles, Image, Paperclip, X, Edit2 } from "lucide-react";
+import { AlertTriangle, Filter, Plus, Sparkles, Image, Paperclip, X, Edit2, Trash2 } from "lucide-react";
 
 export default function HallazgosPage() {
   const hallazgos      = useGranjasStore(useShallow((s) => s.hallazgos));
   const granjas        = useGranjasStore(useShallow((s) => s.granjas));
   const addHallazgo    = useGranjasStore((s) => s.addHallazgo);
   const updateHallazgo = useGranjasStore((s) => s.updateHallazgo);
+  const removeHallazgo = useGranjasStore((s) => s.removeHallazgo);
 
   const [filtroCat, setFiltroCat] = useState("");
   const [filtroCrit, setFiltroCrit] = useState("");
@@ -82,9 +83,22 @@ export default function HallazgosPage() {
                       <h3 className="font-display font-bold text-white text-base">{h.titulo}</h3>
                       <p className="text-xs text-[#94A3B8] mt-1">{h.granjaNombre} · {h.auditorNombre} · {h.fechaVisita}</p>
                     </div>
-                    <button onClick={() => { setEditing(h); setModalOpen(true); }} className="p-1.5 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white">
-                      <Edit2 className="w-3.5 h-3.5"/>
-                    </button>
+                    <div className="flex gap-1">
+                      <button onClick={() => { setEditing(h); setModalOpen(true); }} className="p-1.5 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar">
+                        <Edit2 className="w-3.5 h-3.5"/>
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`¿Eliminar hallazgo "${h.titulo}"?\nEsta acción no se puede deshacer.`)) return;
+                          try { await removeHallazgo(h.id); }
+                          catch (e: any) { alert("Error al eliminar: " + (e?.response?.data?.message ?? e?.message ?? "desconocido")); }
+                        }}
+                        className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-3.5 h-3.5"/>
+                      </button>
+                    </div>
                   </div>
                   <p className="text-sm text-[#94A3B8] mb-3 leading-relaxed">{h.descripcion}</p>
                   <div className="flex items-center gap-1.5 flex-wrap mb-3">

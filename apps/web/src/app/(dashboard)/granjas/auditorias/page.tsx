@@ -6,12 +6,14 @@ import { useShallow } from "zustand/react/shallow";
 import { CHECKLIST_PREGUNTAS, CATEGORIA_HALLAZGO, TIPO_AUDITORIA, ESTADO_AUDITORIA } from "@/lib/granjas.constants";
 import { AUDITORS } from "@/lib/constants";
 import type { Auditoria } from "@/lib/granjas.types";
-import { ClipboardCheck, Sparkles, Filter, Plus, CheckCircle2, Clock, AlertCircle, XCircle, X } from "lucide-react";
+import { ClipboardCheck, Sparkles, Filter, Plus, CheckCircle2, Clock, AlertCircle, XCircle, X, Trash2 } from "lucide-react";
 
 export default function AuditoriasPage() {
-  const auditorias = useGranjasStore(useShallow((s) => s.auditorias));
-  const granjas    = useGranjasStore(useShallow((s) => s.granjas));
-  const addAuditoria = useGranjasStore((s) => s.addAuditoria);
+  const auditorias    = useGranjasStore(useShallow((s) => s.auditorias));
+  const granjas       = useGranjasStore(useShallow((s) => s.granjas));
+  const addAuditoria  = useGranjasStore((s) => s.addAuditoria);
+  const updateAud     = useGranjasStore((s) => s.updateAuditoria);
+  const removeAud     = useGranjasStore((s) => s.removeAuditoria);
   const [modalOpen, setModalOpen] = useState(false);
 
   const stats = {
@@ -75,6 +77,7 @@ export default function AuditoriasPage() {
                     <th className="text-left p-2">Fecha</th>
                     <th className="text-left p-2">Estado</th>
                     <th className="text-left p-2">Comentarios</th>
+                    <th className="text-center p-2 w-12">Acción</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -85,15 +88,33 @@ export default function AuditoriasPage() {
                       <td className="p-2 text-[#94A3B8]">{a.tipoAuditoria}</td>
                       <td className="p-2 text-[#94A3B8] font-mono text-xs">{a.fechaProgramada}</td>
                       <td className="p-2">
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
-                              style={{
-                                background: a.estado === "Aprobada" ? "rgba(16,185,129,0.15)" : a.estado === "Pendiente" ? "rgba(148,163,184,0.15)" : "rgba(245,158,11,0.15)",
-                                color: a.estado === "Aprobada" ? "#10B981" : a.estado === "Pendiente" ? "#94A3B8" : "#F59E0B",
-                              }}>
-                          {a.estado}
-                        </span>
+                        <select
+                          value={a.estado}
+                          onChange={(e) => updateAud(a.id, { estado: e.target.value as any })}
+                          className="text-[10px] px-2 py-0.5 rounded font-semibold border bg-transparent"
+                          style={{
+                            background: a.estado === "Aprobada" ? "rgba(16,185,129,0.15)" : a.estado === "Pendiente" ? "rgba(148,163,184,0.15)" : "rgba(245,158,11,0.15)",
+                            color: a.estado === "Aprobada" ? "#10B981" : a.estado === "Pendiente" ? "#94A3B8" : "#F59E0B",
+                            borderColor: a.estado === "Aprobada" ? "#10B98140" : a.estado === "Pendiente" ? "#94A3B840" : "#F59E0B40",
+                          }}
+                        >
+                          {ESTADO_AUDITORIA.map(s => <option key={s} value={s} className="bg-[#0D1526] text-white">{s}</option>)}
+                        </select>
                       </td>
                       <td className="p-2 text-[#94A3B8] text-xs max-w-xs truncate">{a.comentarios ?? "—"}</td>
+                      <td className="p-2 text-center">
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`¿Eliminar auditoría de ${a.granjaNombre}?`)) return;
+                            try { await removeAud(a.id); }
+                            catch (e: any) { alert("Error al eliminar: " + (e?.response?.data?.message ?? e?.message ?? "desconocido")); }
+                          }}
+                          className="p-1 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-3.5 h-3.5"/>
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

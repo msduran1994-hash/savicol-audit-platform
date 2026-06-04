@@ -380,9 +380,13 @@ interface GranjasState {
   // Sub-recursos CRUD
   addHallazgo:    (h: Omit<Hallazgo, "id" | "createdAt" | "updatedAt">) => Promise<void>;
   updateHallazgo: (id: string, patch: Partial<Hallazgo>) => Promise<void>;
+  removeHallazgo: (id: string) => Promise<void>;
   addAuditoria:   (a: Omit<Auditoria, "id" | "createdAt" | "updatedAt">) => Promise<void>;
+  updateAuditoria:(id: string, patch: Partial<Auditoria>) => Promise<void>;
+  removeAuditoria:(id: string) => Promise<void>;
   addKPI:         (k: Omit<KPI, "id" | "createdAt" | "updatedAt">) => Promise<void>;
   updateKPI:      (id: string, patch: Partial<KPI>) => Promise<void>;
+  removeKPI:      (id: string) => Promise<void>;
 
   // Filtros
   setFilters: (f: Partial<GranjasFilters>) => void;
@@ -400,7 +404,7 @@ const defaultFilters: GranjasFilters = {
 
 export const useGranjasStore = create<GranjasState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       granjas: GRANJAS_DEMO,
       auditorias: AUDITORIAS_DEMO,
       hallazgos: HALLAZGOS_DEMO,
@@ -513,6 +517,45 @@ export const useGranjasStore = create<GranjasState>()(
         if (id.startsWith("tmp_") || id.startsWith("DEMO_KPI_")) return;
         try { await apiPatch(`/granjas/kpis/${id}`, kpiToDB(patch)); }
         catch (e) { console.error("updateKPI failed:", e); }
+      },
+      removeHallazgo: async (id) => {
+        const before = get().hallazgos;
+        set((s) => ({ hallazgos: s.hallazgos.filter(h => h.id !== id) }));
+        if (id.startsWith("tmp_") || id.startsWith("DEMO_HAL_")) return;
+        try { await apiDelete(`/granjas/hallazgos/${id}`); }
+        catch (e) {
+          set({ hallazgos: before });
+          console.error("removeHallazgo failed:", e);
+          throw e;
+        }
+      },
+      updateAuditoria: async (id, patch) => {
+        set((s) => ({ auditorias: s.auditorias.map((a) => a.id === id ? { ...a, ...patch, updatedAt: new Date().toISOString() } : a) }));
+        if (id.startsWith("tmp_") || id.startsWith("DEMO_AUD_")) return;
+        try { await apiPatch(`/granjas/auditorias/${id}`, patch); }
+        catch (e) { console.error("updateAuditoria failed:", e); throw e; }
+      },
+      removeAuditoria: async (id) => {
+        const before = get().auditorias;
+        set((s) => ({ auditorias: s.auditorias.filter(a => a.id !== id) }));
+        if (id.startsWith("tmp_") || id.startsWith("DEMO_AUD_")) return;
+        try { await apiDelete(`/granjas/auditorias/${id}`); }
+        catch (e) {
+          set({ auditorias: before });
+          console.error("removeAuditoria failed:", e);
+          throw e;
+        }
+      },
+      removeKPI: async (id) => {
+        const before = get().kpis;
+        set((s) => ({ kpis: s.kpis.filter(k => k.id !== id) }));
+        if (id.startsWith("tmp_") || id.startsWith("DEMO_KPI_")) return;
+        try { await apiDelete(`/granjas/kpis/${id}`); }
+        catch (e) {
+          set({ kpis: before });
+          console.error("removeKPI failed:", e);
+          throw e;
+        }
       },
 
       setFilters: (f) => set((s) => ({ filters: { ...s.filters, ...f } })),

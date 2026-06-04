@@ -128,6 +128,25 @@ export default function GranjasDashboardPage() {
       />
 
       <div className="flex-1 p-6 space-y-6">
+        {/* Banner · Dashboard Ejecutivo Avanzado Granjas */}
+        <a
+          href="/granjas/ejecutivo"
+          className="card-base p-4 flex items-center justify-between bg-gradient-to-r from-purple-500/10 via-amber-500/5 to-transparent border-amber-500/30 hover:border-amber-500/40 transition-all group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-purple-500/30 to-amber-500/30 border border-amber-500/40 flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-amber-400"/>
+            </div>
+            <div>
+              <p className="font-display font-bold text-white text-sm">Dashboard Ejecutivo Avanzado · Granjas</p>
+              <p className="text-xs text-[#94A3B8] mt-0.5">
+                14 KPIs · 8 charts · Heatmap criticidad · Trazabilidad auditorías · Análisis IA · Filtros globales
+              </p>
+            </div>
+          </div>
+          <span className="text-amber-400 text-sm font-semibold group-hover:translate-x-1 transition-transform">Ver dashboard →</span>
+        </a>
+
         {/* Banner ejecutivo */}
         <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-[#1A1208] via-[#2A1810] to-[#1A1208] border border-amber-900/40 px-6 py-5">
           <div className="absolute right-0 top-0 bottom-0 w-48 opacity-[0.08]"

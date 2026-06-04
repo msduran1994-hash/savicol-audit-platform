@@ -5,12 +5,14 @@ import { useGranjasStore } from "@/store/granjas.store";
 import { useShallow } from "zustand/react/shallow";
 import { ESTADO_KPI } from "@/lib/granjas.constants";
 import type { KPI } from "@/lib/granjas.types";
-import { Target, Plus, Bell, Mail, Filter, TrendingUp, X } from "lucide-react";
+import { Target, Plus, Bell, Mail, Filter, TrendingUp, X, Trash2 } from "lucide-react";
 
 export default function KPIPage() {
-  const kpis    = useGranjasStore(useShallow((s) => s.kpis));
-  const granjas = useGranjasStore(useShallow((s) => s.granjas));
-  const addKPI  = useGranjasStore((s) => s.addKPI);
+  const kpis      = useGranjasStore(useShallow((s) => s.kpis));
+  const granjas   = useGranjasStore(useShallow((s) => s.granjas));
+  const addKPI    = useGranjasStore((s) => s.addKPI);
+  const updateKPI = useGranjasStore((s) => s.updateKPI);
+  const removeKPI = useGranjasStore((s) => s.removeKPI);
   const [modalOpen, setModalOpen] = useState(false);
 
   const total       = kpis.length;
@@ -79,15 +81,36 @@ export default function KPIPage() {
                 k.estado === "En Espera"   ? "#06B6D4" : "#94A3B8";
               return (
                 <div key={k.id} className="card-base">
-                  <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-start justify-between mb-3 gap-2">
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-white">{k.accion}</h3>
                       <p className="text-xs text-[#94A3B8] mt-1">{k.seguimiento}</p>
                     </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
-                          style={{ background: `${estColor}18`, color: estColor, border: `1px solid ${estColor}30` }}>
-                      {k.estado}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                            style={{ background: `${estColor}18`, color: estColor, border: `1px solid ${estColor}30` }}>
+                        {k.estado}
+                      </span>
+                      <select
+                        value={k.estado}
+                        onChange={(e) => updateKPI(k.id, { estado: e.target.value as any })}
+                        className="text-[10px] px-2 py-0.5 rounded bg-[#1A2540] border border-[#2A3F6A] text-white"
+                        title="Cambiar estado"
+                      >
+                        {ESTADO_KPI.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`¿Eliminar KPI "${k.accion}"?\nEsta acción no se puede deshacer.`)) return;
+                          try { await removeKPI(k.id); }
+                          catch (e: any) { alert("Error al eliminar: " + (e?.response?.data?.message ?? e?.message ?? "desconocido")); }
+                        }}
+                        className="p-1 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400"
+                        title="Eliminar KPI"
+                      >
+                        <Trash2 className="w-3.5 h-3.5"/>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Barra de avance */}

@@ -225,18 +225,43 @@ export class GranjasService {
   }
 
   async updateKPI(id: string, dto: Partial<CreateKPIDto>, updatedBy: string) {
-    const k = await this.prisma.kPI.update({
-      where: { id },
-      data: {
-        ...dto,
-        ...(dto.fechaCompromiso    && { fechaCompromiso:    new Date(dto.fechaCompromiso) }),
-        ...(dto.fechaProximaVisita && { fechaProximaVisita: new Date(dto.fechaProximaVisita) }),
-        ...(dto.fechaCumplimiento  && { fechaCumplimiento:  new Date(dto.fechaCumplimiento) }),
-      },
-    });
+    const existing = await this.prisma.kPI.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("KPI no encontrado");
+
+    const data = this.sanitizeKPIPayload(dto);
+    const k = await this.prisma.kPI.update({ where: { id }, data });
     await this.logActivity({ granjaId: k.granjaId, tipo: "KPI", accion: "Actualizado",
       recursoId: id, recursoNombre: k.accion, usuarioId: updatedBy, usuarioNombre: "" });
     return k;
+  }
+
+  async removeKPI(id: string, deletedBy: string) {
+    const existing = await this.prisma.kPI.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("KPI no encontrado");
+
+    await this.prisma.kPI.delete({ where: { id } });
+    await this.logActivity({ granjaId: existing.granjaId, tipo: "KPI", accion: "Eliminado",
+      recursoId: id, recursoNombre: existing.accion, usuarioId: deletedBy, usuarioNombre: "" });
+    return { message: "KPI eliminado", id };
+  }
+
+  /**
+   * Sanitiza KPI payload: convierte fechas, clampea porcentaje, limpia strings vacíos.
+   */
+  private sanitizeKPIPayload(dto: Partial<CreateKPIDto>): any {
+    const data: any = { ...dto };
+    for (const k of ["seguimiento", "planAccionVeterinario", "responsable", "accion"]) {
+      if (typeof data[k] === "string" && data[k].trim() === "") delete data[k];
+    }
+    for (const f of ["fechaCompromiso", "fechaProximaVisita", "fechaCumplimiento"]) {
+      if (typeof data[f] === "string" && data[f].trim() !== "") data[f] = new Date(data[f]);
+      else if (data[f] === "" || data[f] === null) delete data[f];
+    }
+    if (data.porcentajeAvance != null) {
+      const n = typeof data.porcentajeAvance === "number" ? data.porcentajeAvance : parseInt(String(data.porcentajeAvance), 10);
+      data.porcentajeAvance = isNaN(n) ? 0 : Math.max(0, Math.min(100, n));
+    }
+    return data;
   }
 
   // ── AUDITORÍAS ──
@@ -249,13 +274,56 @@ export class GranjasService {
   }
 
   async createAuditoria(dto: CreateAuditoriaDto, createdBy: string) {
-    const a = await this.prisma.auditoriaGranja.create({
-      data: { ...dto, fechaProgramada: new Date(dto.fechaProgramada) },
-    });
+    const data = this.sanitizeAuditoriaPayload(dto);
+    const a = await this.prisma.auditoriaGranja.create({ data });
     await this.logActivity({ granjaId: dto.granjaId, tipo: "Auditoría", accion: "Creado",
       recursoId: a.id, recursoNombre: `${a.tipoAuditoria} · ${a.fechaProgramada.toISOString().slice(0,10)}`,
       usuarioId: createdBy, usuarioNombre: "" });
     return a;
+  }
+
+  async updateAuditoria(id: string, dto: Partial<CreateAuditoriaDto>, updatedBy: string) {
+    const existing = await this.prisma.auditoriaGranja.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Auditoría no encontrada");
+
+    const data = this.sanitizeAuditoriaPayload(dto);
+    const a = await this.prisma.auditoriaGranja.update({ where: { id }, data });
+    await this.logActivity({ granjaId: a.granjaId, tipo: "Auditoría", accion: "Actualizado",
+      recursoId: id, recursoNombre: `${a.tipoAuditoria}`, usuarioId: updatedBy, usuarioNombre: "" });
+    return a;
+  }
+
+  async removeAuditoria(id: string, deletedBy: string) {
+    const existing = await this.prisma.auditoriaGranja.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Auditoría no encontrada");
+
+    await this.prisma.auditoriaGranja.delete({ where: { id } });
+    await this.logActivity({ granjaId: existing.granjaId, tipo: "Auditoría", accion: "Eliminado",
+      recursoId: id, recursoNombre: existing.tipoAuditoria, usuarioId: deletedBy, usuarioNombre: "" });
+    return { message: "Auditoría eliminada", id };
+  }
+
+  /**
+   * Sanitiza Auditoria payload: convierte fechas y elimina strings vacíos.
+   */
+  private sanitizeAuditoriaPayload(dto: Partial<CreateAuditoriaDto>): any {
+    const data: any = { ...dto };
+    for (const k of ["comentarios"]) {
+      if (typeof data[k] === "string" && data[k].trim() === "") delete data[k];
+    }
+    if (typeof data.fechaProgramada === "string" && data.fechaProgramada.trim() !== "") {
+      data.fechaProgramada = new Date(data.fechaProgramada);
+    } else if (data.fechaProgramada === "" || data.fechaProgramada === null) {
+      delete data.fechaProgramada;
+    }
+    if ((data as any).fechaEjecutada) {
+      if (typeof (data as any).fechaEjecutada === "string" && (data as any).fechaEjecutada.trim() !== "") {
+        (data as any).fechaEjecutada = new Date((data as any).fechaEjecutada);
+      } else {
+        delete (data as any).fechaEjecutada;
+      }
+    }
+    return data;
   }
 
   // ── ACTIVIDAD LOG ──
