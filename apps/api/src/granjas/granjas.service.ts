@@ -192,8 +192,16 @@ export class GranjasService {
    *  - Trim de strings con contenido
    */
   private sanitizeHallazgoPayload(dto: Partial<CreateHallazgoDto>): any {
-    const { tiposRiesgo, ...rest } = dto;
-    const data: any = { ...rest };
+    // Whitelist explícita: columnas escribibles del modelo Hallazgo
+    const ALLOWED = [
+      "titulo", "granjaId", "auditoriaId", "auditorId", "auditorNombre",
+      "tipoGranja", "tipoOperativo", "fechaVisita", "categoria",
+      "tiposRiesgo", "criticidad", "estado", "descripcion", "recomendacionesIA",
+    ];
+    const data: any = {};
+    for (const k of ALLOWED) {
+      if ((dto as any)[k] !== undefined) data[k] = (dto as any)[k];
+    }
 
     // Trim strings + eliminar vacíos opcionales
     for (const k of ["titulo", "descripcion", "recomendacionesIA", "auditorNombre"]) {
@@ -213,8 +221,8 @@ export class GranjasService {
     }
 
     // tiposRiesgo: array → JSON string (SQLite legacy · Postgres también lo acepta como string)
-    if (tiposRiesgo !== undefined) {
-      data.tiposRiesgo = JSON.stringify(Array.isArray(tiposRiesgo) ? tiposRiesgo : []);
+    if (data.tiposRiesgo !== undefined) {
+      data.tiposRiesgo = JSON.stringify(Array.isArray(data.tiposRiesgo) ? data.tiposRiesgo : []);
     }
 
     return data;
@@ -277,13 +285,26 @@ export class GranjasService {
    * Sanitiza KPI payload: convierte fechas, clampea porcentaje, limpia strings vacíos.
    */
   private sanitizeKPIPayload(dto: Partial<CreateKPIDto>): any {
-    const data: any = { ...dto };
+    // Whitelist explícita: columnas escribibles del modelo KPI
+    const ALLOWED = [
+      "granjaId", "hallazgoId", "accion", "seguimiento", "fechaCompromiso",
+      "fechaProximaVisita", "fechaCumplimiento", "planAccionVeterinario",
+      "estado", "responsable", "porcentajeAvance",
+    ];
+    const data: any = {};
+    for (const k of ALLOWED) {
+      if ((dto as any)[k] !== undefined) data[k] = (dto as any)[k];
+    }
+
     for (const k of ["seguimiento", "planAccionVeterinario", "responsable", "accion"]) {
       if (typeof data[k] === "string" && data[k].trim() === "") delete data[k];
     }
     for (const f of ["fechaCompromiso", "fechaProximaVisita", "fechaCumplimiento"]) {
-      if (typeof data[f] === "string" && data[f].trim() !== "") data[f] = new Date(data[f]);
-      else if (data[f] === "" || data[f] === null) delete data[f];
+      if (typeof data[f] === "string" && data[f].trim() !== "") {
+        const d = new Date(data[f]);
+        if (!isNaN(d.getTime())) data[f] = d;
+        else delete data[f];
+      } else if (data[f] === "" || data[f] === null) delete data[f];
     }
     if (data.porcentajeAvance != null) {
       const n = typeof data.porcentajeAvance === "number" ? data.porcentajeAvance : parseInt(String(data.porcentajeAvance), 10);
@@ -338,23 +359,40 @@ export class GranjasService {
   }
 
   /**
-   * Sanitiza Auditoria payload: convierte fechas y elimina strings vacíos.
+   * Sanitiza Auditoria payload: convierte fechas, elimina strings vacíos
+   * y descarta campos UI-only / relacionales que Prisma rechazaría.
    */
   private sanitizeAuditoriaPayload(dto: Partial<CreateAuditoriaDto>): any {
-    const data: any = { ...dto };
-    for (const k of ["comentarios"]) {
-      if (typeof data[k] === "string" && data[k].trim() === "") delete data[k];
+    // Whitelist explícita de columnas escribibles del modelo AuditoriaGranja
+    const ALLOWED = [
+      "auditorId", "auditorNombre", "granjaId", "tipoAuditoria",
+      "fechaProgramada", "fechaEjecutada", "estado", "comentarios",
+    ];
+    const data: any = {};
+    for (const k of ALLOWED) {
+      if ((dto as any)[k] !== undefined) data[k] = (dto as any)[k];
+    }
+
+    for (const k of ["comentarios", "auditorNombre"]) {
+      if (typeof data[k] === "string") {
+        data[k] = data[k].trim();
+        if (data[k] === "" && k === "comentarios") delete data[k];
+      }
     }
     if (typeof data.fechaProgramada === "string" && data.fechaProgramada.trim() !== "") {
-      data.fechaProgramada = new Date(data.fechaProgramada);
+      const d = new Date(data.fechaProgramada);
+      if (!isNaN(d.getTime())) data.fechaProgramada = d;
+      else delete data.fechaProgramada;
     } else if (data.fechaProgramada === "" || data.fechaProgramada === null) {
       delete data.fechaProgramada;
     }
-    if ((data as any).fechaEjecutada) {
-      if (typeof (data as any).fechaEjecutada === "string" && (data as any).fechaEjecutada.trim() !== "") {
-        (data as any).fechaEjecutada = new Date((data as any).fechaEjecutada);
+    if (data.fechaEjecutada) {
+      if (typeof data.fechaEjecutada === "string" && data.fechaEjecutada.trim() !== "") {
+        const d = new Date(data.fechaEjecutada);
+        if (!isNaN(d.getTime())) data.fechaEjecutada = d;
+        else delete data.fechaEjecutada;
       } else {
-        delete (data as any).fechaEjecutada;
+        delete data.fechaEjecutada;
       }
     }
     return data;

@@ -6,7 +6,7 @@ import { useShallow } from "zustand/react/shallow";
 import { CHECKLIST_PREGUNTAS, CATEGORIA_HALLAZGO, TIPO_AUDITORIA, ESTADO_AUDITORIA } from "@/lib/granjas.constants";
 import { AUDITORS } from "@/lib/constants";
 import type { Auditoria } from "@/lib/granjas.types";
-import { ClipboardCheck, Sparkles, Filter, Plus, CheckCircle2, Clock, AlertCircle, XCircle, X, Trash2 } from "lucide-react";
+import { ClipboardCheck, Sparkles, Filter, Plus, CheckCircle2, Clock, AlertCircle, XCircle, X, Trash2, Edit2 } from "lucide-react";
 
 export default function AuditoriasPage() {
   const auditorias    = useGranjasStore(useShallow((s) => s.auditorias));
@@ -15,6 +15,7 @@ export default function AuditoriasPage() {
   const updateAud     = useGranjasStore((s) => s.updateAuditoria);
   const removeAud     = useGranjasStore((s) => s.removeAuditoria);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingAud, setEditingAud] = useState<Auditoria | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [checklistFor, setChecklistFor] = useState<any | null>(null);
 
@@ -114,6 +115,13 @@ export default function AuditoriasPage() {
                             <Sparkles className="w-3.5 h-3.5"/>
                           </button>
                           <button
+                            onClick={() => { setEditingAud(a); setSaveError(null); }}
+                            className="p-1 rounded hover:bg-blue-500/10 text-[#94A3B8] hover:text-blue-400"
+                            title="Editar auditoría"
+                          >
+                            <Edit2 className="w-3.5 h-3.5"/>
+                          </button>
+                          <button
                             onClick={async () => {
                               if (!confirm(`¿Eliminar auditoría de ${a.granjaNombre}?`)) return;
                               try { await removeAud(a.id); }
@@ -171,16 +179,27 @@ export default function AuditoriasPage() {
               await addAuditoria(a as any);
               setModalOpen(false);
             } catch (e: any) {
-              const raw = e?.response?.data;
-              let msg = "Error al guardar la auditoría";
-              if (raw) {
-                if (typeof raw === "string") msg = raw;
-                else if (raw.message) msg = Array.isArray(raw.message) ? raw.message.join(" · ") : String(raw.message);
-                else if (raw.error)   msg = String(raw.error);
-              } else if (e?.message) msg = e.message;
-              if (e?.response?.status) msg = `HTTP ${e.response.status} · ${msg}`;
-              setSaveError(msg);
+              setSaveError(formatErr(e, "Error al guardar la auditoría"));
               console.error("[Auditorias] error guardando:", e);
+            }
+          }}
+        />
+      )}
+
+      {editingAud && (
+        <AuditoriaModal
+          granjas={granjas}
+          error={saveError}
+          editing={editingAud}
+          onClose={() => { setEditingAud(null); setSaveError(null); }}
+          onSave={async (patch) => {
+            setSaveError(null);
+            try {
+              await updateAud(editingAud.id, patch as any);
+              setEditingAud(null);
+            } catch (e: any) {
+              setSaveError(formatErr(e, "Error al actualizar la auditoría"));
+              console.error("[Auditorias] error editando:", e);
             }
           }}
         />
@@ -196,14 +215,38 @@ export default function AuditoriasPage() {
   );
 }
 
+// ─── HELPER · format error ──
+function formatErr(e: any, fallback: string): string {
+  const raw = e?.response?.data;
+  let msg = fallback;
+  if (raw) {
+    if (typeof raw === "string") msg = raw;
+    else if (raw.message) msg = Array.isArray(raw.message) ? raw.message.join(" · ") : String(raw.message);
+    else if (raw.error)   msg = String(raw.error);
+  } else if (e?.message) msg = e.message;
+  if (e?.response?.status) msg = `HTTP ${e.response.status} · ${msg}`;
+  return msg;
+}
+
 // ─── MODAL ───────────────────────────────────────────────────────────────────
-function AuditoriaModal({ granjas, onClose, onSave, error }: {
+function AuditoriaModal({ granjas, onClose, onSave, error, editing }: {
   granjas: any[];
   onClose: () => void;
   onSave: (a: Partial<Auditoria>) => Promise<void> | void;
   error?: string | null;
+  editing?: Auditoria;
 }) {
-  const [form, setForm] = useState<Partial<Auditoria>>({
+  const [form, setForm] = useState<Partial<Auditoria>>(editing ? {
+    auditorId:       editing.auditorId,
+    auditorNombre:   editing.auditorNombre,
+    granjaId:        editing.granjaId,
+    granjaNombre:    editing.granjaNombre,
+    tipoAuditoria:   editing.tipoAuditoria,
+    fechaProgramada: editing.fechaProgramada?.slice(0, 10) ?? new Date().toISOString().slice(0,10),
+    fechaEjecutada:  editing.fechaEjecutada?.slice(0, 10),
+    estado:          editing.estado,
+    comentarios:     editing.comentarios ?? "",
+  } : {
     auditorId:       AUDITORS[0]?.id ?? "",
     auditorNombre:   AUDITORS[0]?.name ?? "",
     granjaId:        granjas[0]?.id ?? "",
@@ -261,8 +304,14 @@ function AuditoriaModal({ granjas, onClose, onSave, error }: {
       <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-xl overflow-hidden flex flex-col shadow-card">
         <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
           <div>
-            <h2 className="font-display font-bold text-white text-lg">Nueva Auditoría</h2>
-            <p className="text-xs text-[#94A3B8] mt-0.5">Aplica el checklist IA después de crearla</p>
+            <h2 className="font-display font-bold text-white text-lg">
+              {editing ? "Editar Auditoría" : "Nueva Auditoría"}
+            </h2>
+            <p className="text-xs text-[#94A3B8] mt-0.5">
+              {editing
+                ? "Modifica los campos y guarda los cambios"
+                : "Aplica el checklist IA después de crearla"}
+            </p>
           </div>
           <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
         </header>
@@ -293,6 +342,11 @@ function AuditoriaModal({ granjas, onClose, onSave, error }: {
             <Field label="Fecha Programada">
               <input type="date" value={form.fechaProgramada} onChange={(e)=>setForm({...form, fechaProgramada: e.target.value})} className="input-base"/>
             </Field>
+            {editing && (
+              <Field label="Fecha Ejecutada">
+                <input type="date" value={form.fechaEjecutada ?? ""} onChange={(e)=>setForm({...form, fechaEjecutada: e.target.value})} className="input-base"/>
+              </Field>
+            )}
           </div>
           <Field label="Comentarios">
             <textarea value={form.comentarios ?? ""} onChange={(e)=>setForm({...form, comentarios: e.target.value})} rows={3} className="input-base resize-none"/>
@@ -313,7 +367,7 @@ function AuditoriaModal({ granjas, onClose, onSave, error }: {
               className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-2 disabled:opacity-50"
             >
               {submitting && <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"/>}
-              {submitting ? "Guardando..." : "Crear auditoría"}
+              {submitting ? "Guardando..." : editing ? "Actualizar" : "Crear auditoría"}
             </button>
           </div>
         </form>
