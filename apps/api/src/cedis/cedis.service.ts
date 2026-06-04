@@ -151,26 +151,58 @@ export class CedisService {
   }
 
   createHallazgo(dto: CreateHallazgoCediDto) {
-    return this.prisma.hallazgoCedi.create({
-      data: {
-        ...dto,
-        ...(dto.fechaCompromiso && { fechaCompromiso: new Date(dto.fechaCompromiso) }),
-      },
-    });
+    // Sanitiza el payload · convierte strings de fecha a Date + limpia campos no persistibles
+    const data = this.sanitizeHallazgoPayload(dto);
+    return this.prisma.hallazgoCedi.create({ data });
   }
 
   async updateHallazgo(id: string, dto: Partial<CreateHallazgoCediDto>) {
     const existing = await this.prisma.hallazgoCedi.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Hallazgo no encontrado");
 
-    return this.prisma.hallazgoCedi.update({
-      where: { id },
-      data: {
-        ...dto,
-        ...(dto.fechaCompromiso && { fechaCompromiso: new Date(dto.fechaCompromiso) }),
-        ...((dto as any).fechaCierre && { fechaCierre: new Date((dto as any).fechaCierre) }),
-      },
-    });
+    const data = this.sanitizeHallazgoPayload(dto);
+    return this.prisma.hallazgoCedi.update({ where: { id }, data });
+  }
+
+  /**
+   * Sanitiza el payload para evitar errores Prisma:
+   *  · Convierte fechas string → Date (solo si presentes)
+   *  · Elimina cadenas vacías de campos opcionales
+   *  · Garantiza tipos correctos (porcentajeAvance como número 0-100)
+   */
+  private sanitizeHallazgoPayload(dto: Partial<CreateHallazgoCediDto>): any {
+    const data: any = { ...dto };
+
+    // Limpiar campos opcionales con string vacío (evita filtrar como contenido)
+    for (const k of ["responsable", "subItem", "subtema", "recomendacionIA"]) {
+      if (typeof data[k] === "string" && data[k].trim() === "") delete data[k];
+    }
+
+    // Fechas: solo convertir si es string no vacío
+    if (typeof data.fechaCompromiso === "string" && data.fechaCompromiso.trim() !== "") {
+      data.fechaCompromiso = new Date(data.fechaCompromiso);
+    } else if (data.fechaCompromiso === "" || data.fechaCompromiso === null) {
+      delete data.fechaCompromiso;
+    }
+
+    if (typeof data.fechaCierre === "string" && data.fechaCierre.trim() !== "") {
+      data.fechaCierre = new Date(data.fechaCierre);
+    } else if (data.fechaCierre === "" || data.fechaCierre === null) {
+      delete data.fechaCierre;
+    }
+
+    // porcentajeAvance: clamp 0-100
+    if (data.porcentajeAvance != null) {
+      const n = typeof data.porcentajeAvance === "number"
+        ? data.porcentajeAvance
+        : parseInt(String(data.porcentajeAvance), 10);
+      data.porcentajeAvance = isNaN(n) ? 0 : Math.max(0, Math.min(100, n));
+    }
+
+    // reincidente: cast a boolean
+    if (data.reincidente != null) data.reincidente = !!data.reincidente;
+
+    return data;
   }
 
   async removeHallazgo(id: string) {

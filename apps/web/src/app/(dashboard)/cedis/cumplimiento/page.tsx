@@ -367,7 +367,20 @@ export default function CumplimientoCedisPage() {
               }
               setModalOpen(false);
             } catch (e: any) {
-              setErrorMsg(e?.response?.data?.message ?? e?.message ?? "Error al guardar");
+              // Extracción robusta del error · cualquiera de estas estructuras
+              const raw = e?.response?.data;
+              let msg = "Error al guardar";
+              if (raw) {
+                if (typeof raw === "string") msg = raw;
+                else if (raw.message) msg = Array.isArray(raw.message) ? raw.message.join(" · ") : String(raw.message);
+                else if (raw.error)   msg = String(raw.error);
+              } else if (e?.message) {
+                msg = e.message;
+              }
+              // Detalle adicional para debugging
+              if (e?.response?.status) msg = `HTTP ${e.response.status} · ${msg}`;
+              setErrorMsg(msg);
+              console.error("[CumplimientoCEDIS] error guardando plan:", e);
               throw e;
             }
           }}
@@ -419,11 +432,22 @@ function PlanModal({ item, cedis, onClose, onSave, error }: {
 
   const safeCediId = item?.cediId ?? (cedis[0]?.id ?? "");
 
-  // Estado del formulario · soporta tanto valores UPPER_CASE (API) como Title Case (legacy)
+  // Normaliza valores legacy (Title Case con acentos) → UPPER_CASE del backend
   const normalize = (s: string | undefined, list: readonly string[]): string => {
     if (!s) return list[0] ?? "";
     const upper = s.toUpperCase().replace(/[ÉÍÓÚÁÑ]/g, m => ({ Á: "A", É: "E", Í: "I", Ó: "O", Ú: "U", Ñ: "N" }[m] ?? m));
     return list.includes(upper as any) ? upper : (list[0] ?? "");
+  };
+
+  // Convierte cualquier formato de fecha (ISO datetime, Date, string) a YYYY-MM-DD para <input type="date">
+  const toDateInput = (v: any): string => {
+    if (!v) return "";
+    if (typeof v === "string" && v.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    try {
+      const d = new Date(v);
+      if (isNaN(d.getTime())) return "";
+      return d.toISOString().slice(0, 10);
+    } catch { return ""; }
   };
 
   const [form, setForm] = useState<Partial<HallazgoCediDto>>({
@@ -437,8 +461,8 @@ function PlanModal({ item, cedis, onClose, onSave, error }: {
     criticidad:       normalize(item?.criticidad, CRITICIDADES),
     estado:           normalize(item?.estado,     ESTADOS),
     responsable:      item?.responsable ?? "",
-    fechaCompromiso:  item?.fechaCompromiso ?? "",
-    fechaCierre:      item?.fechaCierre ?? "",
+    fechaCompromiso:  toDateInput(item?.fechaCompromiso),
+    fechaCierre:      toDateInput(item?.fechaCierre),
     porcentajeAvance: item?.porcentajeAvance ?? 0,
     reincidente:      item?.reincidente ?? false,
     recomendacionIA:  item?.recomendacionIA ?? "",
@@ -448,26 +472,32 @@ function PlanModal({ item, cedis, onClose, onSave, error }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.cediId)      { alert("CEDI es obligatorio"); return; }
-    if (!form.titulo)      { alert("Título es obligatorio"); return; }
-    if (!form.descripcion) { alert("Descripción es obligatoria"); return; }
+    if (!form.cediId)      { alert("CEDI es obligatorio · selecciona uno"); return; }
+    if (!form.titulo?.trim())      { alert("Título es obligatorio"); return; }
+    if (!form.descripcion?.trim()) { alert("Descripción es obligatoria"); return; }
     if (!form.categoria)   { alert("Categoría es obligatoria"); return; }
     if (!form.tipoRiesgo)  { alert("Tipo de riesgo es obligatorio"); return; }
     if (!form.criticidad)  { alert("Criticidad es obligatoria"); return; }
 
-    // Construir payload limpio · eliminar strings vacíos
+    // Construir payload limpio · eliminar strings vacíos para que backend los ignore
     const payload: any = { ...form };
-    if (!payload.fechaCompromiso) delete payload.fechaCompromiso;
-    if (!payload.fechaCierre)     delete payload.fechaCierre;
-    if (!payload.subItem)         delete payload.subItem;
-    if (!payload.recomendacionIA) delete payload.recomendacionIA;
-    if (!payload.responsable)     delete payload.responsable;
+    // Strip strings vacíos y trim los que tienen contenido
+    for (const k of ["titulo", "descripcion", "subItem", "responsable", "recomendacionIA", "fechaCompromiso", "fechaCierre"]) {
+      if (typeof payload[k] === "string") {
+        payload[k] = payload[k].trim();
+        if (payload[k] === "") delete payload[k];
+      }
+    }
+    // Clamp porcentajeAvance
+    if (typeof payload.porcentajeAvance === "number") {
+      payload.porcentajeAvance = Math.max(0, Math.min(100, payload.porcentajeAvance));
+    }
 
     setSubmitting(true);
     try {
       await onSave(payload);
     } catch {
-      /* error mostrado en el banner */
+      /* error mostrado en el banner por el padre */
     } finally {
       setSubmitting(false);
     }
