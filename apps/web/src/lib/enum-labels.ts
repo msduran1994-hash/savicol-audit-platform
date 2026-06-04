@@ -30,6 +30,23 @@ export const ESTADO_HALLAZGO_DB: Dict = { ABIERTO: "Abierto", EN_PLAN: "En Plan"
 export const ESTADO_KPI_DB:      Dict = { NO_INICIADO: "No Iniciado", EN_CURSO: "En Curso", EN_ESPERA: "En Espera", COMPLETADO: "Completado" };
 export const TIPO_RIESGO_DB:     Dict = { OPERATIVO: "Operativo", REPUTACIONAL: "Reputacional", FINANCIERO: "Financiero", LEGAL: "Legal", CONTAGIO: "Contagio" };
 
+// ─── AUDITORÍAS GRANJAS ──────────────────────────────────────────────────────
+export const TIPO_AUDITORIA_DB: Dict = {
+  ACOMPANAMIENTO_INSUMOS: "Acompañamiento Insumos",
+  ALIMENTACION:           "Alimentación",
+  INVENTARIO:             "Inventario",
+  SANIDAD:                "Sanidad",
+  MORTALIDAD:             "Mortalidad",
+  GENERAL:                "General",
+};
+export const ESTADO_AUDITORIA_DB: Dict = {
+  PENDIENTE:    "Pendiente",
+  EN_PROCESO:   "En Proceso",
+  COMPLETADA:   "Completada",
+  APROBADA:     "Aprobada",
+  NO_APROBADA:  "No Aprobada",
+};
+
 // ─── RUTAS ───────────────────────────────────────────────────────────────────
 export const MOTIVO_DB: Dict = {
   PRODUCTO_VENCIDO:       "Producto Vencido",
@@ -75,6 +92,8 @@ export const CRITICIDAD_RUTA_TO_DB    = reverse(CRITICIDAD_RUTA_DB);
 export const ESTADO_ACOMP_TO_DB       = reverse(ESTADO_ACOMP_DB);
 export const ESTADO_CUMPLIMIENTO_TO_DB = reverse(ESTADO_CUMPLIMIENTO_DB);
 export const AUDIT_STATUS_TO_DB       = reverse(AUDIT_STATUS_DB);
+export const TIPO_AUDITORIA_TO_DB      = reverse(TIPO_AUDITORIA_DB);
+export const ESTADO_AUDITORIA_TO_DB    = reverse(ESTADO_AUDITORIA_DB);
 
 // ─── HELPER GENÉRICO ─────────────────────────────────────────────────────────
 export const toDB = (val: any, dict: Dict): any =>

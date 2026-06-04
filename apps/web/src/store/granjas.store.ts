@@ -335,6 +335,7 @@ interface GranjasFilters {
 import {
   TIPO_RIESGO_TO_DB, CATEGORIA_HALLAZGO_TO_DB, CRITICIDAD_HALL_TO_DB,
   ESTADO_HALLAZGO_TO_DB, ESTADO_KPI_TO_DB,
+  TIPO_AUDITORIA_TO_DB, ESTADO_AUDITORIA_TO_DB,
 } from "../lib/enum-labels";
 
 function hallazgoToDB(h: Partial<Hallazgo>): any {
@@ -350,6 +351,13 @@ function hallazgoToDB(h: Partial<Hallazgo>): any {
 }
 function kpiToDB(k: Partial<KPI>): any {
   return { ...k, ...(k.estado && { estado: toDB(k.estado, ESTADO_KPI_TO_DB) }) };
+}
+function auditoriaToDB(a: Partial<Auditoria>): any {
+  return {
+    ...a,
+    ...(a.tipoAuditoria && { tipoAuditoria: toDB(a.tipoAuditoria, TIPO_AUDITORIA_TO_DB) }),
+    ...(a.estado        && { estado:        toDB(a.estado,        ESTADO_AUDITORIA_TO_DB) }),
+  };
 }
 
 interface GranjasState {
@@ -500,7 +508,7 @@ export const useGranjasStore = create<GranjasState>()(
         const optimistic = { ...a, id: tempId, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as Auditoria;
         set((s) => ({ auditorias: [...s.auditorias, optimistic] }));
         try {
-          const real = await apiPost<Auditoria>("/granjas/auditorias", a);
+          const real = await apiPost<Auditoria>("/granjas/auditorias", auditoriaToDB(a));
           set((s) => ({ auditorias: s.auditorias.map((x) => x.id === tempId ? { ...optimistic, id: real.id } : x) }));
         } catch (e) {
           set((s) => ({ auditorias: s.auditorias.filter((x) => x.id !== tempId) }));
@@ -538,10 +546,15 @@ export const useGranjasStore = create<GranjasState>()(
         }
       },
       updateAuditoria: async (id, patch) => {
+        const before = get().auditorias;
         set((s) => ({ auditorias: s.auditorias.map((a) => a.id === id ? { ...a, ...patch, updatedAt: new Date().toISOString() } : a) }));
         if (id.startsWith("tmp_") || id.startsWith("DEMO_AUD_")) return;
-        try { await apiPatch(`/granjas/auditorias/${id}`, patch); }
-        catch (e) { console.error("updateAuditoria failed:", e); throw e; }
+        try { await apiPatch(`/granjas/auditorias/${id}`, auditoriaToDB(patch)); }
+        catch (e) {
+          set({ auditorias: before });
+          console.error("[granjas-store] updateAuditoria failed:", e);
+          throw e;
+        }
       },
       removeAuditoria: async (id) => {
         const before = get().auditorias;

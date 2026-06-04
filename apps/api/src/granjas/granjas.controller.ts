@@ -181,6 +181,37 @@ export class GranjasController {
     return this.svc.removeAuditoria(id, req.user.id);
   }
 
+  // ── BIBLIOTECA CHECKLIST IA ──
+  @Get("auditorias/:id/checklist")
+  getChecklist(@Param("id") id: string) {
+    return this.svc.getChecklistRespuestas(id);
+  }
+
+  @Post("auditorias/:id/checklist")
+  saveChecklist(
+    @Param("id") id: string,
+    @Body() body: { respuestas: Array<{ preguntaId: string; respuesta: string; observacion?: string }> },
+  ) {
+    return this.svc.saveChecklistRespuestas(id, body.respuestas ?? []);
+  }
+
+  @Post("auditorias/:id/checklist/generate-hallazgos")
+  generateHallazgos(
+    @Param("id") id: string,
+    @Body() body: {
+      items: Array<{
+        preguntaId: string;
+        categoria: string;
+        pregunta: string;
+        peso: number;
+        observacion?: string;
+      }>;
+    },
+    @Req() req: AuthRequest,
+  ) {
+    return this.svc.generateHallazgosFromChecklist(id, body.items ?? [], req.user.id);
+  }
+
   // ── ACTIVIDAD ──
   @Get("actividad/list")
   findActividad(@Query("limit") limit?: string) {

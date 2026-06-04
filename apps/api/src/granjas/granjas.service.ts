@@ -360,6 +360,107 @@ export class GranjasService {
     return data;
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  //  BIBLIOTECA CHECKLIST IA · respuestas + generación de hallazgos
+  // ════════════════════════════════════════════════════════════════════════
+
+  async getChecklistRespuestas(auditoriaId: string) {
+    return this.prisma.checklistRespuesta.findMany({
+      where: { auditoriaId },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  /**
+   * Guarda/actualiza respuestas del checklist (180 preguntas).
+   * Payload: array de { preguntaId, respuesta, observacion? }
+   * Upsert por (auditoriaId, preguntaId).
+   */
+  async saveChecklistRespuestas(
+    auditoriaId: string,
+    respuestas: Array<{ preguntaId: string; respuesta: string; observacion?: string }>,
+  ) {
+    const aud = await this.prisma.auditoriaGranja.findUnique({ where: { id: auditoriaId } });
+    if (!aud) throw new NotFoundException("Auditoría no encontrada");
+
+    // Eliminar las respuestas previas de esta auditoría y reescribir
+    await this.prisma.checklistRespuesta.deleteMany({ where: { auditoriaId } });
+
+    if (respuestas.length === 0) return { count: 0, score: 100 };
+
+    const data = respuestas.map(r => ({
+      auditoriaId,
+      preguntaId:  r.preguntaId,
+      respuesta:   r.respuesta,
+      observacion: r.observacion?.trim() || null,
+    }));
+    await this.prisma.checklistRespuesta.createMany({ data });
+
+    // Calcular score
+    const cumple    = data.filter(r => r.respuesta === "Cumple").length;
+    const noCumple  = data.filter(r => r.respuesta === "No Cumple").length;
+    const naCount   = data.filter(r => r.respuesta === "No Aplica").length;
+    const evaluadas = cumple + noCumple;
+    const score     = evaluadas > 0 ? Math.round((cumple / evaluadas) * 100) : 100;
+
+    return {
+      count: data.length,
+      cumple, noCumple, naCount, evaluadas,
+      score,
+    };
+  }
+
+  /**
+   * Genera hallazgos automáticos a partir de las respuestas "No Cumple".
+   * Útil después de aplicar el checklist.
+   */
+  async generateHallazgosFromChecklist(
+    auditoriaId: string,
+    items: Array<{
+      preguntaId: string;
+      categoria: string;
+      pregunta: string;
+      peso: number;
+      observacion?: string;
+    }>,
+    createdBy: string,
+  ) {
+    const aud = await this.prisma.auditoriaGranja.findUnique({
+      where: { id: auditoriaId },
+      include: { granja: { select: { tipoGranja: true, tipoOperativo: true } } },
+    });
+    if (!aud) throw new NotFoundException("Auditoría no encontrada");
+
+    const created: any[] = [];
+    for (const it of items) {
+      // Mapear peso → criticidad: 3=CRITICA, 2=ALTA, 1=MEDIA
+      const criticidad = it.peso >= 3 ? "CRITICA" : it.peso === 2 ? "ALTA" : "MEDIA";
+      const h = await this.prisma.hallazgo.create({
+        data: {
+          titulo:        `[Auto] ${it.pregunta.slice(0, 80)}`,
+          granjaId:      aud.granjaId,
+          auditoriaId,
+          auditorId:     aud.auditorId,
+          auditorNombre: aud.auditorNombre,
+          tipoGranja:    aud.granja?.tipoGranja    ?? "PROPIA",
+          tipoOperativo: aud.granja?.tipoOperativo ?? "ENGORDE",
+          fechaVisita:   aud.fechaProgramada,
+          categoria:     it.categoria,
+          tiposRiesgo:   JSON.stringify(["OPERATIVO"]),
+          criticidad,
+          estado:        "ABIERTO",
+          descripcion:   `Hallazgo generado automáticamente desde checklist IA · sub-ítem: ${it.preguntaId}${it.observacion ? "\n\nObservación: " + it.observacion : ""}`,
+        },
+      });
+      created.push(h);
+      await this.logActivity({
+        granjaId: aud.granjaId, tipo: "Hallazgo", accion: "Auto-creado desde Checklist",
+        recursoId: h.id, recursoNombre: h.titulo, usuarioId: createdBy, usuarioNombre: "",
+      });
+    }
+    return { generados: created.length, hallazgos: created };
+  }
+
   // ── ACTIVIDAD LOG ──
   findActividad(limit = 50) {
     return this.prisma.actividadGranjaLog.findMany({
