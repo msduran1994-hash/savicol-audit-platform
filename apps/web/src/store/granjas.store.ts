@@ -478,15 +478,22 @@ export const useGranjasStore = create<GranjasState>()(
           const real = await apiPost<Hallazgo>("/granjas/hallazgos", hallazgoToDB(h));
           set((s) => ({ hallazgos: s.hallazgos.map((x) => x.id === tempId ? { ...optimistic, id: real.id } : x) }));
         } catch (e) {
+          // Rollback optimista + re-throw para que la UI muestre el error
           set((s) => ({ hallazgos: s.hallazgos.filter((x) => x.id !== tempId) }));
-          console.error("addHallazgo failed:", e);
+          console.error("[granjas-store] addHallazgo failed:", e);
+          throw e;
         }
       },
       updateHallazgo: async (id, patch) => {
+        const before = get().hallazgos;
         set((s) => ({ hallazgos: s.hallazgos.map((h) => h.id === id ? { ...h, ...patch, updatedAt: new Date().toISOString() } : h) }));
         if (id.startsWith("tmp_") || id.startsWith("DEMO_HAL_")) return;
         try { await apiPatch(`/granjas/hallazgos/${id}`, hallazgoToDB(patch)); }
-        catch (e) { console.error("updateHallazgo failed:", e); }
+        catch (e) {
+          set({ hallazgos: before });
+          console.error("[granjas-store] updateHallazgo failed:", e);
+          throw e;
+        }
       },
       addAuditoria: async (a) => {
         const tempId = `tmp_${Date.now()}`;
@@ -497,7 +504,8 @@ export const useGranjasStore = create<GranjasState>()(
           set((s) => ({ auditorias: s.auditorias.map((x) => x.id === tempId ? { ...optimistic, id: real.id } : x) }));
         } catch (e) {
           set((s) => ({ auditorias: s.auditorias.filter((x) => x.id !== tempId) }));
-          console.error("addAuditoria failed:", e);
+          console.error("[granjas-store] addAuditoria failed:", e);
+          throw e;
         }
       },
       addKPI: async (k) => {

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 
 // SQLite: enums son strings con union types
@@ -160,14 +160,14 @@ export class GranjasService {
   }
 
   async createHallazgo(dto: CreateHallazgoDto, createdBy: string) {
-    const { tiposRiesgo, ...rest } = dto;
-    const h = await this.prisma.hallazgo.create({
-      data: {
-        ...rest,
-        fechaVisita:  new Date(dto.fechaVisita),
-        tiposRiesgo:  JSON.stringify(tiposRiesgo ?? []),   // SQLite: array → JSON
-      },
-    });
+    if (!dto.granjaId)    throw new BadRequestException("granjaId es obligatorio");
+    if (!dto.titulo?.trim())       throw new BadRequestException("titulo es obligatorio");
+    if (!dto.descripcion?.trim())  throw new BadRequestException("descripcion es obligatoria");
+
+    const data = this.sanitizeHallazgoPayload(dto);
+    if (!data.fechaVisita) data.fechaVisita = new Date(); // si no hay fecha, usa hoy
+
+    const h = await this.prisma.hallazgo.create({ data });
     await this.logActivity({ granjaId: dto.granjaId, tipo: "Hallazgo", accion: "Creado",
       recursoId: h.id, recursoNombre: h.titulo, usuarioId: createdBy, usuarioNombre: "" });
     return h;
@@ -177,18 +177,47 @@ export class GranjasService {
     const existing = await this.prisma.hallazgo.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Hallazgo no encontrado");
 
-    const { tiposRiesgo, ...rest } = dto;
-    const h = await this.prisma.hallazgo.update({
-      where: { id },
-      data: {
-        ...rest,
-        ...(dto.fechaVisita && { fechaVisita: new Date(dto.fechaVisita) }),
-        ...(tiposRiesgo     && { tiposRiesgo: JSON.stringify(tiposRiesgo) }),
-      },
-    });
+    const data = this.sanitizeHallazgoPayload(dto);
+    const h = await this.prisma.hallazgo.update({ where: { id }, data });
     await this.logActivity({ granjaId: existing.granjaId, tipo: "Hallazgo", accion: "Actualizado",
       recursoId: id, recursoNombre: h.titulo, usuarioId: updatedBy, usuarioNombre: "" });
     return h;
+  }
+
+  /**
+   * Sanitiza Hallazgo payload:
+   *  - tiposRiesgo array → JSON string (SQLite no soporta arrays)
+   *  - fechaVisita string → Date solo si presente
+   *  - Strings vacíos opcionales eliminados
+   *  - Trim de strings con contenido
+   */
+  private sanitizeHallazgoPayload(dto: Partial<CreateHallazgoDto>): any {
+    const { tiposRiesgo, ...rest } = dto;
+    const data: any = { ...rest };
+
+    // Trim strings + eliminar vacíos opcionales
+    for (const k of ["titulo", "descripcion", "recomendacionesIA", "auditorNombre"]) {
+      if (typeof data[k] === "string") {
+        data[k] = data[k].trim();
+        if (data[k] === "" && k !== "titulo" && k !== "descripcion") delete data[k];
+      }
+    }
+
+    // Fecha visita: solo si tiene contenido válido
+    if (typeof data.fechaVisita === "string" && data.fechaVisita.trim() !== "") {
+      const d = new Date(data.fechaVisita);
+      if (!isNaN(d.getTime())) data.fechaVisita = d;
+      else delete data.fechaVisita;
+    } else if (data.fechaVisita === "" || data.fechaVisita === null) {
+      delete data.fechaVisita;
+    }
+
+    // tiposRiesgo: array → JSON string (SQLite legacy · Postgres también lo acepta como string)
+    if (tiposRiesgo !== undefined) {
+      data.tiposRiesgo = JSON.stringify(Array.isArray(tiposRiesgo) ? tiposRiesgo : []);
+    }
+
+    return data;
   }
 
   async removeHallazgo(id: string, deletedBy: string) {
@@ -211,14 +240,13 @@ export class GranjasService {
   }
 
   async createKPI(dto: CreateKPIDto, createdBy: string) {
-    const k = await this.prisma.kPI.create({
-      data: {
-        ...dto,
-        fechaCompromiso:    new Date(dto.fechaCompromiso),
-        fechaProximaVisita: dto.fechaProximaVisita ? new Date(dto.fechaProximaVisita) : null,
-        fechaCumplimiento:  dto.fechaCumplimiento  ? new Date(dto.fechaCumplimiento)  : null,
-      },
-    });
+    if (!dto.granjaId)         throw new BadRequestException("granjaId es obligatorio");
+    if (!dto.accion?.trim())   throw new BadRequestException("accion es obligatoria");
+
+    const data = this.sanitizeKPIPayload(dto);
+    if (!data.fechaCompromiso) data.fechaCompromiso = new Date(); // fallback hoy
+
+    const k = await this.prisma.kPI.create({ data });
     await this.logActivity({ granjaId: dto.granjaId, tipo: "KPI", accion: "Creado",
       recursoId: k.id, recursoNombre: k.accion, usuarioId: createdBy, usuarioNombre: "" });
     return k;
@@ -274,7 +302,13 @@ export class GranjasService {
   }
 
   async createAuditoria(dto: CreateAuditoriaDto, createdBy: string) {
+    if (!dto.granjaId)               throw new BadRequestException("granjaId es obligatorio");
+    if (!dto.auditorId)              throw new BadRequestException("auditorId es obligatorio");
+    if (!dto.tipoAuditoria)          throw new BadRequestException("tipoAuditoria es obligatorio");
+
     const data = this.sanitizeAuditoriaPayload(dto);
+    if (!data.fechaProgramada) data.fechaProgramada = new Date(); // fallback hoy
+
     const a = await this.prisma.auditoriaGranja.create({ data });
     await this.logActivity({ granjaId: dto.granjaId, tipo: "Auditoría", accion: "Creado",
       recursoId: a.id, recursoNombre: `${a.tipoAuditoria} · ${a.fechaProgramada.toISOString().slice(0,10)}`,

@@ -20,6 +20,7 @@ export default function HallazgosPage() {
   const [filtroRiesgo, setFiltroRiesgo] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Hallazgo | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const filtered = hallazgos.filter(h => {
     if (filtroCat   && h.categoria  !== filtroCat) return false;
@@ -125,11 +126,28 @@ export default function HallazgosPage() {
         <HallazgoModal
           hallazgo={editing}
           granjas={granjas}
-          onClose={() => setModalOpen(false)}
-          onSave={(h) => {
-            if (editing) updateHallazgo(editing.id, h);
-            else         addHallazgo(h as any);
-            setModalOpen(false);
+          error={saveError}
+          onClose={() => { setModalOpen(false); setSaveError(null); }}
+          onSave={async (h) => {
+            setSaveError(null);
+            try {
+              if (editing) await updateHallazgo(editing.id, h);
+              else         await addHallazgo(h as any);
+              setModalOpen(false);
+            } catch (e: any) {
+              const raw = e?.response?.data;
+              let msg = "Error al guardar";
+              if (raw) {
+                if (typeof raw === "string") msg = raw;
+                else if (raw.message) msg = Array.isArray(raw.message) ? raw.message.join(" · ") : String(raw.message);
+                else if (raw.error)   msg = String(raw.error);
+              } else if (e?.message) {
+                msg = e.message;
+              }
+              if (e?.response?.status) msg = `HTTP ${e.response.status} · ${msg}`;
+              setSaveError(msg);
+              console.error("[Hallazgos] error guardando:", e);
+            }
           }}
         />
       )}
@@ -137,28 +155,35 @@ export default function HallazgosPage() {
   );
 }
 
-function HallazgoModal({ hallazgo, granjas, onClose, onSave }: {
+function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
   hallazgo: Hallazgo | null;
   granjas: any[];
   onClose: () => void;
-  onSave: (h: Partial<Hallazgo>) => void;
+  onSave: (h: Partial<Hallazgo>) => Promise<void> | void;
+  error?: string | null;
 }) {
+  // Toma la granja del hallazgo si existe, sino la primera disponible
+  const defaultGranja = hallazgo ? granjas.find(g => g.id === hallazgo.granjaId) ?? granjas[0] : granjas[0];
+
   const [form, setForm] = useState<Partial<Hallazgo>>(hallazgo ?? {
     titulo: "",
-    granjaId: granjas[0]?.id ?? "",
-    granjaNombre: granjas[0]?.nombre ?? "",
-    auditorId: AUDITORS[0].id,
-    auditorNombre: AUDITORS[0].name,
-    tipoGranja: "Propia",
-    tipoOperativo: "Engorde",
-    fechaVisita: new Date().toISOString().slice(0,10),
-    categoria: "Bioseguridad",
-    tiposRiesgo: [],
-    criticidad: "Media",
-    estado: "Abierto",
-    descripcion: "",
+    granjaId:     defaultGranja?.id ?? "",
+    granjaNombre: defaultGranja?.nombre ?? "",
+    auditorId:    AUDITORS[0]?.id ?? "",
+    auditorNombre:AUDITORS[0]?.name ?? "",
+    tipoGranja:    defaultGranja?.tipoGranja ?? "Propia",
+    tipoOperativo: defaultGranja?.tipoOperativo ?? "Engorde",
+    fechaVisita:   new Date().toISOString().slice(0,10),
+    categoria:     "Bioseguridad",
+    tiposRiesgo:   [],
+    criticidad:    "Media",
+    estado:        "Abierto",
+    descripcion:   "",
     recomendacionesIA: "",
   });
+
+  const [submitting, setSubmitting] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   function toggleRiesgo(r: typeof TIPO_RIESGO[number]) {
     setForm((f) => {
@@ -167,16 +192,52 @@ function HallazgoModal({ hallazgo, granjas, onClose, onSave }: {
     });
   }
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.titulo) return;
+    setValidationError(null);
+
+    // Validaciones explícitas con mensajes claros
+    if (!form.titulo?.trim()) {
+      setValidationError("El título del hallazgo es obligatorio");
+      return;
+    }
+    if (!form.granjaId) {
+      setValidationError("Selecciona una granja del listado");
+      return;
+    }
+    if (!form.descripcion?.trim()) {
+      setValidationError("La descripción del hallazgo es obligatoria");
+      return;
+    }
+    if (granjas.length === 0) {
+      setValidationError("No hay granjas en el sistema. Crea una granja primero en /granjas/registro");
+      return;
+    }
+
     const granja  = granjas.find(g => g.id === form.granjaId);
     const auditor = AUDITORS.find(a => a.id === form.auditorId);
-    onSave({
+
+    // Sanitizar: trim strings + asegurar tipos correctos derivados de granja
+    const payload: Partial<Hallazgo> = {
       ...form,
-      granjaNombre:  granja?.nombre  ?? form.granjaNombre,
-      auditorNombre: auditor?.name   ?? form.auditorNombre,
-    });
+      titulo:        form.titulo.trim(),
+      descripcion:   form.descripcion.trim(),
+      recomendacionesIA: form.recomendacionesIA?.trim() || undefined,
+      granjaNombre:  granja?.nombre ?? form.granjaNombre,
+      auditorNombre: auditor?.name  ?? form.auditorNombre,
+      // El tipo de granja debe coincidir con la granja seleccionada (display name del store)
+      tipoGranja:    granja?.tipoGranja    ?? form.tipoGranja,
+      tipoOperativo: granja?.tipoOperativo ?? form.tipoOperativo,
+    };
+
+    setSubmitting(true);
+    try {
+      await onSave(payload);
+    } catch {
+      // Error se muestra en el banner desde el padre
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -244,9 +305,24 @@ function HallazgoModal({ hallazgo, granjas, onClose, onSave }: {
           </F>
         </form>
 
+        {(validationError || error) && (
+          <div className="mx-6 mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>
+            <span>{validationError ?? error}</span>
+          </div>
+        )}
+
         <footer className="flex items-center justify-end gap-2 px-6 py-3 border-t border-[#1E2D4A]">
-          <button type="button" onClick={onClose} className="btn-ghost text-xs">Cancelar</button>
-          <button type="submit" onClick={submit} className="btn-primary text-xs bg-amber-500 hover:bg-amber-600">{hallazgo ? "Guardar" : "Crear hallazgo"}</button>
+          <button type="button" onClick={onClose} className="btn-ghost text-xs" disabled={submitting}>Cancelar</button>
+          <button
+            type="submit"
+            onClick={submit}
+            disabled={submitting}
+            className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-2 disabled:opacity-50"
+          >
+            {submitting && <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"/>}
+            {submitting ? "Guardando..." : (hallazgo ? "Guardar" : "Crear hallazgo")}
+          </button>
         </footer>
       </div>
     </div>
