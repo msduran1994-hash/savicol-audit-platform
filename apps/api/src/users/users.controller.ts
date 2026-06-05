@@ -37,7 +37,7 @@ export class UsersController {
   @Post()
   @Roles("ADMIN")
   create(@Body() dto: CreateUserDto, @Req() req: AuthRequest) {
-    return this.svc.create(dto, req.user.role);
+    return this.svc.create(dto, req.user.role, req.user.id);
   }
 
   // ── ACTUALIZAR ──
@@ -63,7 +63,7 @@ export class UsersController {
   @Patch(":id/toggle-active")
   @Roles("ADMIN")
   toggleActive(@Param("id") id: string, @Req() req: AuthRequest) {
-    return this.svc.toggleActive(id, req.user.role);
+    return this.svc.toggleActive(id, req.user.role, req.user.id);
   }
 
   // ── PASSWORD ──
@@ -71,7 +71,7 @@ export class UsersController {
   @Roles("ADMIN")
   @HttpCode(HttpStatus.OK)
   resetPassword(@Param("id") id: string, @Req() req: AuthRequest) {
-    return this.svc.resetPassword(id, req.user.role);
+    return this.svc.resetPassword(id, req.user.role, req.user.id);
   }
 
   @Post(":id/change-password")

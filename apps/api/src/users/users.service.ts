@@ -8,6 +8,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../email/email.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { AuditLogsService } from "../audit-logs/audit-logs.service";
 import * as bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 
@@ -33,6 +34,7 @@ export class UsersService {
     private prisma: PrismaService,
     private email:  EmailService,
     private notif:  NotificationsService,
+    private audit:  AuditLogsService,
   ) {}
 
   // ────────────────────────────────────────────────────────
@@ -76,7 +78,7 @@ export class UsersService {
   // ────────────────────────────────────────────────────────
   //  CREACIÓN
   // ────────────────────────────────────────────────────────
-  async create(dto: CreateUserDto, requesterRole: string) {
+  async create(dto: CreateUserDto, requesterRole: string, requesterId?: string) {
     if (requesterRole !== "ADMIN")
       throw new ForbiddenException("Solo ADMIN puede crear usuarios");
 
@@ -109,6 +111,14 @@ export class UsersService {
     // (para que el ADMIN la entregue al nuevo usuario)
     const result: any = user;
     if (!dto.password) result.tempPassword = plainPassword;
+
+    // Audit log
+    await this.audit.logAccess({
+      userId: requesterId ?? user.id,
+      action: "USER_CREATED",
+      resource: `user:${user.id}`,
+      metadata: { newUser: { id: user.id, email: user.email, role: user.role } },
+    });
 
     // Notificación in-app al nuevo usuario (visible cuando inicie sesión)
     await this.notif.create({
@@ -178,6 +188,14 @@ export class UsersService {
       select: { id: true, email: true, name: true, role: true },
     });
 
+    // Audit log
+    await this.audit.logAccess({
+      userId: requesterId,
+      action: "ROLE_CHANGED",
+      resource: `user:${id}`,
+      metadata: { targetUserId: id, oldRole: oldUser.role, newRole: upper },
+    });
+
     // Notif + email al target
     const changedBy = await this.prisma.user.findUnique({ where: { id: requesterId }, select: { name: true } });
     const changedByName = changedBy?.name ?? "Administrador";
@@ -201,26 +219,43 @@ export class UsersService {
     return updated;
   }
 
-  async toggleActive(id: string, requesterRole: string) {
+  async toggleActive(id: string, requesterRole: string, requesterId?: string) {
     if (requesterRole !== "ADMIN")
       throw new ForbiddenException("Solo ADMIN puede activar/desactivar usuarios");
 
     const user = await this.findOne(id);
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id },
       data: { isActive: !user.isActive },
       select: { id: true, email: true, name: true, role: true, isActive: true },
     });
+
+    await this.audit.logAccess({
+      userId: requesterId ?? id,
+      action: updated.isActive ? "USER_CREATED" : "ACCOUNT_DEACTIVATED",
+      resource: `user:${id}`,
+      metadata: { targetUserId: id, newState: updated.isActive ? "active" : "inactive" },
+    });
+
+    return updated;
   }
 
   // ────────────────────────────────────────────────────────
   //  PASSWORD MANAGEMENT
   // ────────────────────────────────────────────────────────
-  async resetPassword(id: string, requesterRole: string) {
+  async resetPassword(id: string, requesterRole: string, requesterId?: string) {
     if (requesterRole !== "ADMIN")
       throw new ForbiddenException("Solo ADMIN puede resetear contraseñas");
 
     const user = await this.findOne(id); // valida existencia
+
+    // Audit log
+    await this.audit.logAccess({
+      userId: requesterId ?? id,
+      action: "PASSWORD_RESET_COMPLETED",
+      resource: `user:${id}`,
+      metadata: { targetUserId: id, by: "admin" },
+    });
 
     const tempPassword = this.generateTempPassword();
     const hash = await bcrypt.hash(tempPassword, 12);
@@ -280,6 +315,11 @@ export class UsersService {
       this.prisma.session.deleteMany({ where: { userId: id } }), // cierra todas las sesiones
     ]);
 
+    await this.audit.logAccess({
+      userId: id, action: "PASSWORD_CHANGED",
+      resource: `user:${id}`, metadata: { by: "self" },
+    });
+
     return { message: "Contraseña actualizada. Inicie sesión nuevamente." };
   }
 
@@ -293,7 +333,15 @@ export class UsersService {
     if (id === requesterId)
       throw new BadRequestException("No puedes eliminar tu propio usuario");
 
-    await this.findOne(id); // valida existencia
+    const targetUser = await this.findOne(id); // valida existencia
+
+    // Audit log ANTES de borrar (sino cascade elimina el log también)
+    await this.audit.logAccess({
+      userId: requesterId,
+      action: "USER_DELETED",
+      resource: `user:${id}`,
+      metadata: { targetEmail: targetUser.email, targetRole: targetUser.role },
+    });
 
     // Cascade implícito: User → sessions, auditChanges, accessLogs (definido en schema)
     await this.prisma.user.delete({ where: { id } });

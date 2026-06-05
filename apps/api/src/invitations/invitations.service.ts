@@ -14,6 +14,7 @@ import * as crypto from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../email/email.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { AuditLogsService } from "../audit-logs/audit-logs.service";
 
 const INVITATION_TTL_HOURS = Number(process.env.INVITATION_TTL_HOURS ?? 24);
 const VALID_ROLES = ["ADMIN", "AUDITOR", "SUPERVISOR", "AUDITEE", "VIEWER"];
@@ -36,6 +37,7 @@ export class InvitationsService {
     private prisma: PrismaService,
     private email:  EmailService,
     private notif:  NotificationsService,
+    private audit:  AuditLogsService,
   ) {}
 
   // ── CREATE (admin) ──
@@ -82,6 +84,14 @@ export class InvitationsService {
       to: email,
       subject: `Invitación a Savicol Audit Platform · rol ${role}`,
       html,
+    });
+
+    // Audit log
+    await this.audit.logAccess({
+      userId: invitedBy.id,
+      action: "INVITATION_SENT",
+      resource: `invitation:${inv.id}`,
+      metadata: { email, role, emailMode: dispatch.mode, emailSent: dispatch.ok },
     });
 
     return {
@@ -196,6 +206,14 @@ export class InvitationsService {
         metadata: { userId: user.id, invitationId: inv.id },
       });
     }
+
+    // Audit log
+    await this.audit.logAccess({
+      userId: user.id,
+      action: "INVITATION_ACCEPTED",
+      resource: `invitation:${inv.id}`,
+      metadata: { email: user.email, role: user.role, invitedBy: inv.invitedById },
+    });
 
     return {
       id: user.id, email: user.email, name: user.name, role: user.role,

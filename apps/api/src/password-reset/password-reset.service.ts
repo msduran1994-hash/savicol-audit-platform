@@ -12,6 +12,7 @@ import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../email/email.service";
+import { AuditLogsService } from "../audit-logs/audit-logs.service";
 
 const RESET_TTL_HOURS = Number(process.env.PASSWORD_RESET_TTL_HOURS ?? 1);
 
@@ -31,6 +32,7 @@ export class PasswordResetService {
   constructor(
     private prisma: PrismaService,
     private email:  EmailService,
+    private audit:  AuditLogsService,
   ) {}
 
   /**
@@ -71,6 +73,13 @@ export class PasswordResetService {
       html,
     });
 
+    await this.audit.logAccess({
+      userId: user.id,
+      action: "PASSWORD_RESET_REQUESTED",
+      ip: meta.ip, ua: meta.ua,
+      metadata: { email: user.email },
+    });
+
     return { ok: true, message: "Si el correo existe, recibirás instrucciones para restablecer tu contraseña." };
   }
 
@@ -109,6 +118,12 @@ export class PasswordResetService {
       // Invalidar todas las sesiones del usuario · obligará a re-login
       this.prisma.session.deleteMany({ where: { userId: t.userId } }),
     ]);
+
+    await this.audit.logAccess({
+      userId: t.userId,
+      action: "PASSWORD_RESET_COMPLETED",
+      metadata: { by: "self-service" },
+    });
 
     return { ok: true, message: "Contraseña actualizada exitosamente. Inicia sesión con tus nuevas credenciales." };
   }
