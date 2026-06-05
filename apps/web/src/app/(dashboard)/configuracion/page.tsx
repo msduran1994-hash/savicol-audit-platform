@@ -30,6 +30,7 @@ import {
   useNotificationPrefs, useUpdateNotificationPrefs,
   type NotificationPrefs,
 } from "@/hooks/useNotifications";
+import { useEmailStatus, useEmailTest, type EmailTestResult } from "@/hooks/useEmail";
 
 const sections = [
   { id: "perfil",       label: "Perfil",          icon: User,      description: "Información personal y credenciales" },
@@ -1951,6 +1952,9 @@ function NotificacionesSection() {
         </p>
       </div>
 
+      {/* Diagnóstico SMTP · solo visible para ADMIN */}
+      <EmailDiagnosticCard/>
+
       {savedMsg && (
         <div className={cn(
           "px-3 py-2 rounded-lg border text-xs flex items-start gap-2",
@@ -1994,5 +1998,212 @@ function Toggle({ checked, disabled, onChange }: { checked: boolean; disabled?: 
         checked ? "translate-x-5" : "translate-x-1"
       )} />
     </button>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EMAIL DIAGNOSTIC CARD · solo admin · estado SMTP + test envío
+// ═══════════════════════════════════════════════════════════════════════════════
+function EmailDiagnosticCard() {
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === "ADMIN";
+  const statusQ = useEmailStatus();
+  const testMut = useEmailTest();
+  const [testTo, setTestTo]   = useState("");
+  const [lastResult, setLastResult] = useState<EmailTestResult | null>(null);
+
+  if (!isAdmin) return null;
+
+  const status = statusQ.data;
+
+  const runTest = async () => {
+    setLastResult(null);
+    try {
+      const r = await testMut.mutateAsync(testTo.trim() || undefined);
+      setLastResult(r);
+    } catch (e: any) {
+      setLastResult({
+        ok: false, mode: "noop", to: testTo || user?.email || "",
+        from: "—", elapsedMs: 0, messageId: null, timestamp: new Date().toISOString(),
+        error: e?.response?.data?.message ?? e?.message ?? "Error en la solicitud",
+        hint: "El backend devolvió error. Revisa los logs de Railway.",
+      });
+    }
+  };
+
+  return (
+    <div className="mt-6 pt-6 border-t border-[#1E2D4A] space-y-4">
+      <div>
+        <h3 className="font-display font-bold text-white text-base flex items-center gap-2">
+          <Mail className="w-4 h-4 text-amber-400"/>
+          Estado de correo SMTP
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 font-bold uppercase">ADMIN</span>
+        </h3>
+        <p className="text-xs text-[#94A3B8] mt-1">
+          Diagnóstico de conexión SMTP y prueba de envío real.
+          Si los correos no llegan, ejecuta el test desde aquí para ver el error específico.
+        </p>
+      </div>
+
+      {/* Estado actual */}
+      {statusQ.isLoading ? (
+        <div className="py-6 text-center text-[#475569]"><Loader2 className="w-5 h-5 animate-spin mx-auto"/></div>
+      ) : !status ? (
+        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-300">
+          No se pudo cargar el estado del servicio. Verifica que el backend esté en línea.
+        </div>
+      ) : (
+        <div className={cn(
+          "p-4 rounded-lg border space-y-3",
+          status.configured
+            ? "bg-emerald-500/10 border-emerald-500/30"
+            : "bg-amber-500/10 border-amber-500/30"
+        )}>
+          <div className="flex items-start gap-3">
+            <div className={cn(
+              "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
+              status.configured ? "bg-emerald-500/20 border border-emerald-500/40" : "bg-amber-500/20 border border-amber-500/40"
+            )}>
+              {status.configured
+                ? <CheckCircle2 className="w-5 h-5 text-emerald-400"/>
+                : <AlertCircle className="w-5 h-5 text-amber-400"/>}
+            </div>
+            <div className="flex-1">
+              <p className={cn("text-sm font-bold", status.configured ? "text-emerald-300" : "text-amber-300")}>
+                {status.configured ? "SMTP configurado y listo" : "Modo NO-OP · los correos NO se envían"}
+              </p>
+              <p className="text-[11px] text-[#94A3B8] mt-1">
+                Modo activo: <code className="text-cyan-300">{status.mode}</code>
+              </p>
+            </div>
+          </div>
+
+          {/* Tabla de variables */}
+          <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-lg overflow-hidden">
+            <table className="w-full text-xs">
+              <tbody>
+                <tr className="border-b border-[#1E2D4A]/40">
+                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_HOST</td>
+                  <td className="px-3 py-2 text-white font-mono">{status.smtp.host ?? <span className="text-red-400">no configurado</span>}</td>
+                </tr>
+                <tr className="border-b border-[#1E2D4A]/40">
+                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_PORT</td>
+                  <td className="px-3 py-2 text-white font-mono">{status.smtp.port}</td>
+                </tr>
+                <tr className="border-b border-[#1E2D4A]/40">
+                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_USER</td>
+                  <td className="px-3 py-2 text-white font-mono">{status.smtp.user ?? <span className="text-red-400">no configurado</span>}</td>
+                </tr>
+                <tr className="border-b border-[#1E2D4A]/40">
+                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_PASS</td>
+                  <td className="px-3 py-2 font-mono">
+                    {status.smtp.passSet
+                      ? <span className="text-emerald-400">✓ configurada · {status.smtp.passLength} caracteres</span>
+                      : <span className="text-red-400">no configurada</span>}
+                  </td>
+                </tr>
+                <tr className="border-b border-[#1E2D4A]/40">
+                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_FROM</td>
+                  <td className="px-3 py-2 text-white font-mono text-[10px]">{status.smtp.from ?? <span className="text-amber-400">usando default</span>}</td>
+                </tr>
+                <tr>
+                  <td className="px-3 py-2 text-[#94A3B8]">APP_BASE_URL</td>
+                  <td className="px-3 py-2 text-white font-mono text-[10px]">{status.appBaseUrl ?? <span className="text-amber-400">usando default Vercel</span>}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Diagnostics */}
+          {status.diagnostics.length > 0 && (
+            <ul className="text-xs space-y-1">
+              {status.diagnostics.map((d, i) => <li key={i} className="text-[#E2E8F0]">{d}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Test de envío */}
+      <div className="bg-[#1A2540] border border-[#2A3F6A] rounded-lg p-4 space-y-3">
+        <h4 className="text-sm font-bold text-white flex items-center gap-2">
+          <Send className="w-3.5 h-3.5 text-cyan-400"/>Enviar correo de prueba
+        </h4>
+        <p className="text-[11px] text-[#94A3B8]">
+          Envía un correo de prueba para validar la conectividad. Por defecto, se envía a tu propio correo ({user?.email}).
+          Puedes especificar otro destinatario si quieres validar entrega externa.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="email"
+            value={testTo}
+            onChange={(e) => setTestTo(e.target.value)}
+            placeholder={user?.email ?? "destinatario@ejemplo.com"}
+            className="flex-1 px-3 py-2 bg-[#0A111F] border border-[#1E2D4A] rounded-lg text-xs text-white placeholder:text-[#475569]"
+          />
+          <button
+            onClick={runTest}
+            disabled={testMut.isPending}
+            className="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white text-xs font-bold flex items-center gap-2 disabled:opacity-50"
+          >
+            {testMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Send className="w-3.5 h-3.5"/>}
+            {testMut.isPending ? "Enviando..." : "Enviar test"}
+          </button>
+        </div>
+
+        {/* Resultado del test */}
+        {lastResult && (
+          <div className={cn(
+            "p-3 rounded-lg border text-xs space-y-2",
+            lastResult.ok
+              ? "bg-emerald-500/10 border-emerald-500/30"
+              : "bg-red-500/10 border-red-500/30"
+          )}>
+            <div className="flex items-start gap-2">
+              {lastResult.ok
+                ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5"/>
+                : <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5"/>}
+              <div className="flex-1">
+                <p className={cn("font-bold", lastResult.ok ? "text-emerald-300" : "text-red-300")}>
+                  {lastResult.ok ? "✓ Test exitoso" : "✗ Test fallido"} · modo: {lastResult.mode}
+                </p>
+                <p className="text-[10px] text-[#94A3B8] mt-1">
+                  Destinatario: <code>{lastResult.to}</code> ·
+                  Remitente: <code className="text-[9px]">{lastResult.from}</code> ·
+                  Tiempo: {lastResult.elapsedMs}ms
+                </p>
+                {lastResult.messageId && (
+                  <p className="text-[10px] text-[#94A3B8] mt-1 truncate">Message-ID: <code className="text-[9px]">{lastResult.messageId}</code></p>
+                )}
+                {lastResult.error && (
+                  <p className="text-[11px] text-red-200 mt-2 bg-red-500/5 p-2 rounded font-mono">{lastResult.error}</p>
+                )}
+                <p className="text-[11px] text-[#E2E8F0] mt-2 leading-relaxed">{lastResult.hint}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Setup instructions */}
+      {status && !status.configured && (
+        <div className="bg-cyan-500/5 border border-cyan-500/30 rounded-lg p-4 text-xs text-[#E2E8F0] space-y-2">
+          <p className="font-bold text-cyan-300">📋 Pasos para activar envío real (Gmail Workspace)</p>
+          <ol className="list-decimal list-inside space-y-1.5 text-[#94A3B8] ml-1">
+            <li>Login en <code className="text-amber-300">myaccount.google.com</code> con cuenta corporativa (debe tener 2FA activado)</li>
+            <li>Security → 2-Step Verification → <strong>App passwords</strong></li>
+            <li>Select app: <strong>"Mail"</strong> · Select device: <strong>"Other (Custom name)"</strong> → "Savicol Audit Platform"</li>
+            <li>Generate · copia los <strong>16 caracteres</strong> (los espacios son visuales, el sistema los limpia)</li>
+            <li>En Railway → tu servicio API → <strong>Variables</strong>, agrega:</li>
+          </ol>
+          <pre className="bg-[#0A111F] border border-[#1E2D4A] rounded p-3 text-[10px] text-emerald-300 overflow-x-auto leading-tight">{`SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=noreply@savicol.com
+SMTP_PASS=xxxx xxxx xxxx xxxx
+SMTP_FROM=Savicol Audit <noreply@savicol.com>
+APP_BASE_URL=https://savicol-audit-platform.vercel.app`}</pre>
+          <p className="text-[#94A3B8]">6. Railway redeploya automáticamente · espera ~1 minuto · vuelve aquí y ejecuta el test.</p>
+        </div>
+      )}
+    </div>
   );
 }

@@ -46,22 +46,44 @@ export class EmailService {
     this.from  = process.env.SMTP_FROM ?? "Savicol Audit <noreply@savicol.com>";
 
     this.noopMode = !host || !user || !pass;
-    if (this.noopMode) {
+    if (this.noopMode || !host || !user || !pass) {
       this.logger.warn(
         "[EmailService] Modo NO-OP · SMTP_HOST/USER/PASS no configurados. " +
         "Los correos se loguearán pero NO se enviarán. " +
-        "Configura SMTP_* en Railway → Variables para activar envío real.",
+        "Configura SMTP_* en Railway → Variables para activar envío real. " +
+        `Estado actual: host=${host ? "✓" : "✗"} user=${user ? "✓" : "✗"} pass=${pass ? "✓" : "✗"}`,
       );
       return;
     }
 
+    // Limpiar espacios de App Password Gmail (la web los pone visualmente pero el server no los acepta)
+    const cleanPass = pass.replace(/\s+/g, "");
+
     this.transporter = nodemailer.createTransport({
       host,
       port,
-      secure: port === 465, // STARTTLS para 587 (Gmail Workspace)
-      auth: { user, pass },
+      secure: port === 465,                // 465 = TLS implícito, 587 = STARTTLS
+      requireTLS: port === 587,            // fuerza STARTTLS en 587
+      auth: { user, pass: cleanPass },
+      tls: {
+        // Permite TLS aunque el certificado no esté en cadena (debug Gmail Workspace)
+        rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false",
+      },
+      // Logger útil para debug en Railway (NODE_ENV=development)
+      logger: process.env.SMTP_DEBUG === "true",
+      debug:  process.env.SMTP_DEBUG === "true",
     });
+
     this.logger.log(`[EmailService] SMTP listo · ${host}:${port} · from=${this.from}`);
+
+    // Test de conectividad async · no bloquea startup pero loguea el resultado
+    this.transporter.verify((err) => {
+      if (err) {
+        this.logger.error(`[EmailService] ⚠️ verify() falló: ${err.message}. Los envíos pueden fallar. Verifica credenciales SMTP.`);
+      } else {
+        this.logger.log(`[EmailService] ✅ Conexión SMTP verificada · listo para enviar`);
+      }
+    });
   }
 
   /**
