@@ -1,6 +1,7 @@
 import {
   Controller, Post, Body, Res, Req, UseGuards, HttpCode, HttpStatus,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { Response, Request } from "express";
 import { AuthService } from "./auth.service";
 import { JwtRefreshGuard } from "./guards/jwt-refresh.guard";
@@ -16,6 +17,7 @@ export class AuthController {
 
   @Post("login")
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })  // 10 attempts / minute / IP · anti-bruteforce
   async login(
     @Body() body: { email: string; password: string },
     @Req() req: Request,
@@ -26,6 +28,7 @@ export class AuthController {
 
   @Post("mfa/verify")
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })  // 10 attempts / minute / IP
   async mfaVerify(
     @Body() body: { tempToken: string; code: string },
     @Req() req: Request,

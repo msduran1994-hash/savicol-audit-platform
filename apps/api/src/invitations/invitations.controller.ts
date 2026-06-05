@@ -2,6 +2,7 @@ import {
   Controller, Get, Post, Delete, Body, Param, Query, Req,
   UseGuards, HttpCode, HttpStatus,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { InvitationsService, CreateInvitationDto, AcceptInvitationDto } from "./invitations.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -23,6 +24,7 @@ export class InvitationsController {
 
   @Post("accept")
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })  // 10 attempts / min / IP · anti-bruteforce token
   accept(@Body() dto: AcceptInvitationDto) {
     return this.svc.accept(dto);
   }
