@@ -1,5 +1,5 @@
 import {
-  Controller, Post, Body, Res, Req, UseGuards, HttpCode, HttpStatus,
+  Controller, Post, Body, Query, Res, Req, UseGuards, HttpCode, HttpStatus,
 } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { Response, Request } from "express";
@@ -59,10 +59,12 @@ export class AuthController {
   async logout(
     @Req() req: Request & { user?: { sub: string } },
     @Res({ passthrough: true }) res: Response,
+    @Query("reason") reason?: string,
   ) {
     res.clearCookie("refresh_token");
     if (req.user?.sub) await this.auth.logout(req.user.sub, {
       ip: req.ip, ua: req.headers["user-agent"]?.toString(),
+      reason: reason ?? "manual",
     });
     return { message: "Sesión cerrada" };
   }

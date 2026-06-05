@@ -12,7 +12,7 @@ import * as bcrypt from "bcryptjs";
 import { authenticator } from "otplib";
 import * as qrcode from "qrcode";
 
-export interface AccessMeta { ip?: string; ua?: string }
+export interface AccessMeta { ip?: string; ua?: string; reason?: string }
 
 @Injectable()
 export class AuthService {
@@ -164,7 +164,10 @@ export class AuthService {
   async logout(userId: string, meta: AccessMeta = {}) {
     // SQLite: borrar las sesiones del usuario (no hay flag isActive)
     await this.prisma.session.deleteMany({ where: { userId } });
-    await this.audit.logAccess({ userId, action: "LOGOUT", ip: meta.ip, ua: meta.ua });
+    await this.audit.logAccess({
+      userId, action: "LOGOUT", ip: meta.ip, ua: meta.ua,
+      metadata: { reason: meta.reason ?? "manual" },
+    });
     return { message: "Sesión cerrada" };
   }
 

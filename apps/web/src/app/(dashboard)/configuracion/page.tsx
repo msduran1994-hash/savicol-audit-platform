@@ -240,6 +240,96 @@ function SeguridadSection() {
           {change.isPending ? "Actualizando..." : "Actualizar contraseña"}
         </button>
       </div>
+
+      {/* SESSION POLICY · timeout por inactividad */}
+      <SessionPolicyCard userRole={user?.role}/>
+
+      {/* MIS SESIONES ACTIVAS · revocar todas */}
+      <MisSesionesCard userId={user?.id}/>
+    </div>
+  );
+}
+
+function SessionPolicyCard({ userRole }: { userRole?: string }) {
+  // Lazy require para no romper el import si el módulo no existe
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getPolicy, SESSION_POLICIES } = require("@/lib/session-policy");
+  const myPolicy = getPolicy(userRole);
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-[#94A3B8]">Política de inactividad</h3>
+      <div className="p-4 bg-[#1A2540] rounded-xl border border-amber-500/30">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
+            <Clock className="w-4 h-4 text-amber-400" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-white">Tu política activa: <span className="text-amber-400">{myPolicy.label}</span></p>
+            <p className="text-[10px] text-[#94A3B8]">{myPolicy.description}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-center">
+          <div className="bg-[#0A111F] rounded-lg p-3 border border-[#1E2D4A]">
+            <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">Advertencia</p>
+            <p className="font-display text-2xl font-bold text-amber-400 mt-1">{myPolicy.warningMinutes}<span className="text-xs text-[#475569] font-normal ml-1">min</span></p>
+          </div>
+          <div className="bg-[#0A111F] rounded-lg p-3 border border-[#1E2D4A]">
+            <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">Cierre automático</p>
+            <p className="font-display text-2xl font-bold text-red-400 mt-1">{myPolicy.timeoutMinutes}<span className="text-xs text-[#475569] font-normal ml-1">min</span></p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-xl overflow-hidden">
+        <table className="w-full text-xs">
+          <thead className="bg-[#1A2540]">
+            <tr>
+              <th className="text-left px-3 py-2 text-[10px] text-[#94A3B8] uppercase">Rol</th>
+              <th className="text-left px-3 py-2 text-[10px] text-[#94A3B8] uppercase">Descripción</th>
+              <th className="text-center px-3 py-2 text-[10px] text-[#94A3B8] uppercase">Aviso</th>
+              <th className="text-center px-3 py-2 text-[10px] text-[#94A3B8] uppercase">Cierre</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(SESSION_POLICIES).map(([role, p]: any) => (
+              <tr key={role} className={cn("border-t border-[#1E2D4A]/40", role === userRole?.toUpperCase() && "bg-amber-500/5")}>
+                <td className="px-3 py-2 text-white font-semibold">
+                  {role === userRole?.toUpperCase() && "→ "}{p.label}
+                </td>
+                <td className="px-3 py-2 text-[#94A3B8]">{p.description}</td>
+                <td className="px-3 py-2 text-center text-amber-300">{p.warningMinutes > 0 ? `${p.warningMinutes}min` : "—"}</td>
+                <td className="px-3 py-2 text-center text-red-300">{p.timeoutMinutes > 0 ? `${p.timeoutMinutes}min` : "Sin timeout"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-[10px] text-[#475569]">
+        El temporizador se reinicia con cualquier actividad (mouse, teclado, scroll, touch).
+        Las sesiones cerradas por inactividad se registran en <strong className="text-cyan-400">Auditoría → Accesos</strong> con acción LOGOUT y metadata.reason=idle_timeout.
+      </p>
+    </div>
+  );
+}
+
+function MisSesionesCard({ userId }: { userId?: string }) {
+  if (!userId) return null;
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-[#94A3B8]">Mis sesiones activas</h3>
+      <div className="p-4 bg-[#1A2540] rounded-xl border border-[#2A3F6A] text-xs text-[#94A3B8]">
+        <p>
+          Las sesiones activas globales (todos los usuarios) se gestionan desde
+          <a href="#" onClick={(e) => { e.preventDefault(); }} className="text-cyan-400 hover:underline ml-1">
+            Auditoría → Sesiones
+          </a> (solo admin).
+        </p>
+        <p className="mt-2 text-[10px] text-[#475569]">
+          Para cerrar todas tus sesiones de inmediato, usa el botón "Cerrar todas las sesiones" del menú de usuario, o cambia tu contraseña (esto invalida todas las sesiones automáticamente).
+        </p>
+      </div>
     </div>
   );
 }
