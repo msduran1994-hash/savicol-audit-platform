@@ -22,6 +22,7 @@ import { EmailModule } from "./email/email.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { InvitationsModule } from "./invitations/invitations.module";
 import { PasswordResetModule } from "./password-reset/password-reset.module";
+import { AuditLogsModule } from "./audit-logs/audit-logs.module";
 // RolesGuard se aplica a nivel de controller junto a JwtAuthGuard
 // (NestJS ejecuta global guards ANTES que controller guards · user no estaría
 // disponible si RolesGuard se aplica globalmente)
@@ -58,6 +59,7 @@ import { PasswordResetModule } from "./password-reset/password-reset.module";
     NotificationsModule,
     InvitationsModule,
     PasswordResetModule,
+    AuditLogsModule,   // global · provee logAccess() y endpoints /audit-logs
   ],
   providers: [
     // Rate limiting global

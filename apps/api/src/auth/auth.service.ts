@@ -7,9 +7,12 @@ import {
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
+import { AuditLogsService } from "../audit-logs/audit-logs.service";
 import * as bcrypt from "bcryptjs";
 import { authenticator } from "otplib";
 import * as qrcode from "qrcode";
+
+export interface AccessMeta { ip?: string; ua?: string }
 
 @Injectable()
 export class AuthService {
@@ -17,6 +20,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
+    private audit: AuditLogsService,
   ) {}
 
   /* ── Register ─────────────────────────────────────────── */
@@ -48,18 +52,40 @@ export class AuthService {
   }
 
   /* ── Login ────────────────────────────────────────────── */
-  async login(dto: { email: string; password: string }) {
+  async login(dto: { email: string; password: string }, meta: AccessMeta = {}) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (!user) throw new UnauthorizedException("Credenciales inválidas");
+    if (!user) {
+      // No podemos loggear sin userId · loggeamos solo si llegó a la búsqueda
+      throw new UnauthorizedException("Credenciales inválidas");
+    }
 
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!valid) throw new UnauthorizedException("Credenciales inválidas");
+    if (!valid) {
+      await this.audit.logAccess({
+        userId: user.id, action: "LOGIN_FAILED",
+        ip: meta.ip, ua: meta.ua,
+        metadata: { reason: "invalid_password" },
+      });
+      throw new UnauthorizedException("Credenciales inválidas");
+    }
 
-    if (!user.isActive) throw new ForbiddenException("Cuenta inactiva");
+    if (!user.isActive) {
+      await this.audit.logAccess({
+        userId: user.id, action: "LOGIN_FAILED",
+        ip: meta.ip, ua: meta.ua,
+        metadata: { reason: "account_inactive" },
+      });
+      throw new ForbiddenException("Cuenta inactiva");
+    }
 
     // Si MFA NO está habilitado, devolvemos los tokens directamente
     if (!user.mfaEnabled || !user.mfaSecret) {
       const tokens = await this.signTokens(user.id, user.email, user.role);
+      await this.audit.logAccess({
+        userId: user.id, action: "LOGIN_SUCCESS",
+        ip: meta.ip, ua: meta.ua,
+        metadata: { mfa: false },
+      });
       return {
         mfaRequired: false,
         user: { id: user.id, email: user.email, name: user.name, role: user.role },
@@ -77,7 +103,7 @@ export class AuthService {
   }
 
   /* ── MFA Verify ───────────────────────────────────────── */
-  async mfaVerify(dto: { tempToken: string; code: string }) {
+  async mfaVerify(dto: { tempToken: string; code: string }, meta: AccessMeta = {}) {
     let payload: any;
     try {
       payload = this.jwt.verify(dto.tempToken);
@@ -92,7 +118,13 @@ export class AuthService {
 
     if (!user.mfaSecret) throw new UnauthorizedException("Usuario sin MFA configurado");
     const isValid = authenticator.verify({ token: dto.code, secret: user.mfaSecret });
-    if (!isValid) throw new UnauthorizedException("Código MFA incorrecto");
+    if (!isValid) {
+      await this.audit.logAccess({
+        userId: user.id, action: "MFA_FAILED",
+        ip: meta.ip, ua: meta.ua,
+      });
+      throw new UnauthorizedException("Código MFA incorrecto");
+    }
 
     // Update last login (no field in schema → solo updatedAt automático)
     await this.prisma.user.update({
@@ -101,6 +133,10 @@ export class AuthService {
     });
 
     const tokens = await this.signTokens(user.id, user.email, user.role);
+    await this.audit.logAccess({
+      userId: user.id, action: "MFA_SUCCESS",
+      ip: meta.ip, ua: meta.ua,
+    });
     return {
       user: { id: user.id, email: user.email, name: user.name, role: user.role },
       ...tokens,
@@ -125,9 +161,10 @@ export class AuthService {
   }
 
   /* ── Logout ───────────────────────────────────────────── */
-  async logout(userId: string) {
+  async logout(userId: string, meta: AccessMeta = {}) {
     // SQLite: borrar las sesiones del usuario (no hay flag isActive)
     await this.prisma.session.deleteMany({ where: { userId } });
+    await this.audit.logAccess({ userId, action: "LOGOUT", ip: meta.ip, ua: meta.ua });
     return { message: "Sesión cerrada" };
   }
 

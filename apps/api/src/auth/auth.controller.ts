@@ -16,17 +16,22 @@ export class AuthController {
 
   @Post("login")
   @HttpCode(HttpStatus.OK)
-  async login(@Body() body: { email: string; password: string }, @Res({ passthrough: true }) res: Response) {
-    return this.auth.login(body);
+  async login(
+    @Body() body: { email: string; password: string },
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.login(body, { ip: req.ip, ua: req.headers["user-agent"]?.toString() });
   }
 
   @Post("mfa/verify")
   @HttpCode(HttpStatus.OK)
   async mfaVerify(
     @Body() body: { tempToken: string; code: string },
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.auth.mfaVerify(body);
+    const result = await this.auth.mfaVerify(body, { ip: req.ip, ua: req.headers["user-agent"]?.toString() });
     // Set refresh token as httpOnly cookie
     res.cookie("refresh_token", result.refreshToken, {
       httpOnly: true,
@@ -53,7 +58,9 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     res.clearCookie("refresh_token");
-    if (req.user?.sub) await this.auth.logout(req.user.sub);
+    if (req.user?.sub) await this.auth.logout(req.user.sub, {
+      ip: req.ip, ua: req.headers["user-agent"]?.toString(),
+    });
     return { message: "Sesión cerrada" };
   }
 }

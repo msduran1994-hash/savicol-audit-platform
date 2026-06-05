@@ -21,12 +21,17 @@ import {
   useInvitations, useCreateInvitation, useRevokeInvitation, useResendInvitation,
   type InvitationItem,
 } from "@/hooks/useInvitations";
-import { Send, Clock, CheckCircle as CheckSolid, Filter } from "lucide-react";
+import { Send, Clock, CheckCircle as CheckSolid, Filter, FileSearch, Monitor as MonitorIcon, Eye } from "lucide-react";
+import {
+  useAccessLogs, useAccessStats, useAdminSessions,
+  type AccessLogItem, type AccessStats, type AdminSession,
+} from "@/hooks/useAuditLogs";
 
 const sections = [
   { id: "perfil",       label: "Perfil",          icon: User,      description: "Información personal y credenciales" },
   { id: "usuarios",     label: "Usuarios",         icon: Users,     description: "Crear y gestionar usuarios + roles" },
   { id: "invitaciones", label: "Invitaciones",     icon: Send,      description: "Enviar invitaciones por correo con token temporal" },
+  { id: "auditoria",    label: "Auditoría",        icon: FileSearch, description: "Registro de accesos · sesiones · cambios" },
   { id: "seguridad",    label: "Seguridad",        icon: Shield,    description: "MFA, contraseña y sesiones activas" },
   { id: "notificaciones", label: "Notificaciones", icon: Bell,      description: "Alertas y recordatorios de auditoría" },
   { id: "apariencia",   label: "Apariencia",       icon: Palette,   description: "Tema, idioma y preferencias visuales" },
@@ -76,6 +81,7 @@ export default function ConfiguracionPage() {
           {active === "perfil" && <PerfilSection user={user} />}
           {active === "usuarios" && <UsuariosSection user={user} />}
           {active === "invitaciones" && <InvitacionesSection />}
+          {active === "auditoria" && <AuditoriaSection />}
           {active === "seguridad" && <SeguridadSection />}
           {active === "notificaciones" && <PlaceholderSection label="Notificaciones" />}
           {active === "apariencia" && <PlaceholderSection label="Apariencia" />}
@@ -1453,6 +1459,274 @@ function InviteModal({ onClose, onSubmit }: {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AUDITORÍA · access logs + sesiones activas + cambios cronograma
+// ═══════════════════════════════════════════════════════════════════════════════
+const ACTION_LABEL: Record<string, string> = {
+  LOGIN_SUCCESS:    "Login exitoso",
+  LOGIN_FAILED:     "Login fallido",
+  MFA_SUCCESS:      "MFA exitoso",
+  MFA_FAILED:       "MFA fallido",
+  LOGOUT:           "Cierre de sesión",
+  PASSWORD_CHANGED: "Cambio de contraseña",
+  PASSWORD_RESET_REQUESTED: "Solicitud reset",
+  PASSWORD_RESET_COMPLETED: "Reset completado",
+  INVITATION_SENT:     "Invitación enviada",
+  INVITATION_ACCEPTED: "Invitación aceptada",
+  USER_CREATED:        "Usuario creado",
+  USER_DELETED:        "Usuario eliminado",
+  ROLE_CHANGED:        "Cambio de rol",
+  ACCOUNT_DEACTIVATED: "Cuenta desactivada",
+};
+const ACTION_COLOR: Record<string, string> = {
+  LOGIN_SUCCESS:    "#10B981",
+  LOGIN_FAILED:     "#EF4444",
+  MFA_SUCCESS:      "#10B981",
+  MFA_FAILED:       "#EF4444",
+  LOGOUT:           "#94A3B8",
+  PASSWORD_CHANGED: "#F59E0B",
+  PASSWORD_RESET_REQUESTED: "#F59E0B",
+  PASSWORD_RESET_COMPLETED: "#F59E0B",
+  INVITATION_SENT:     "#3B82F6",
+  INVITATION_ACCEPTED: "#10B981",
+  USER_CREATED:        "#10B981",
+  USER_DELETED:        "#EF4444",
+  ROLE_CHANGED:        "#F59E0B",
+  ACCOUNT_DEACTIVATED: "#EF4444",
+};
+
+function AuditoriaSection() {
+  const [tab, setTab] = useState<"access" | "sessions" | "activity">("access");
+  const [search, setSearch] = useState("");
+  const [action, setAction] = useState("");
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="font-display font-bold text-lg text-white">Auditoría de accesos</h2>
+        <p className="text-xs text-[#94A3B8] mt-1">
+          Registro completo de logins, cambios y sesiones activas. Solo ADMIN/SUPERVISOR.
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 p-1 bg-[#0D1526] border border-[#1E2D4A] rounded-lg w-fit">
+        {[
+          { id: "access" as const,   label: "Accesos",   icon: FileSearch },
+          { id: "sessions" as const, label: "Sesiones",  icon: MonitorIcon },
+          { id: "activity" as const, label: "Cambios",   icon: Eye },
+        ].map(t => {
+          const Icon = t.icon;
+          return (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
+                tab === t.id ? "bg-amber-500/15 text-amber-300 border border-amber-500/30" : "text-[#94A3B8] hover:text-white"
+              )}>
+              <Icon className="w-3 h-3"/>{t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "access" && <AccessLogsTab search={search} setSearch={setSearch} action={action} setAction={setAction}/>}
+      {tab === "sessions" && <SessionsTab/>}
+      {tab === "activity" && <ActivityLogsTab/>}
+    </div>
+  );
+}
+
+function AccessLogsTab({ search, setSearch, action, setAction }: {
+  search: string; setSearch: (s: string) => void;
+  action: string; setAction: (a: string) => void;
+}) {
+  const statsQ = useAccessStats();
+  const logsQ  = useAccessLogs({ search, action, limit: 100 });
+  const stats = statsQ.data;
+  const page  = logsQ.data;
+  const items = page?.items ?? [];
+
+  return (
+    <div className="space-y-4">
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="card-base">
+            <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">Total registros</p>
+            <p className="font-display text-2xl font-bold text-white mt-1">{stats.total.toLocaleString()}</p>
+          </div>
+          <div className="card-base">
+            <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">Últimos 30 días</p>
+            <p className="font-display text-2xl font-bold text-amber-400 mt-1">{stats.last30d.toLocaleString()}</p>
+          </div>
+          <div className="card-base">
+            <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">Acciones distintas</p>
+            <p className="font-display text-2xl font-bold text-cyan-400 mt-1">{stats.byAction.length}</p>
+          </div>
+          <div className="card-base">
+            <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">Top usuarios activos</p>
+            <p className="font-display text-2xl font-bold text-emerald-400 mt-1">{stats.topUsers.length}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <input value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar acción, recurso, metadata..."
+          className="flex-1 min-w-[240px] px-3 py-2 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white placeholder:text-[#475569]"/>
+        <select value={action} onChange={(e) => setAction(e.target.value)}
+          className="px-3 py-2 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+          <option value="">Todas las acciones</option>
+          {Object.keys(ACTION_LABEL).map(a => <option key={a} value={a}>{ACTION_LABEL[a]}</option>)}
+        </select>
+        <span className="text-[10px] text-[#475569] ml-auto">
+          {logsQ.isLoading ? "Cargando..." : `${items.length} de ${page?.total ?? 0}`}
+        </span>
+      </div>
+
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-lg overflow-hidden">
+        {logsQ.isLoading ? (
+          <div className="py-10 text-center text-[#475569]"><Loader2 className="w-5 h-5 animate-spin mx-auto"/></div>
+        ) : items.length === 0 ? (
+          <div className="py-10 text-center">
+            <FileSearch className="w-8 h-8 text-[#1E2D4A] mx-auto mb-3"/>
+            <p className="text-xs text-[#94A3B8]">No hay registros con los filtros actuales</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-[#1A2540] sticky top-0">
+                <tr>
+                  <th className="text-left px-3 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Fecha</th>
+                  <th className="text-left px-3 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Usuario</th>
+                  <th className="text-left px-3 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Acción</th>
+                  <th className="text-left px-3 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">IP</th>
+                  <th className="text-left px-3 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">User Agent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((l: AccessLogItem) => {
+                  const color = ACTION_COLOR[l.action] ?? "#94A3B8";
+                  const label = ACTION_LABEL[l.action] ?? l.action;
+                  return (
+                    <tr key={l.id} className="border-t border-[#1E2D4A]/40 hover:bg-[#1A2540]">
+                      <td className="px-3 py-2 text-[#94A3B8] font-mono whitespace-nowrap">
+                        {new Date(l.createdAt).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "medium" })}
+                      </td>
+                      <td className="px-3 py-2 text-white">
+                        <p className="font-semibold truncate max-w-[180px]">{l.user?.name ?? "(eliminado)"}</p>
+                        <p className="text-[10px] text-[#94A3B8] truncate max-w-[180px]">{l.user?.email}</p>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: `${color}18`, color }}>
+                          {label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-[#94A3B8] font-mono">{l.ipAddress ?? "—"}</td>
+                      <td className="px-3 py-2 text-[#475569] truncate max-w-[260px]" title={l.userAgent ?? ""}>
+                        {l.userAgent ? l.userAgent.split(" ").slice(0, 2).join(" ") : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SessionsTab() {
+  const sessionsQ = useAdminSessions();
+  const items = sessionsQ.data ?? [];
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-[#94A3B8]">Sesiones activas en este momento (max 200, ordenadas por creación)</p>
+      {sessionsQ.isLoading ? (
+        <div className="py-10 text-center text-[#475569]"><Loader2 className="w-5 h-5 animate-spin mx-auto"/></div>
+      ) : items.length === 0 ? (
+        <div className="py-10 text-center">
+          <MonitorIcon className="w-8 h-8 text-[#1E2D4A] mx-auto mb-3"/>
+          <p className="text-xs text-[#94A3B8]">Sin sesiones activas</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((s: AdminSession) => (
+            <div key={s.id} className="bg-[#1A2540] border border-[#2A3F6A] rounded-lg p-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+                <MonitorIcon className="w-4 h-4 text-emerald-400"/>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white font-semibold truncate">{s.user.name}</p>
+                <p className="text-[10px] text-[#94A3B8] truncate">{s.user.email} · {s.user.role}</p>
+                <p className="text-[10px] text-[#475569] mt-0.5">
+                  IP {s.ipAddress ?? "—"} · {s.userAgent?.split(" ").slice(0, 2).join(" ") ?? "—"}
+                </p>
+              </div>
+              <div className="text-right text-[10px]">
+                <p className="text-[#94A3B8]">Inició: {new Date(s.createdAt).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })}</p>
+                <p className="text-[#475569]">Expira: {new Date(s.expiresAt).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActivityLogsTab() {
+  // Reutilizamos el hook (lazy require para evitar import circular)
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { useActivityLogs } = require("@/hooks/useAuditLogs");
+  const logsQ = useActivityLogs({ limit: 100 });
+  const items = logsQ.data?.items ?? [];
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-[#94A3B8]">Cambios registrados en el cronograma de auditoría</p>
+      {logsQ.isLoading ? (
+        <div className="py-10 text-center text-[#475569]"><Loader2 className="w-5 h-5 animate-spin mx-auto"/></div>
+      ) : items.length === 0 ? (
+        <div className="py-10 text-center">
+          <Eye className="w-8 h-8 text-[#1E2D4A] mx-auto mb-3"/>
+          <p className="text-xs text-[#94A3B8]">Sin cambios registrados</p>
+        </div>
+      ) : (
+        <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-lg overflow-hidden">
+          <table className="w-full text-xs">
+            <thead className="bg-[#1A2540]">
+              <tr>
+                <th className="text-left px-3 py-2 text-[10px] text-[#94A3B8] uppercase">Fecha</th>
+                <th className="text-left px-3 py-2 text-[10px] text-[#94A3B8] uppercase">Usuario</th>
+                <th className="text-left px-3 py-2 text-[10px] text-[#94A3B8] uppercase">Acción</th>
+                <th className="text-left px-3 py-2 text-[10px] text-[#94A3B8] uppercase">Actividad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((l: any) => (
+                <tr key={l.id} className="border-t border-[#1E2D4A]/40 hover:bg-[#1A2540]">
+                  <td className="px-3 py-2 text-[#94A3B8] font-mono whitespace-nowrap">
+                    {new Date(l.changedAt).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })}
+                  </td>
+                  <td className="px-3 py-2 text-white">{l.user?.name ?? "(eliminado)"}</td>
+                  <td className="px-3 py-2">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-300">{l.action}</span>
+                  </td>
+                  <td className="px-3 py-2 text-[#94A3B8] truncate max-w-[300px]">
+                    {l.activity?.activity ?? "—"} ({l.activity?.area})
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
