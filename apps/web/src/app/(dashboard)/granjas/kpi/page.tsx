@@ -7,8 +7,12 @@ import { ESTADO_KPI } from "@/lib/granjas.constants";
 import type { KPI } from "@/lib/granjas.types";
 import {
   Target, Plus, Bell, Mail, Filter, TrendingUp, X, Trash2,
-  Edit2, AlertCircle, Loader2,
+  Edit2, AlertCircle, Loader2, Clock, AlertTriangle, CheckCircle2,
 } from "lucide-react";
+import {
+  useKpiAlerts, useSendKpiReminders,
+  type KpiAlert, type KpiAlertSeverity,
+} from "@/hooks/useKpiAlerts";
 
 // ─── HELPER · format error ──
 function formatErr(e: any, fallback: string): string {
@@ -33,6 +37,12 @@ export default function KPIPage() {
   const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
   const [saveError, setSaveError]   = useState<string | null>(null);
   const [filterEstado, setFilterEstado] = useState("");
+  const [alertsModalOpen, setAlertsModalOpen] = useState(false);
+  const [reminderResult, setReminderResult]   = useState<null | { sent: number; failed: number; total: number }>(null);
+
+  const alertsQ = useKpiAlerts();
+  const sendReminders = useSendKpiReminders();
+  const totalAlerts = alertsQ.data?.length ?? 0;
 
   const filtered = filterEstado
     ? kpis.filter(k => k.estado === filterEstado)
@@ -61,8 +71,37 @@ export default function KPIPage() {
             <option value="">Todos los estados</option>
             {ESTADO_KPI.map(e => <option key={e} value={e}>{e}</option>)}
           </select>
-          <button className="btn-secondary text-xs"><Mail className="w-3.5 h-3.5"/>Enviar recordatorios</button>
-          <button className="btn-secondary text-xs"><Bell className="w-3.5 h-3.5"/>Alertas activas</button>
+          <button
+            onClick={async () => {
+              if (totalAlerts === 0) {
+                alert("No hay KPIs en estado de alerta. Nada para recordar.");
+                return;
+              }
+              if (!confirm(`¿Enviar recordatorios a los responsables de ${totalAlerts} KPIs en alerta?\n\nSe creará notificación in-app y se enviará correo (si SMTP está configurado).`)) return;
+              try {
+                const r = await sendReminders.mutateAsync({});
+                setReminderResult({ sent: r.remindersSent, failed: r.emailsFailed, total: r.emailsAttempted });
+              } catch (e: any) {
+                alert("Error: " + (e?.response?.data?.message ?? e?.message ?? "desconocido"));
+              }
+            }}
+            disabled={sendReminders.isPending}
+            className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
+          >
+            {sendReminders.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Mail className="w-3.5 h-3.5"/>}
+            {sendReminders.isPending ? "Enviando..." : "Enviar recordatorios"}
+          </button>
+          <button
+            onClick={() => setAlertsModalOpen(true)}
+            className="btn-secondary text-xs flex items-center gap-1.5 relative"
+          >
+            <Bell className="w-3.5 h-3.5"/>Alertas activas
+            {totalAlerts > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold">
+                {totalAlerts > 99 ? "99+" : totalAlerts}
+              </span>
+            )}
+          </button>
           <button onClick={() => { setSaveError(null); setEditingKpi(null); setModalOpen(true); }}
             className="btn-primary text-xs ml-auto bg-amber-500 hover:bg-amber-600">
             <Plus className="w-3.5 h-3.5"/>Nuevo KPI
@@ -195,6 +234,37 @@ export default function KPIPage() {
           </ul>
         </div>
       </div>
+
+      {/* Banner resultado envío recordatorios */}
+      {reminderResult && (
+        <div className="fixed top-20 right-6 z-50 bg-[#0D1526] border border-emerald-500/40 rounded-xl shadow-2xl max-w-sm overflow-hidden animate-slide-up">
+          <div className="bg-emerald-500/10 px-4 py-3 border-b border-emerald-500/20 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400"/>
+              <p className="text-sm font-semibold text-white">Recordatorios enviados</p>
+            </div>
+            <button onClick={() => setReminderResult(null)} className="text-[#94A3B8] hover:text-white"><X className="w-4 h-4"/></button>
+          </div>
+          <div className="px-4 py-3 text-xs text-[#94A3B8] space-y-1">
+            <p><strong className="text-emerald-300">{reminderResult.sent}</strong> notificaciones in-app creadas</p>
+            {reminderResult.total > 0 && (
+              <p><strong className="text-cyan-300">{reminderResult.total - reminderResult.failed}/{reminderResult.total}</strong> correos enviados con éxito</p>
+            )}
+            {reminderResult.failed > 0 && (
+              <p className="text-amber-300">⚠ {reminderResult.failed} correos fallaron (revisa SMTP config)</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Alertas Activas */}
+      {alertsModalOpen && (
+        <AlertsModal
+          alerts={alertsQ.data ?? []}
+          isLoading={alertsQ.isLoading}
+          onClose={() => setAlertsModalOpen(false)}
+        />
+      )}
 
       {modalOpen && (
         <KPIModal
@@ -393,6 +463,146 @@ function Field({ label, value, truncate }: { label: string; value: string; trunc
     <div>
       <p className="text-[10px] text-[#475569] uppercase tracking-wider mb-0.5">{label}</p>
       <p className={`text-white ${truncate ? "truncate" : ""}`}>{value}</p>
+    </div>
+  );
+}
+
+// ─── ALERTS MODAL ──────────────────────────────────────────────────────────
+const SEV_COLOR: Record<KpiAlertSeverity, string> = {
+  RIESGO_CRITICO: "#EF4444",
+  VENCIDO:        "#F59E0B",
+  PROXIMO:        "#3B82F6",
+};
+const SEV_LABEL: Record<KpiAlertSeverity, string> = {
+  RIESGO_CRITICO: "Riesgo crítico",
+  VENCIDO:        "Vencido",
+  PROXIMO:        "Próximo a vencer",
+};
+const SEV_ICON: Record<KpiAlertSeverity, any> = {
+  RIESGO_CRITICO: AlertCircle,
+  VENCIDO:        AlertTriangle,
+  PROXIMO:        Clock,
+};
+
+function AlertsModal({ alerts, isLoading, onClose }: {
+  alerts: KpiAlert[];
+  isLoading: boolean;
+  onClose: () => void;
+}) {
+  const [filter, setFilter] = useState<KpiAlertSeverity | "">("");
+
+  const filtered = filter ? alerts.filter(a => a.severity === filter) : alerts;
+  const counts = {
+    RIESGO_CRITICO: alerts.filter(a => a.severity === "RIESGO_CRITICO").length,
+    VENCIDO:        alerts.filter(a => a.severity === "VENCIDO").length,
+    PROXIMO:        alerts.filter(a => a.severity === "PROXIMO").length,
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0D1526] border border-amber-500/40 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+        <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A] bg-gradient-to-r from-amber-500/10 to-transparent">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
+              <Bell className="w-5 h-5 text-amber-400"/>
+            </div>
+            <div>
+              <h2 className="font-display font-bold text-white text-lg">Alertas Activas KPI</h2>
+              <p className="text-xs text-[#94A3B8] mt-0.5">{alerts.length} KPIs requieren atención</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
+        </header>
+
+        {/* KPI cards por severidad */}
+        <div className="grid grid-cols-3 gap-3 px-6 py-4 border-b border-[#1E2D4A]">
+          {(["RIESGO_CRITICO", "VENCIDO", "PROXIMO"] as KpiAlertSeverity[]).map(sev => {
+            const Icon = SEV_ICON[sev];
+            const active = filter === sev;
+            return (
+              <button key={sev} onClick={() => setFilter(active ? "" : sev)}
+                className={`p-3 rounded-lg border transition-all text-left ${active ? "border-amber-500/40 bg-amber-500/5" : "border-[#2A3F6A] bg-[#1A2540] hover:border-[#3A4F8A]"}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Icon className="w-4 h-4" style={{ color: SEV_COLOR[sev] }}/>
+                  <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">{SEV_LABEL[sev]}</p>
+                </div>
+                <p className="font-display text-2xl font-bold" style={{ color: SEV_COLOR[sev] }}>{counts[sev]}</p>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tabla de alertas */}
+        <div className="flex-1 overflow-y-auto">
+          {isLoading ? (
+            <div className="py-12 text-center text-[#475569]">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto"/>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-12 text-center">
+              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3"/>
+              <p className="text-white font-semibold mb-1">¡Sin alertas activas!</p>
+              <p className="text-xs text-[#94A3B8]">
+                {filter ? `No hay KPIs en estado ${SEV_LABEL[filter]}.` : "Todos los KPIs están al día."}
+              </p>
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="bg-[#1A2540] sticky top-0">
+                <tr>
+                  <th className="text-left px-4 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Severidad</th>
+                  <th className="text-left px-4 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Acción / Granja</th>
+                  <th className="text-left px-4 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Responsable</th>
+                  <th className="text-center px-4 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Avance</th>
+                  <th className="text-center px-4 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Compromiso</th>
+                  <th className="text-center px-4 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(a => {
+                  const Icon = SEV_ICON[a.severity];
+                  return (
+                    <tr key={a.id} className="border-t border-[#1E2D4A]/40 hover:bg-[#1A2540]/50">
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                          style={{ background: `${SEV_COLOR[a.severity]}18`, color: SEV_COLOR[a.severity], border: `1px solid ${SEV_COLOR[a.severity]}30` }}>
+                          <Icon className="w-3 h-3"/>{SEV_LABEL[a.severity]}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-white font-semibold">{a.accion}</p>
+                        <p className="text-[10px] text-[#94A3B8] mt-0.5">{a.granjaCodigo} · {a.granjaNombre}</p>
+                      </td>
+                      <td className="px-4 py-3 text-[#94A3B8]">{a.responsable}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="font-bold" style={{ color: a.porcentajeAvance < 50 ? SEV_COLOR.VENCIDO : "#10B981" }}>
+                          {a.porcentajeAvance}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-[#94A3B8] font-mono">
+                        <div>{new Date(a.fechaCompromiso).toLocaleDateString("es-CO")}</div>
+                        <div className="text-[9px] mt-0.5" style={{ color: a.diasDeAtraso > 0 ? SEV_COLOR.VENCIDO : "#94A3B8" }}>
+                          {a.diasDeAtraso > 0 ? `+${a.diasDeAtraso}d atraso` : a.diasDeAtraso === 0 ? "vence hoy" : `${-a.diasDeAtraso}d restantes`}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center text-[#94A3B8]">{a.estado}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <footer className="px-6 py-3 border-t border-[#1E2D4A] bg-[#0A111F] flex items-center justify-between">
+          <p className="text-[10px] text-[#475569]">
+            Vencidos: <strong className="text-amber-400">{counts.VENCIDO}</strong> ·
+            Próximos a vencer: <strong className="text-blue-400">{counts.PROXIMO}</strong> ·
+            Riesgo crítico: <strong className="text-red-400">{counts.RIESGO_CRITICO}</strong>
+          </p>
+          <button onClick={onClose} className="btn-ghost text-xs">Cerrar</button>
+        </footer>
+      </div>
     </div>
   );
 }

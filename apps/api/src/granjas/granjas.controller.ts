@@ -6,6 +6,7 @@ import {
   GranjasService, CreateGranjaDto, CreateHallazgoDto, CreateKPIDto, CreateAuditoriaDto,
 } from "./granjas.service";
 import { GranjasExecutiveService, GranjasExecutiveFilters } from "./granjas-executive.service";
+import { KpiAlertsService } from "./kpi-alerts.service";
 import { AuditActivitiesAiService } from "../audit-activities/audit-activities-ai.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 
@@ -20,7 +21,25 @@ export class GranjasController {
     private svc: GranjasService,
     private exec: GranjasExecutiveService,
     private ai: AuditActivitiesAiService,
+    private alerts: KpiAlertsService,
   ) {}
+
+  // ── KPI ALERTS ──
+  @Get("kpi/alerts")
+  getKpiAlerts(@Query("granjaId") granjaId?: string) {
+    return this.alerts.listActiveAlerts(granjaId);
+  }
+
+  @Get("kpi/alerts/scan")
+  scanKpiAlerts(@Query("granjaId") granjaId?: string) {
+    return this.alerts.scanAlerts({ granjaId });
+  }
+
+  @Post("kpi/alerts/remind")
+  @HttpCode(HttpStatus.OK)
+  sendKpiReminders(@Req() req: AuthRequest, @Body() body: { granjaId?: string } = {}) {
+    return this.alerts.sendReminders({ id: req.user.id, name: req.user.name }, { granjaId: body?.granjaId });
+  }
 
   // ── DASHBOARD STATS (legacy) ──
   @Get("dashboard")
