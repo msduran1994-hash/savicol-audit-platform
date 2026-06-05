@@ -38,6 +38,8 @@ model User {
   auditActivities AuditActivity[]    @relation("CreatedByUser")
   auditChanges    AuditActivityLog[]
   accessLogs      AccessLog[]
+  notifications   Notification[]
+  passwordResets  PasswordResetToken[]
 }
 
 model Session {
@@ -664,4 +666,77 @@ model ApiToken {
 
   @@index([isActive])
   @@index([tokenPrefix])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MÓDULO NOTIFICACIONES · in-app + email
+// ═══════════════════════════════════════════════════════════════════════════════
+// kind: USER_CREATED | ROLE_CHANGED | PASSWORD_RESET | INVITATION_SENT
+//     | HALLAZGO_ASSIGNED | KPI_ASSIGNED | ALERT_CRITICAL | ACCESS_GRANTED
+//     | SYSTEM
+// severity: INFO | SUCCESS | WARNING | CRITICAL
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String                          // destinatario
+  kind       String
+  severity   String    @default("INFO")
+  title      String
+  message    String
+  metadata   String?                         // JSON con contexto (link, recurso, etc.)
+  readAt     DateTime?
+  emailSent  Boolean   @default(false)
+  emailError String?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([readAt])
+  @@index([createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MÓDULO INVITACIONES · token temporal para activar cuenta
+// ═══════════════════════════════════════════════════════════════════════════════
+// status: PENDING | ACCEPTED | EXPIRED | REVOKED
+model UserInvitation {
+  id           String    @id @default(cuid())
+  email        String
+  name         String
+  role         String    @default("AUDITOR")
+  token        String    @unique               // raw token (longitud ≥48)
+  tokenHash    String    @unique               // bcrypt para verificar sin filtrar el token raw
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  status       String    @default("PENDING")
+  invitedById  String
+  invitedByName String
+  createdAt    DateTime  @default(now())
+
+  @@index([email])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MÓDULO PASSWORD RESET · token temporal para cambiar contraseña sin auth
+// ═══════════════════════════════════════════════════════════════════════════════
+// status: PENDING | USED | EXPIRED
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  status    String   @default("PENDING")
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
 }
