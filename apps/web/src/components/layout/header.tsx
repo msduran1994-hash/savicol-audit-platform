@@ -1,9 +1,10 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Search, HelpCircle, Shield, Tractor, Truck, Warehouse } from "lucide-react";
+import { Search, HelpCircle, Shield, Tractor, Truck, Warehouse } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { cn } from "@/lib/utils";
+import { NotificationBell } from "./notification-bell";
 
 interface HeaderProps { title: string; subtitle?: string; }
 
@@ -63,10 +64,7 @@ export function Header({ title, subtitle }: HeaderProps) {
         </div>
 
         {/* Notifications */}
-        <button className="relative w-9 h-9 rounded-lg bg-[#0D1526] border border-[#1E2D4A] flex items-center justify-center text-[#94A3B8] hover:text-white hover:border-[#2A3F6A] transition-colors">
-          <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400" />
-        </button>
+        <NotificationBell />
 
         <button className="w-9 h-9 rounded-lg bg-[#0D1526] border border-[#1E2D4A] flex items-center justify-center text-[#94A3B8] hover:text-white hover:border-[#2A3F6A] transition-colors">
           <HelpCircle className="w-4 h-4" />

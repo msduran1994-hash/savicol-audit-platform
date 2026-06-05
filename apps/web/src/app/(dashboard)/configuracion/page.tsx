@@ -17,10 +17,16 @@ import {
   useRevokeApiToken, useDeleteApiToken, getSetting,
   type ApiToken,
 } from "@/hooks/useSettings";
+import {
+  useInvitations, useCreateInvitation, useRevokeInvitation, useResendInvitation,
+  type InvitationItem,
+} from "@/hooks/useInvitations";
+import { Send, Clock, CheckCircle as CheckSolid, Filter } from "lucide-react";
 
 const sections = [
   { id: "perfil",       label: "Perfil",          icon: User,      description: "Información personal y credenciales" },
   { id: "usuarios",     label: "Usuarios",         icon: Users,     description: "Crear y gestionar usuarios + roles" },
+  { id: "invitaciones", label: "Invitaciones",     icon: Send,      description: "Enviar invitaciones por correo con token temporal" },
   { id: "seguridad",    label: "Seguridad",        icon: Shield,    description: "MFA, contraseña y sesiones activas" },
   { id: "notificaciones", label: "Notificaciones", icon: Bell,      description: "Alertas y recordatorios de auditoría" },
   { id: "apariencia",   label: "Apariencia",       icon: Palette,   description: "Tema, idioma y preferencias visuales" },
@@ -69,6 +75,7 @@ export default function ConfiguracionPage() {
         <div className="flex-1 bg-[#0D1526] border border-[#1E2D4A] rounded-2xl p-6">
           {active === "perfil" && <PerfilSection user={user} />}
           {active === "usuarios" && <UsuariosSection user={user} />}
+          {active === "invitaciones" && <InvitacionesSection />}
           {active === "seguridad" && <SeguridadSection />}
           {active === "notificaciones" && <PlaceholderSection label="Notificaciones" />}
           {active === "apariencia" && <PlaceholderSection label="Apariencia" />}
@@ -1236,6 +1243,215 @@ function TempPasswordModal({ data, onClose }: {
             {copied ? "¡Copiado!" : "Copiar contraseña"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INVITACIONES · admin
+// ═══════════════════════════════════════════════════════════════════════════════
+function InvitacionesSection() {
+  const [status, setStatus]       = useState<string>("");
+  const [showInvite, setShowInvite] = useState(false);
+  const [resentLink, setResentLink] = useState<string | null>(null);
+
+  const invQ        = useInvitations(status ? { status } : {});
+  const createInv   = useCreateInvitation();
+  const revokeInv   = useRevokeInvitation();
+  const resendInv   = useResendInvitation();
+
+  const items: InvitationItem[] = invQ.data ?? [];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-display font-bold text-lg text-white">Invitaciones de usuarios</h2>
+          <p className="text-xs text-[#94A3B8] mt-1">
+            Envía invitaciones por correo · el usuario crea su propia contraseña vía token temporal (24h).
+          </p>
+        </div>
+        <button onClick={() => setShowInvite(true)} className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-1.5">
+          <Send className="w-3.5 h-3.5"/>Enviar invitación
+        </button>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex items-center gap-2">
+        <Filter className="w-3.5 h-3.5 text-[#94A3B8]"/>
+        <select value={status} onChange={(e) => setStatus(e.target.value)}
+          className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+          <option value="">Todas</option>
+          <option value="PENDING">Pendientes</option>
+          <option value="ACCEPTED">Aceptadas</option>
+          <option value="EXPIRED">Expiradas</option>
+          <option value="REVOKED">Revocadas</option>
+        </select>
+        <span className="text-[10px] text-[#475569] ml-auto">{items.length} registros</span>
+      </div>
+
+      {resentLink && (
+        <div className="px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs flex items-start gap-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>
+          <div>
+            <p className="font-semibold mb-1">SMTP no configurado — link generado manualmente:</p>
+            <p className="text-[10px] text-cyan-200 break-all">{resentLink}</p>
+            <button onClick={() => { navigator.clipboard.writeText(resentLink); setResentLink(null); }} className="text-[10px] underline mt-1">Copiar y cerrar</button>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {invQ.isLoading ? (
+          <div className="py-10 text-center text-[#475569]"><Loader2 className="w-5 h-5 animate-spin mx-auto"/></div>
+        ) : items.length === 0 ? (
+          <div className="py-10 text-center">
+            <Send className="w-8 h-8 text-[#1E2D4A] mx-auto mb-3"/>
+            <p className="text-xs text-[#94A3B8]">No hay invitaciones {status && `· status: ${status}`}</p>
+          </div>
+        ) : items.map(inv => {
+          const expired = inv.status === "EXPIRED" || (inv.status === "PENDING" && new Date(inv.expiresAt).getTime() < Date.now());
+          const color = inv.status === "ACCEPTED" ? "#10B981" : inv.status === "PENDING" ? (expired ? "#94A3B8" : "#F59E0B") : "#94A3B8";
+          const Icon  = inv.status === "ACCEPTED" ? CheckSolid : expired ? Clock : Send;
+          return (
+            <div key={inv.id} className="bg-[#1A2540] border border-[#2A3F6A] rounded-lg p-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}18`, color }}>
+                <Icon className="w-4 h-4"/>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm text-white font-semibold truncate">{inv.name}</p>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: `${color}18`, color }}>
+                    {inv.status}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 font-semibold">{inv.role}</span>
+                </div>
+                <p className="text-[11px] text-[#94A3B8]">{inv.email}</p>
+                <p className="text-[10px] text-[#475569] mt-0.5">
+                  Invitado por {inv.invitedByName} · {new Date(inv.createdAt).toLocaleDateString("es-CO")}
+                  {inv.status === "PENDING" && !expired && ` · expira ${new Date(inv.expiresAt).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })}`}
+                  {inv.status === "ACCEPTED" && inv.acceptedAt && ` · aceptada ${new Date(inv.acceptedAt).toLocaleDateString("es-CO")}`}
+                </p>
+              </div>
+              {inv.status === "PENDING" && (
+                <div className="flex gap-1">
+                  <button
+                    onClick={async () => {
+                      try {
+                        const r = await resendInv.mutateAsync(inv.id);
+                        if (r.mode === "noop" && r.activationUrl) setResentLink(r.activationUrl);
+                        else alert(`Correo reenviado a ${inv.email}`);
+                      } catch (e: any) {
+                        alert("Error: " + (e?.response?.data?.message ?? e?.message));
+                      }
+                    }}
+                    className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400"
+                    title="Reenviar"
+                  >
+                    <Send className="w-3.5 h-3.5"/>
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`¿Revocar invitación de ${inv.email}?`)) return;
+                      try { await revokeInv.mutateAsync(inv.id); }
+                      catch (e: any) { alert("Error: " + (e?.response?.data?.message ?? e?.message)); }
+                    }}
+                    className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400"
+                    title="Revocar"
+                  >
+                    <Trash2 className="w-3.5 h-3.5"/>
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {showInvite && (
+        <InviteModal
+          onClose={() => setShowInvite(false)}
+          onSubmit={async (dto) => {
+            try {
+              const r = await createInv.mutateAsync(dto);
+              if (r.emailMode === "noop" && r.activationUrl) {
+                setResentLink(r.activationUrl);
+              } else {
+                alert(`Invitación enviada a ${r.email}`);
+              }
+              setShowInvite(false);
+            } catch (e: any) {
+              throw e;
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function InviteModal({ onClose, onSubmit }: {
+  onClose: () => void;
+  onSubmit: (dto: { email: string; name: string; role: string }) => Promise<void>;
+}) {
+  const [form, setForm] = useState({ email: "", name: "", role: "AUDITOR" });
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault(); setErr(null);
+    if (!form.email.includes("@")) { setErr("Email inválido"); return; }
+    if (!form.name.trim())         { setErr("Nombre obligatorio"); return; }
+    setSubmitting(true);
+    try { await onSubmit(form); }
+    catch (e: any) { setErr(e?.response?.data?.message ?? e?.message ?? "Error"); }
+    finally { setSubmitting(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-md overflow-hidden">
+        <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
+          <div>
+            <h3 className="font-display font-bold text-white">Enviar invitación</h3>
+            <p className="text-[10px] text-[#94A3B8] mt-0.5">El usuario recibirá un correo con link de activación</p>
+          </div>
+          <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
+        </header>
+        <form onSubmit={submit} className="px-6 py-4 space-y-3">
+          <div>
+            <label className="text-xs text-[#94A3B8] mb-1.5 block">Correo *</label>
+            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
+              required className="input-base" placeholder="usuario@savicol.com"/>
+          </div>
+          <div>
+            <label className="text-xs text-[#94A3B8] mb-1.5 block">Nombre *</label>
+            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required className="input-base" placeholder="Ej. Juan Pérez"/>
+          </div>
+          <div>
+            <label className="text-xs text-[#94A3B8] mb-1.5 block">Rol</label>
+            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="input-base">
+              {ROLES_CATALOG.filter(r => r.id !== "AI_AGENT").map(r => (
+                <option key={r.id} value={r.id}>{r.label} · {r.id}</option>
+              ))}
+            </select>
+          </div>
+          {err && (
+            <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start gap-2">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>{err}</span>
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="btn-ghost text-xs" disabled={submitting}>Cancelar</button>
+            <button type="submit" disabled={submitting}
+              className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-2 disabled:opacity-50">
+              {submitting && <Loader2 className="w-3 h-3 animate-spin"/>}
+              {submitting ? "Enviando..." : "Enviar invitación"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

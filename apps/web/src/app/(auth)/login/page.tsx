@@ -227,6 +227,13 @@ export default function LoginPage() {
               <Lock className="inline w-3 h-3 mr-1" />
               Autenticación multifactor (MFA) requerida para todos los roles
             </p>
+
+            {/* Forgot password */}
+            <p className="text-center text-xs">
+              <a href="/olvide" className="text-[#94A3B8] hover:text-amber-400 transition-colors">
+                ¿Olvidaste tu contraseña?
+              </a>
+            </p>
           </form>
 
           <div className="mt-8 pt-6 border-t border-[#1E2D4A] text-center text-xs text-[#475569]">
