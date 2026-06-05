@@ -5,7 +5,23 @@ import { useGranjasStore } from "@/store/granjas.store";
 import { useShallow } from "zustand/react/shallow";
 import { ESTADO_KPI } from "@/lib/granjas.constants";
 import type { KPI } from "@/lib/granjas.types";
-import { Target, Plus, Bell, Mail, Filter, TrendingUp, X, Trash2 } from "lucide-react";
+import {
+  Target, Plus, Bell, Mail, Filter, TrendingUp, X, Trash2,
+  Edit2, AlertCircle, Loader2,
+} from "lucide-react";
+
+// ─── HELPER · format error ──
+function formatErr(e: any, fallback: string): string {
+  const raw = e?.response?.data;
+  let msg = fallback;
+  if (raw) {
+    if (typeof raw === "string") msg = raw;
+    else if (raw.message) msg = Array.isArray(raw.message) ? raw.message.join(" · ") : String(raw.message);
+    else if (raw.error)   msg = String(raw.error);
+  } else if (e?.message) msg = e.message;
+  if (e?.response?.status) msg = `HTTP ${e.response.status} · ${msg}`;
+  return msg;
+}
 
 export default function KPIPage() {
   const kpis      = useGranjasStore(useShallow((s) => s.kpis));
@@ -13,7 +29,14 @@ export default function KPIPage() {
   const addKPI    = useGranjasStore((s) => s.addKPI);
   const updateKPI = useGranjasStore((s) => s.updateKPI);
   const removeKPI = useGranjasStore((s) => s.removeKPI);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modalOpen, setModalOpen]   = useState(false);
+  const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
+  const [saveError, setSaveError]   = useState<string | null>(null);
+  const [filterEstado, setFilterEstado] = useState("");
+
+  const filtered = filterEstado
+    ? kpis.filter(k => k.estado === filterEstado)
+    : kpis;
 
   const total       = kpis.length;
   const completados = kpis.filter(k => k.estado === "Completado").length;
@@ -33,13 +56,17 @@ export default function KPIPage() {
         {/* Toolbar */}
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-xs text-[#94A3B8] flex items-center gap-1.5"><Filter className="w-3.5 h-3.5"/>Filtros:</span>
-          <select className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+          <select value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)}
+            className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
             <option value="">Todos los estados</option>
-            {ESTADO_KPI.map(e => <option key={e}>{e}</option>)}
+            {ESTADO_KPI.map(e => <option key={e} value={e}>{e}</option>)}
           </select>
           <button className="btn-secondary text-xs"><Mail className="w-3.5 h-3.5"/>Enviar recordatorios</button>
           <button className="btn-secondary text-xs"><Bell className="w-3.5 h-3.5"/>Alertas activas</button>
-          <button onClick={()=>setModalOpen(true)} className="btn-primary text-xs ml-auto bg-amber-500 hover:bg-amber-600"><Plus className="w-3.5 h-3.5"/>Nuevo KPI</button>
+          <button onClick={() => { setSaveError(null); setEditingKpi(null); setModalOpen(true); }}
+            className="btn-primary text-xs ml-auto bg-amber-500 hover:bg-amber-600">
+            <Plus className="w-3.5 h-3.5"/>Nuevo KPI
+          </button>
         </div>
 
         {/* Indicadores principales */}
@@ -66,25 +93,33 @@ export default function KPIPage() {
         </div>
 
         {/* Lista de KPIs */}
-        {kpis.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="card-base flex flex-col items-center justify-center py-16 text-center">
             <Target className="w-10 h-10 text-[#1E2D4A] mb-4"/>
-            <p className="text-white font-semibold mb-2">Sin KPIs registrados</p>
-            <p className="text-[#475569] text-sm">Los KPIs se crean desde el cierre de un hallazgo o manualmente</p>
+            <p className="text-white font-semibold mb-2">
+              {kpis.length === 0 ? "Sin KPIs registrados" : "Sin resultados con el filtro actual"}
+            </p>
+            <p className="text-[#475569] text-sm">
+              {kpis.length === 0 ? 'Click en "Nuevo KPI" para crear el primero' : "Cambia el filtro o quítalo para ver todos"}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {kpis.map(k => {
+            {filtered.map(k => {
               const estColor =
                 k.estado === "Completado"  ? "#10B981" :
                 k.estado === "En Curso"    ? "#F59E0B" :
                 k.estado === "En Espera"   ? "#06B6D4" : "#94A3B8";
+              const granja = granjas.find(g => g.id === k.granjaId);
               return (
                 <div key={k.id} className="card-base">
                   <div className="flex items-start justify-between mb-3 gap-2">
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-white">{k.accion}</h3>
                       <p className="text-xs text-[#94A3B8] mt-1">{k.seguimiento}</p>
+                      {granja && (
+                        <p className="text-[10px] text-[#475569] mt-1">📍 {granja.nombre} · {granja.codigo}</p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
@@ -93,17 +128,27 @@ export default function KPIPage() {
                       </span>
                       <select
                         value={k.estado}
-                        onChange={(e) => updateKPI(k.id, { estado: e.target.value as any })}
+                        onChange={async (e) => {
+                          try { await updateKPI(k.id, { estado: e.target.value as any }); }
+                          catch (err: any) { alert("Error al cambiar estado: " + formatErr(err, "desconocido")); }
+                        }}
                         className="text-[10px] px-2 py-0.5 rounded bg-[#1A2540] border border-[#2A3F6A] text-white"
                         title="Cambiar estado"
                       >
                         {ESTADO_KPI.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                       <button
+                        onClick={() => { setSaveError(null); setEditingKpi(k); setModalOpen(true); }}
+                        className="p-1 rounded hover:bg-blue-500/10 text-[#94A3B8] hover:text-blue-400"
+                        title="Editar KPI"
+                      >
+                        <Edit2 className="w-3.5 h-3.5"/>
+                      </button>
+                      <button
                         onClick={async () => {
                           if (!confirm(`¿Eliminar KPI "${k.accion}"?\nEsta acción no se puede deshacer.`)) return;
                           try { await removeKPI(k.id); }
-                          catch (e: any) { alert("Error al eliminar: " + (e?.response?.data?.message ?? e?.message ?? "desconocido")); }
+                          catch (e: any) { alert("Error al eliminar: " + formatErr(e, "desconocido")); }
                         }}
                         className="p-1 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400"
                         title="Eliminar KPI"
@@ -152,78 +197,179 @@ export default function KPIPage() {
       </div>
 
       {modalOpen && (
-        <KPIModal granjas={granjas} onClose={()=>setModalOpen(false)} onSave={(k)=>{ addKPI(k as any); setModalOpen(false); }}/>
+        <KPIModal
+          granjas={granjas}
+          editing={editingKpi}
+          error={saveError}
+          onClose={() => { setModalOpen(false); setEditingKpi(null); setSaveError(null); }}
+          onSave={async (k) => {
+            setSaveError(null);
+            try {
+              if (editingKpi) {
+                await updateKPI(editingKpi.id, k);
+              } else {
+                await addKPI(k as any);
+              }
+              setModalOpen(false);
+              setEditingKpi(null);
+            } catch (e: any) {
+              setSaveError(formatErr(e, editingKpi ? "Error al actualizar el KPI" : "Error al guardar el KPI"));
+              console.error("[KPI] error:", e);
+            }
+          }}
+        />
       )}
     </div>
   );
 }
 
 // ─── MODAL ───────────────────────────────────────────────────────────────────
-function KPIModal({ granjas, onClose, onSave }: { granjas:any[]; onClose:()=>void; onSave:(k:Partial<KPI>)=>void }) {
-  const [form, setForm] = useState<Partial<KPI>>({
-    granjaId: granjas[0]?.id ?? "",
-    accion: "", seguimiento: "",
-    fechaCompromiso: new Date(Date.now() + 30*86400000).toISOString().slice(0,10),
+function KPIModal({ granjas, editing, error, onClose, onSave }: {
+  granjas: any[];
+  editing?: KPI | null;
+  error: string | null;
+  onClose: () => void;
+  onSave: (k: Partial<KPI>) => Promise<void> | void;
+}) {
+  const [form, setForm] = useState<Partial<KPI>>(editing ? {
+    granjaId:              editing.granjaId,
+    accion:                editing.accion,
+    seguimiento:           editing.seguimiento,
+    fechaCompromiso:       editing.fechaCompromiso?.slice(0, 10) ?? "",
+    fechaProximaVisita:    editing.fechaProximaVisita?.slice(0, 10),
+    fechaCumplimiento:     editing.fechaCumplimiento?.slice(0, 10),
+    planAccionVeterinario: editing.planAccionVeterinario,
+    estado:                editing.estado,
+    responsable:           editing.responsable,
+    porcentajeAvance:      editing.porcentajeAvance,
+    hallazgoId:            editing.hallazgoId,
+  } : {
+    granjaId:              granjas[0]?.id ?? "",
+    accion:                "",
+    seguimiento:           "",
+    fechaCompromiso:       new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
     planAccionVeterinario: "",
-    estado: "No Iniciado",
-    responsable: "",
-    porcentajeAvance: 0,
+    estado:                "No Iniciado",
+    responsable:           "",
+    porcentajeAvance:      0,
   });
-  function submit(e: React.FormEvent) {
+  const [submitting, setSubmitting] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.accion || !form.granjaId) return;
-    onSave(form);
+    setValidationError(null);
+
+    if (granjas.length === 0) {
+      setValidationError("No hay granjas registradas. Crea una en /granjas/registro primero.");
+      return;
+    }
+    if (!form.granjaId)            { setValidationError("Selecciona una granja"); return; }
+    if (!form.accion?.trim())      { setValidationError("La acción es obligatoria"); return; }
+    if (!form.responsable?.trim()) { setValidationError("Asigna un responsable"); return; }
+    if (!form.fechaCompromiso)     { setValidationError("Fecha compromiso es obligatoria"); return; }
+
+    const payload: Partial<KPI> = {
+      ...form,
+      accion:                form.accion!.trim(),
+      seguimiento:           form.seguimiento?.trim() || "—",
+      responsable:           form.responsable!.trim(),
+      planAccionVeterinario: form.planAccionVeterinario?.trim() || "—",
+      porcentajeAvance:      Math.max(0, Math.min(100, form.porcentajeAvance ?? 0)),
+    };
+
+    setSubmitting(true);
+    try { await onSave(payload); }
+    catch { /* error visible en banner padre */ }
+    finally { setSubmitting(false); }
   }
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6">
       <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-xl overflow-hidden flex flex-col shadow-card">
         <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
-          <h2 className="font-display font-bold text-white text-lg">Nuevo KPI</h2>
+          <div>
+            <h2 className="font-display font-bold text-white text-lg">
+              {editing ? "Editar KPI" : "Nuevo KPI"}
+            </h2>
+            <p className="text-xs text-[#94A3B8] mt-0.5">
+              {editing ? "Modifica los campos y guarda los cambios" : "Plan de acción veterinario con seguimiento"}
+            </p>
+          </div>
           <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
         </header>
         <form onSubmit={submit} className="px-6 py-4 space-y-3">
           <FormField label="Acción *">
-            <input value={form.accion} onChange={(e)=>setForm({...form, accion: e.target.value})} required className="input-base"/>
+            <input value={form.accion ?? ""} onChange={(e) => setForm({ ...form, accion: e.target.value })}
+              required className="input-base" placeholder="Ej. Implementar plan de bioseguridad"/>
           </FormField>
           <FormField label="Seguimiento">
-            <input value={form.seguimiento} onChange={(e)=>setForm({...form, seguimiento: e.target.value})} className="input-base"/>
+            <input value={form.seguimiento ?? ""} onChange={(e) => setForm({ ...form, seguimiento: e.target.value })}
+              className="input-base" placeholder="Periodicidad / metodología de seguimiento"/>
           </FormField>
           <div className="grid grid-cols-2 gap-3">
-            <FormField label="Granja">
-              <select value={form.granjaId} onChange={(e)=>setForm({...form, granjaId: e.target.value})} className="input-base">
-                {granjas.map((g:any) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+            <FormField label="Granja *">
+              <select value={form.granjaId} onChange={(e) => setForm({ ...form, granjaId: e.target.value })} className="input-base">
+                {granjas.length === 0
+                  ? <option value="">(sin granjas registradas)</option>
+                  : granjas.map((g: any) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
               </select>
             </FormField>
             <FormField label="Estado">
-              <select value={form.estado} onChange={(e)=>setForm({...form, estado: e.target.value as any})} className="input-base">
+              <select value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value as any })} className="input-base">
                 {ESTADO_KPI.map(e => <option key={e}>{e}</option>)}
               </select>
             </FormField>
-            <FormField label="Responsable">
-              <input value={form.responsable} onChange={(e)=>setForm({...form, responsable: e.target.value})} className="input-base"/>
+            <FormField label="Responsable *">
+              <input value={form.responsable ?? ""} onChange={(e) => setForm({ ...form, responsable: e.target.value })}
+                required className="input-base" placeholder="Nombre del responsable"/>
             </FormField>
             <FormField label="% Avance">
-              <input type="number" min={0} max={100} value={form.porcentajeAvance} onChange={(e)=>setForm({...form, porcentajeAvance: parseInt(e.target.value) || 0})} className="input-base"/>
+              <input type="number" min={0} max={100} value={form.porcentajeAvance ?? 0}
+                onChange={(e) => setForm({ ...form, porcentajeAvance: parseInt(e.target.value, 10) || 0 })}
+                className="input-base"/>
             </FormField>
-            <FormField label="Fecha Compromiso">
-              <input type="date" value={form.fechaCompromiso} onChange={(e)=>setForm({...form, fechaCompromiso: e.target.value})} className="input-base"/>
+            <FormField label="Fecha Compromiso *">
+              <input type="date" value={form.fechaCompromiso ?? ""} required
+                onChange={(e) => setForm({ ...form, fechaCompromiso: e.target.value })} className="input-base"/>
             </FormField>
             <FormField label="Fecha Próxima Visita">
-              <input type="date" value={form.fechaProximaVisita ?? ""} onChange={(e)=>setForm({...form, fechaProximaVisita: e.target.value})} className="input-base"/>
+              <input type="date" value={form.fechaProximaVisita ?? ""}
+                onChange={(e) => setForm({ ...form, fechaProximaVisita: e.target.value })} className="input-base"/>
             </FormField>
+            {editing && (
+              <FormField label="Fecha Cumplimiento">
+                <input type="date" value={form.fechaCumplimiento ?? ""}
+                  onChange={(e) => setForm({ ...form, fechaCumplimiento: e.target.value })} className="input-base"/>
+              </FormField>
+            )}
           </div>
           <FormField label="Plan de Acción Veterinario">
-            <textarea value={form.planAccionVeterinario} onChange={(e)=>setForm({...form, planAccionVeterinario: e.target.value})} rows={2} className="input-base resize-none"/>
+            <textarea value={form.planAccionVeterinario ?? ""} onChange={(e) => setForm({ ...form, planAccionVeterinario: e.target.value })}
+              rows={2} className="input-base resize-none" placeholder="Detalle del plan correctivo"/>
           </FormField>
+
+          {(validationError || error) && (
+            <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start gap-2">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>
+              <span>{validationError ?? error}</span>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="btn-ghost text-xs">Cancelar</button>
-            <button type="submit" className="btn-primary text-xs bg-amber-500 hover:bg-amber-600">Crear KPI</button>
+            <button type="button" onClick={onClose} className="btn-ghost text-xs" disabled={submitting}>Cancelar</button>
+            <button type="submit" disabled={submitting}
+              className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-2 disabled:opacity-50">
+              {submitting && <Loader2 className="w-3 h-3 animate-spin"/>}
+              {submitting ? "Guardando..." : editing ? "Actualizar" : "Crear KPI"}
+            </button>
           </div>
         </form>
       </div>
     </div>
   );
 }
+
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">

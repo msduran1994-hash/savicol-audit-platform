@@ -525,14 +525,20 @@ export const useGranjasStore = create<GranjasState>()(
           set((s) => ({ kpis: s.kpis.map((x) => x.id === tempId ? { ...optimistic, id: real.id } : x) }));
         } catch (e) {
           set((s) => ({ kpis: s.kpis.filter((x) => x.id !== tempId) }));
-          console.error("addKPI failed:", e);
+          console.error("[granjas-store] addKPI failed:", e);
+          throw e;
         }
       },
       updateKPI: async (id, patch) => {
+        const before = get().kpis;
         set((s) => ({ kpis: s.kpis.map((k) => k.id === id ? { ...k, ...patch, updatedAt: new Date().toISOString() } : k) }));
         if (id.startsWith("tmp_") || id.startsWith("DEMO_KPI_")) return;
         try { await apiPatch(`/granjas/kpis/${id}`, kpiToDB(patch)); }
-        catch (e) { console.error("updateKPI failed:", e); }
+        catch (e) {
+          set({ kpis: before });
+          console.error("[granjas-store] updateKPI failed:", e);
+          throw e;
+        }
       },
       removeHallazgo: async (id) => {
         const before = get().hallazgos;
