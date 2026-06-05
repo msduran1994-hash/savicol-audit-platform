@@ -44,30 +44,57 @@ export class NotificationsService {
     return { count };
   }
 
-  // ── creación ──
+  // ── creación · respeta notificationPrefs del usuario ──
   async create(dto: CreateNotificationDto) {
-    const n = await this.prisma.notification.create({
-      data: {
-        userId:   dto.userId,
-        kind:     dto.kind,
-        severity: dto.severity ?? "INFO",
-        title:    dto.title,
-        message:  dto.message,
-        metadata: dto.metadata ? JSON.stringify(dto.metadata) : null,
-      },
+    // Leer preferencias del destinatario
+    const user = await this.prisma.user.findUnique({
+      where: { id: dto.userId },
+      select: { notificationPrefs: true },
     });
+    const prefs = this.parsePrefs(user?.notificationPrefs);
+    const kindPrefs = prefs[dto.kind] ?? { inApp: true, email: true };
 
-    // Email opcional
-    if (dto.email) {
+    // Si el usuario desactivó in-app PARA este kind, no creamos la fila.
+    // Excepción: severity CRITICAL siempre se crea (override de seguridad).
+    const skipInApp = kindPrefs.inApp === false && dto.severity !== "CRITICAL";
+    if (skipInApp && !dto.email) {
+      // Ni notif in-app ni email solicitado · no-op
+      return null;
+    }
+
+    let n: any = null;
+    if (!skipInApp) {
+      n = await this.prisma.notification.create({
+        data: {
+          userId:   dto.userId,
+          kind:     dto.kind,
+          severity: dto.severity ?? "INFO",
+          title:    dto.title,
+          message:  dto.message,
+          metadata: dto.metadata ? JSON.stringify(dto.metadata) : null,
+        },
+      });
+    }
+
+    // Email solo si: (a) caller lo solicita Y (b) usuario lo permite (o CRITICAL)
+    const skipEmail = kindPrefs.email === false && dto.severity !== "CRITICAL";
+    if (dto.email && !skipEmail) {
       const result = await this.email.send({
         to: dto.email.to, subject: dto.email.subject, html: dto.email.html,
       });
-      await this.prisma.notification.update({
-        where: { id: n.id },
-        data: { emailSent: result.ok, emailError: result.ok ? null : result.error ?? null },
-      });
+      if (n) {
+        await this.prisma.notification.update({
+          where: { id: n.id },
+          data: { emailSent: result.ok, emailError: result.ok ? null : result.error ?? null },
+        });
+      }
     }
     return n;
+  }
+
+  private parsePrefs(raw: string | null | undefined): Record<string, { inApp?: boolean; email?: boolean }> {
+    if (!raw) return {};
+    try { return JSON.parse(raw); } catch { return {}; }
   }
 
   /**

@@ -103,4 +103,18 @@ export class UsersController {
   revokeAllSessions(@Param("id") id: string, @Req() req: AuthRequest) {
     return this.svc.revokeAllSessions(id, req.user.id, req.user.role);
   }
+
+  // ── NOTIFICATION PREFERENCES (solo del propio usuario) ──
+  @Get("me/notification-preferences")
+  getMyPrefs(@Req() req: AuthRequest) {
+    return this.svc.getNotificationPrefs(req.user.id);
+  }
+
+  @Patch("me/notification-preferences")
+  updateMyPrefs(
+    @Body() body: { prefs: Record<string, { inApp?: boolean; email?: boolean }> },
+    @Req() req: AuthRequest,
+  ) {
+    return this.svc.updateNotificationPrefs(req.user.id, body.prefs ?? {});
+  }
 }

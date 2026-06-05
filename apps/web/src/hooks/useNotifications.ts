@@ -2,7 +2,7 @@
 // HOOKS · Notifications (in-app)
 // ═══════════════════════════════════════════════════════════════════════════════
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPost, apiDelete } from "@/lib/api";
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
 
 export type NotificationKind =
   | "USER_CREATED" | "ROLE_CHANGED" | "PASSWORD_RESET" | "INVITATION_SENT"
@@ -71,5 +71,25 @@ export function useDeleteNotification() {
   return useMutation({
     mutationFn: (id: string) => apiDelete<{ ok: boolean }>(`/notifications/${id}`),
     onSuccess:  () => invalidate(qc),
+  });
+}
+
+// ─── PREFERENCES ───
+export type NotificationPrefs = Record<string, { inApp?: boolean; email?: boolean }>;
+
+export function useNotificationPrefs() {
+  return useQuery({
+    queryKey: ["notification-prefs"],
+    queryFn:  () => apiGet<{ prefs: NotificationPrefs }>(`/users/me/notification-preferences`),
+    staleTime: 60_000,
+  });
+}
+
+export function useUpdateNotificationPrefs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (prefs: NotificationPrefs) =>
+      apiPatch<{ ok: boolean; prefs: NotificationPrefs }>(`/users/me/notification-preferences`, { prefs }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notification-prefs"] }),
   });
 }

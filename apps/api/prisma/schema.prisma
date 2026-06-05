@@ -31,6 +31,10 @@ model User {
   mfaSecret    String?
   avatarUrl    String?
   isActive     Boolean   @default(true)
+  // JSON · preferencias de notificación · ej:
+  // {"USER_CREATED":{"inApp":true,"email":true},"ROLE_CHANGED":{"inApp":true,"email":false}}
+  // Si la clave no existe → default (inApp:true, email:true)
+  notificationPrefs String  @default("{}")
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 

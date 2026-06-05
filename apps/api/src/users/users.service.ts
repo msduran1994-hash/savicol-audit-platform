@@ -374,6 +374,40 @@ export class UsersService {
   }
 
   // ────────────────────────────────────────────────────────
+  //  NOTIFICATION PREFERENCES
+  // ────────────────────────────────────────────────────────
+  async getNotificationPrefs(userId: string) {
+    const u = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { notificationPrefs: true },
+    });
+    if (!u) throw new NotFoundException("Usuario no encontrado");
+    let prefs: Record<string, any> = {};
+    try { prefs = JSON.parse(u.notificationPrefs ?? "{}"); } catch {}
+    return { prefs };
+  }
+
+  async updateNotificationPrefs(userId: string, prefs: Record<string, { inApp?: boolean; email?: boolean }>) {
+    if (typeof prefs !== "object" || prefs === null) {
+      throw new BadRequestException("prefs debe ser un objeto");
+    }
+    // Validar estructura básica
+    const sanitized: Record<string, { inApp: boolean; email: boolean }> = {};
+    for (const [kind, val] of Object.entries(prefs)) {
+      if (typeof val !== "object" || val === null) continue;
+      sanitized[kind] = {
+        inApp: val.inApp !== false,  // default true
+        email: val.email !== false,
+      };
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data:  { notificationPrefs: JSON.stringify(sanitized) },
+    });
+    return { ok: true, prefs: sanitized };
+  }
+
+  // ────────────────────────────────────────────────────────
   //  HELPERS
   // ────────────────────────────────────────────────────────
   private generateTempPassword(): string {

@@ -26,6 +26,10 @@ import {
   useAccessLogs, useAccessStats, useAdminSessions,
   type AccessLogItem, type AccessStats, type AdminSession,
 } from "@/hooks/useAuditLogs";
+import {
+  useNotificationPrefs, useUpdateNotificationPrefs,
+  type NotificationPrefs,
+} from "@/hooks/useNotifications";
 
 const sections = [
   { id: "perfil",       label: "Perfil",          icon: User,      description: "Información personal y credenciales" },
@@ -83,7 +87,7 @@ export default function ConfiguracionPage() {
           {active === "invitaciones" && <InvitacionesSection />}
           {active === "auditoria" && <AuditoriaSection />}
           {active === "seguridad" && <SeguridadSection />}
-          {active === "notificaciones" && <PlaceholderSection label="Notificaciones" />}
+          {active === "notificaciones" && <NotificacionesSection />}
           {active === "apariencia" && <PlaceholderSection label="Apariencia" />}
           {active === "datos" && <DatosSection />}
           {active === "api" && <ApiSection />}
@@ -1728,5 +1732,177 @@ function ActivityLogsTab() {
         </div>
       )}
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NOTIFICACIONES · preferencias por canal (in-app / email) por tipo
+// ═══════════════════════════════════════════════════════════════════════════════
+const NOTIF_KINDS: Array<{ id: string; label: string; desc: string; severity: string }> = [
+  { id: "USER_CREATED",        label: "Usuario creado",          desc: "Cuando se crea tu cuenta o creas usuarios", severity: "INFO" },
+  { id: "ROLE_CHANGED",        label: "Cambio de rol",           desc: "Cuando tu rol o el de un usuario cambia",   severity: "INFO" },
+  { id: "PASSWORD_RESET",      label: "Restablecimiento contraseña", desc: "Cuando se restablece tu contraseña",   severity: "WARNING" },
+  { id: "INVITATION_SENT",     label: "Invitación enviada",      desc: "Confirmación de invitación enviada",        severity: "INFO" },
+  { id: "HALLAZGO_ASSIGNED",   label: "Hallazgo asignado",       desc: "Cuando se te asigna un nuevo hallazgo",     severity: "WARNING" },
+  { id: "KPI_ASSIGNED",        label: "KPI asignado",            desc: "Cuando se te asigna un nuevo KPI/acción",   severity: "INFO" },
+  { id: "ALERT_CRITICAL",      label: "Alertas críticas",        desc: "Sistema · CRITICAL · siempre se envían",    severity: "CRITICAL" },
+  { id: "ACCESS_GRANTED",      label: "Acceso concedido",        desc: "Notificación cuando inicias sesión nueva",  severity: "INFO" },
+  { id: "SYSTEM",              label: "Notificaciones sistema",  desc: "Mantenimiento, actualizaciones, etc.",      severity: "INFO" },
+];
+
+function NotificacionesSection() {
+  const prefsQ = useNotificationPrefs();
+  const updateMut = useUpdateNotificationPrefs();
+  const [prefs, setPrefs] = useState<NotificationPrefs>({});
+  const [dirty, setDirty] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  // Hidratar con el servidor
+  React.useEffect(() => {
+    if (prefsQ.data?.prefs) setPrefs(prefsQ.data.prefs);
+  }, [prefsQ.data]);
+
+  const getPref = (kind: string, channel: "inApp" | "email"): boolean => {
+    const p = prefs[kind];
+    if (!p) return true; // default ON
+    return p[channel] !== false;
+  };
+
+  const togglePref = (kind: string, channel: "inApp" | "email") => {
+    setPrefs(prev => {
+      const cur = prev[kind] ?? { inApp: true, email: true };
+      const newVal = { ...cur, [channel]: !getPref(kind, channel) };
+      return { ...prev, [kind]: newVal };
+    });
+    setDirty(true);
+    setSavedMsg(null);
+  };
+
+  const save = async () => {
+    setSavedMsg(null);
+    try {
+      await updateMut.mutateAsync(prefs);
+      setDirty(false);
+      setSavedMsg("✓ Preferencias guardadas correctamente");
+      setTimeout(() => setSavedMsg(null), 4000);
+    } catch (e: any) {
+      setSavedMsg("Error: " + (e?.response?.data?.message ?? e?.message ?? "desconocido"));
+    }
+  };
+
+  const reset = () => {
+    setPrefs(prefsQ.data?.prefs ?? {});
+    setDirty(false);
+    setSavedMsg(null);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="font-display font-bold text-lg text-white">Notificaciones</h2>
+        <p className="text-xs text-[#94A3B8] mt-1">
+          Elige por qué canales quieres recibir cada tipo de notificación.
+          Las alertas <span className="text-red-400 font-semibold">CRITICAL</span> siempre se envían (override de seguridad).
+        </p>
+      </div>
+
+      {prefsQ.isLoading ? (
+        <div className="py-10 text-center text-[#475569]"><Loader2 className="w-5 h-5 animate-spin mx-auto"/></div>
+      ) : (
+        <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-[#1A2540]">
+              <tr>
+                <th className="text-left px-4 py-3 text-[10px] text-[#94A3B8] uppercase tracking-wider">Tipo de notificación</th>
+                <th className="text-center px-4 py-3 text-[10px] text-[#94A3B8] uppercase tracking-wider w-24">In-app</th>
+                <th className="text-center px-4 py-3 text-[10px] text-[#94A3B8] uppercase tracking-wider w-24">Email</th>
+              </tr>
+            </thead>
+            <tbody>
+              {NOTIF_KINDS.map(k => {
+                const isCritical = k.severity === "CRITICAL";
+                return (
+                  <tr key={k.id} className={cn("border-t border-[#1E2D4A]/40", isCritical && "bg-red-500/5")}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-white font-semibold">{k.label}</p>
+                        {isCritical && <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 font-bold uppercase">Forzado</span>}
+                      </div>
+                      <p className="text-[11px] text-[#94A3B8] mt-0.5">{k.desc}</p>
+                      <code className="text-[10px] text-[#475569]">{k.id}</code>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <Toggle
+                        checked={isCritical ? true : getPref(k.id, "inApp")}
+                        disabled={isCritical}
+                        onChange={() => togglePref(k.id, "inApp")}
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <Toggle
+                        checked={isCritical ? true : getPref(k.id, "email")}
+                        disabled={isCritical}
+                        onChange={() => togglePref(k.id, "email")}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 text-xs text-[#94A3B8]">
+        <p>
+          <strong className="text-blue-300">Notas:</strong> Las notificaciones in-app aparecen en la campana del header.
+          Los correos se envían vía SMTP corporativo (configurable en variables de entorno).
+          Si SMTP no está configurado, los correos se loguean en consola del backend.
+        </p>
+      </div>
+
+      {savedMsg && (
+        <div className={cn(
+          "px-3 py-2 rounded-lg border text-xs flex items-start gap-2",
+          savedMsg.startsWith("Error")
+            ? "bg-red-500/10 border-red-500/30 text-red-300"
+            : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+        )}>
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>
+          <span>{savedMsg}</span>
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <button onClick={reset} disabled={!dirty || updateMut.isPending} className="btn-ghost text-xs disabled:opacity-50">
+          Descartar cambios
+        </button>
+        <button onClick={save} disabled={!dirty || updateMut.isPending}
+          className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-2 disabled:opacity-50">
+          {updateMut.isPending && <Loader2 className="w-3 h-3 animate-spin"/>}
+          {updateMut.isPending ? "Guardando..." : "Guardar preferencias"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Toggle({ checked, disabled, onChange }: { checked: boolean; disabled?: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={disabled ? undefined : onChange}
+      disabled={disabled}
+      className={cn(
+        "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+        checked ? "bg-emerald-500" : "bg-[#1E2D4A]",
+        disabled && "opacity-50 cursor-not-allowed"
+      )}
+    >
+      <span className={cn(
+        "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform shadow",
+        checked ? "translate-x-5" : "translate-x-1"
+      )} />
+    </button>
   );
 }
