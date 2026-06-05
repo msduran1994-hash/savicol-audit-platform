@@ -6,6 +6,8 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { EmailService } from "../email/email.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import * as bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 
@@ -27,7 +29,11 @@ const VALID_ROLES = ["ADMIN", "AUDITOR", "SUPERVISOR", "AUDITEE", "VIEWER", "AI_
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private email:  EmailService,
+    private notif:  NotificationsService,
+  ) {}
 
   // ────────────────────────────────────────────────────────
   //  LECTURA
@@ -103,6 +109,28 @@ export class UsersService {
     // (para que el ADMIN la entregue al nuevo usuario)
     const result: any = user;
     if (!dto.password) result.tempPassword = plainPassword;
+
+    // Notificación in-app al nuevo usuario (visible cuando inicie sesión)
+    await this.notif.create({
+      userId: user.id,
+      kind: "USER_CREATED",
+      severity: "SUCCESS",
+      title: "Bienvenido a Savicol Audit",
+      message: `Tu cuenta fue creada con rol ${user.role}. Cambia tu contraseña en Configuración → Seguridad.`,
+      metadata: { role: user.role },
+    });
+
+    // Correo de bienvenida con la contraseña temporal (no-op si SMTP no config)
+    if (!dto.password) {
+      const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
+      await this.email.send({
+        to: user.email,
+        subject: "Tu cuenta Savicol Audit · contraseña temporal",
+        html: this.email.templateTempPassword({
+          name: user.name, tempPassword: plainPassword, loginUrl: `${baseUrl}/login`,
+        }),
+      });
+    }
     return result;
   }
 
@@ -133,7 +161,7 @@ export class UsersService {
     });
   }
 
-  async updateRole(id: string, role: string, _requesterId: string, requesterRole: string) {
+  async updateRole(id: string, role: string, requesterId: string, requesterRole: string) {
     if (requesterRole !== "ADMIN")
       throw new ForbiddenException("Solo ADMIN puede cambiar roles");
 
@@ -141,11 +169,36 @@ export class UsersService {
     if (!VALID_ROLES.includes(upper))
       throw new BadRequestException(`Rol inválido. Permitidos: ${VALID_ROLES.join(", ")}`);
 
-    return this.prisma.user.update({
+    const oldUser = await this.findOne(id);
+    if (oldUser.role === upper) return oldUser; // no-op
+
+    const updated = await this.prisma.user.update({
       where: { id },
       data: { role: upper },
       select: { id: true, email: true, name: true, role: true },
     });
+
+    // Notif + email al target
+    const changedBy = await this.prisma.user.findUnique({ where: { id: requesterId }, select: { name: true } });
+    const changedByName = changedBy?.name ?? "Administrador";
+
+    await this.notif.create({
+      userId: id,
+      kind: "ROLE_CHANGED",
+      severity: "INFO",
+      title: "Cambio de rol",
+      message: `Tu rol fue actualizado de ${oldUser.role} a ${upper} por ${changedByName}.`,
+      metadata: { oldRole: oldUser.role, newRole: upper },
+      email: {
+        to: updated.email,
+        subject: "Tu rol en Savicol Audit fue actualizado",
+        html: this.email.templateRoleChanged({
+          name: updated.name, oldRole: oldUser.role, newRole: upper, changedBy: changedByName,
+        }),
+      },
+    });
+
+    return updated;
   }
 
   async toggleActive(id: string, requesterRole: string) {
@@ -167,7 +220,7 @@ export class UsersService {
     if (requesterRole !== "ADMIN")
       throw new ForbiddenException("Solo ADMIN puede resetear contraseñas");
 
-    await this.findOne(id); // valida existencia
+    const user = await this.findOne(id); // valida existencia
 
     const tempPassword = this.generateTempPassword();
     const hash = await bcrypt.hash(tempPassword, 12);
@@ -180,6 +233,23 @@ export class UsersService {
       }),
       this.prisma.session.deleteMany({ where: { userId: id } }),
     ]);
+
+    // Notificación in-app + email con la contraseña temporal
+    const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
+    await this.notif.create({
+      userId: id,
+      kind: "PASSWORD_RESET",
+      severity: "WARNING",
+      title: "Tu contraseña fue restablecida",
+      message: "Un administrador restableció tu contraseña. Revisa tu correo para la contraseña temporal.",
+      email: {
+        to: user.email,
+        subject: "Tu contraseña Savicol Audit fue restablecida",
+        html: this.email.templateTempPassword({
+          name: user.name, tempPassword, loginUrl: `${baseUrl}/login`,
+        }),
+      },
+    });
 
     return {
       message: "Contraseña reseteada. Entregue la contraseña temporal al usuario.",
