@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 56" fill="none">
+  <!-- Shield icon -->
+  <rect x="0" y="4" width="48" height="48" rx="10" fill="#1A3A8F"/>
+  <path d="M24 10L10 17v10c0 7.7 5.6 14.8 14 16.7 8.4-1.9 14-9 14-16.7V17L24 10z" fill="#C41230"/>
+  <path d="M24 13L13 19.5v8.5c0 6.4 4.6 12.4 11 14.2V13z" fill="white" opacity="0.15"/>
+  <path d="M18 27.5l4.5 4.5 9-9" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Text SAVICOL -->
+  <text x="60" y="26" font-family="Inter,system-ui,sans-serif" font-size="20" font-weight="800" fill="#1A3A8F" letter-spacing="-0.5">SAVICOL</text>
+  <!-- Subtitle -->
+  <text x="60" y="42" font-family="Inter,system-ui,sans-serif" font-size="9" font-weight="500" fill="#C41230" letter-spacing="2">AUDIT PLATFORM</text>
+</svg>

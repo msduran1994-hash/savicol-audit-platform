@@ -89,7 +89,7 @@ export default function ConfiguracionPage() {
           {active === "auditoria" && <AuditoriaSection />}
           {active === "seguridad" && <SeguridadSection />}
           {active === "notificaciones" && <NotificacionesSection />}
-          {active === "apariencia" && <PlaceholderSection label="Apariencia" />}
+          {active === "apariencia" && <AparienciaSection user={user} />}
           {active === "datos" && <DatosSection />}
           {active === "api" && <ApiSection />}
         </div>
@@ -852,6 +852,230 @@ function PlaceholderSection({ label }: { label: string }) {
       </div>
       <p className="font-semibold text-[#94A3B8]">{label}</p>
       <p className="text-sm text-[#475569] mt-1">Próximamente disponible</p>
+    </div>
+  );
+}
+
+/* ── Apariencia ─────────────────────────────────────────── */
+function AparienciaSection({ user }: { user: any }) {
+  const isAdmin = user?.role === "ADMIN";
+  const { theme, fontSize, logoUrl, companyName,
+          setTheme, setFontSize, setLogoUrl, setCompanyName, reset }
+    = (typeof window !== "undefined"
+        ? require("@/store/appearance.store").useAppearanceStore()
+        : { theme: "light", fontSize: "md", logoUrl: null, companyName: "Savicol",
+            setTheme: () => {}, setFontSize: () => {}, setLogoUrl: () => {},
+            setCompanyName: () => {}, reset: () => {} });
+
+  const [previewLogo, setPreviewLogo] = React.useState<string | null>(null);
+  const [saved, setSaved] = React.useState(false);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+
+  function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const url = ev.target?.result as string;
+      setPreviewLogo(url);
+      setLogoUrl(url);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleSave() {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  const themeOptions: { value: "light" | "dark"; label: string; desc: string; preview: string }[] = [
+    { value: "light", label: "Light Mode", desc: "Corporativo Ejecutivo · Fondo blanco",
+      preview: "bg-white border-gray-200 text-gray-800" },
+    { value: "dark",  label: "Dark Mode",  desc: "Executive Obsidian · Fondo oscuro",
+      preview: "bg-[#0D1526] border-[#2A3F6A] text-white" },
+  ];
+
+  const fontSizes: { value: "sm" | "md" | "lg"; label: string; px: string }[] = [
+    { value: "sm", label: "Compacto",  px: "13px" },
+    { value: "md", label: "Normal",    px: "15px" },
+    { value: "lg", label: "Grande",    px: "17px" },
+  ];
+
+  return (
+    <div className="space-y-7">
+      <div>
+        <h2 className="font-bold text-lg" style={{ color: "var(--text-primary)" }}>Apariencia</h2>
+        <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+          Personaliza la identidad visual corporativa de la plataforma
+        </p>
+        {!isAdmin && (
+          <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs"
+               style={{ background: "rgba(196,18,48,0.08)", border: "1px solid rgba(196,18,48,0.20)", color: "#C41230" }}>
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            Solo el Administrador puede modificar la apariencia corporativa.
+          </div>
+        )}
+      </div>
+
+      {/* ── Tema ── */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Modo de visualización</h3>
+        <div className="grid grid-cols-2 gap-3">
+          {themeOptions.map(opt => (
+            <button
+              key={opt.value}
+              disabled={!isAdmin}
+              onClick={() => setTheme(opt.value)}
+              className="rounded-xl p-4 text-left transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{
+                border: theme === opt.value ? "2px solid #1A3A8F" : "1px solid var(--border-default)",
+                background: "var(--bg-surface)",
+                boxShadow: theme === opt.value ? "0 0 0 3px rgba(26,58,143,0.10)" : "none",
+              }}
+            >
+              {/* Preview swatch */}
+              <div className={`h-12 rounded-lg mb-3 border ${opt.preview} flex items-center gap-2 px-3`}>
+                <div className="w-2 h-2 rounded-full" style={{ background: "#1A3A8F" }} />
+                <div className="w-2 h-2 rounded-full" style={{ background: "#C41230" }} />
+                <div className="flex-1 h-1.5 rounded" style={{ background: "currentColor", opacity: 0.15 }} />
+              </div>
+              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{opt.label}</p>
+              <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{opt.desc}</p>
+              {theme === opt.value && (
+                <div className="mt-2 inline-flex items-center gap-1 text-xs font-semibold" style={{ color: "#1A3A8F" }}>
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Activo
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Tipografía ── */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Tamaño de fuente</h3>
+        <div className="flex gap-2">
+          {fontSizes.map(fs => (
+            <button
+              key={fs.value}
+              disabled={!isAdmin}
+              onClick={() => setFontSize(fs.value)}
+              className="flex-1 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{
+                border: fontSize === fs.value ? "2px solid #1A3A8F" : "1px solid var(--border-default)",
+                background: fontSize === fs.value ? "rgba(26,58,143,0.06)" : "var(--bg-surface)",
+                color: fontSize === fs.value ? "#1A3A8F" : "var(--text-secondary)",
+              }}
+            >
+              <span style={{ fontSize: fs.px }}>Aa</span>
+              <p className="text-xs mt-0.5">{fs.label}</p>
+            </button>
+          ))}
+        </div>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          Tipografía corporativa: <strong>Inter</strong> · Sistema diseñado para legibilidad ejecutiva
+        </p>
+      </div>
+
+      {/* ── Logo corporativo ── */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Logo corporativo</h3>
+        <div className="rounded-xl p-4 space-y-4"
+             style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
+          {/* Preview */}
+          <div className="flex items-center gap-4">
+            <div className="w-24 h-16 rounded-xl flex items-center justify-center"
+                 style={{ background: "var(--bg-elevated)", border: "1px dashed var(--border-default)" }}>
+              {(previewLogo || logoUrl) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={previewLogo || logoUrl!} alt="Logo" className="max-h-12 max-w-full object-contain" />
+              ) : (
+                <div className="text-center">
+                  <Shield className="w-6 h-6 mx-auto" style={{ color: "#1A3A8F" }} />
+                  <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Logo actual</p>
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+                {logoUrl ? "Logo personalizado" : "Logo SAVICOL predeterminado"}
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                PNG, SVG, JPG o WebP · Máx 2 MB
+              </p>
+            </div>
+          </div>
+
+          {isAdmin && (
+            <div className="flex gap-2">
+              <input ref={fileRef} type="file" accept=".png,.svg,.jpg,.jpeg,.webp" className="hidden"
+                     onChange={handleLogoFile} />
+              <button onClick={() => fileRef.current?.click()} className="btn-secondary text-xs px-3 py-2">
+                Cargar logo
+              </button>
+              {(logoUrl || previewLogo) && (
+                <button onClick={() => { setLogoUrl(null); setPreviewLogo(null); }}
+                        className="btn-ghost text-xs px-3 py-2" style={{ color: "#C41230" }}>
+                  Usar predeterminado
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Nombre empresa ── */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Nombre corporativo</h3>
+        <input
+          type="text"
+          disabled={!isAdmin}
+          value={companyName}
+          onChange={e => setCompanyName(e.target.value)}
+          className="input-base max-w-xs disabled:opacity-60"
+          placeholder="Savicol"
+        />
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          Se muestra en el sidebar, correos y reportes exportados.
+        </p>
+      </div>
+
+      {/* ── Colores corporativos (informativo) ── */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Identidad cromática</h3>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { name: "Azul Corporativo", hex: "#1A3A8F", use: "Sidebar · botones primarios" },
+            { name: "Rojo Corporativo", hex: "#C41230", use: "Acento · alertas · badges" },
+            { name: "Blanco Ejecutivo", hex: "#FFFFFF", use: "Fondos · texto inverso", border: true },
+          ].map(c => (
+            <div key={c.name} className="rounded-xl p-3"
+                 style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
+              <div className="w-full h-8 rounded-lg mb-2"
+                   style={{ background: c.hex, border: c.border ? "1px solid var(--border-default)" : "none" }} />
+              <p className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>{c.name}</p>
+              <p className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>{c.hex}</p>
+              <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>{c.use}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Actions ── */}
+      {isAdmin && (
+        <div className="flex items-center gap-3 pt-2">
+          <button onClick={handleSave} className="btn-primary gap-2 text-sm">
+            {saved ? <><CheckCircle2 className="w-4 h-4" /> Cambios guardados</> : "Guardar configuración"}
+          </button>
+          <button
+            onClick={() => { reset(); setPreviewLogo(null); }}
+            className="btn-ghost text-sm"
+            style={{ color: "var(--text-muted)" }}
+          >
+            Restaurar predeterminado
+          </button>
+        </div>
+      )}
     </div>
   );
 }
