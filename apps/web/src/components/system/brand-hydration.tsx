@@ -8,17 +8,15 @@ export function BrandHydration() {
   const { setLogoUrl, setCompanyName, companyName } = useAppearanceStore();
 
   useEffect(() => {
-    // Default corporativo siempre presente
-    setLogoUrl("/logo-savicol.png");
-
     if (!settings) return;
 
     const remoteLogo = getSetting(settings, "brand.logoUrl");
     const remoteName = getSetting(settings, "brand.name");
 
-    // Solo sobreescribe si el admin subio un logo personalizado diferente al default
-    if (remoteLogo && remoteLogo.trim() && remoteLogo !== "/logo-savicol.png") {
+    if (remoteLogo && remoteLogo.trim()) {
       setLogoUrl(remoteLogo);
+    } else {
+      setLogoUrl("/logo-savicol.png");
     }
 
     if (remoteName && remoteName.trim() && remoteName !== companyName) {
