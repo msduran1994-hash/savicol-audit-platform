@@ -238,34 +238,147 @@ export class EmailService {
   layout(opts: { title: string; previewText: string; body: string; ctaText?: string; ctaUrl?: string }): string {
     const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
     return `<!DOCTYPE html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${this.escape(opts.title)}</title></head>
-<body style="margin:0;padding:0;background:#0A111F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-<div style="display:none;max-height:0;overflow:hidden;">${this.escape(opts.previewText)}</div>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#0A111F;padding:24px 12px">
-  <tr><td align="center">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#0D1526;border:1px solid #1E2D4A;border-radius:16px;overflow:hidden">
-      <tr><td style="background:linear-gradient(135deg,#F59E0B,#FBBF24);padding:24px 28px">
-        <h1 style="margin:0;color:#0A111F;font-size:24px;font-weight:800;letter-spacing:-0.02em">Savicol Audit Platform</h1>
-        <p style="margin:4px 0 0;color:#0A111F;font-size:12px;opacity:0.7">Auditoría corporativa · gestión integral</p>
-      </td></tr>
-      <tr><td style="padding:32px 28px;color:#E2E8F0;font-size:14px;line-height:1.6">
-        <h2 style="margin:0 0 16px;color:#FFFFFF;font-size:20px;font-weight:700">${this.escape(opts.title)}</h2>
-        ${opts.body}
-        ${opts.ctaText && opts.ctaUrl ? `<div style="margin:32px 0;text-align:center">
-          <a href="${opts.ctaUrl}" style="display:inline-block;padding:12px 32px;background:#F59E0B;color:#0A111F;font-weight:700;font-size:14px;text-decoration:none;border-radius:8px">${this.escape(opts.ctaText)}</a>
-        </div>` : ""}
-      </td></tr>
-      <tr><td style="padding:20px 28px;border-top:1px solid #1E2D4A;background:#0A111F;color:#475569;font-size:11px;line-height:1.5">
-        <p style="margin:0">Este correo fue enviado automáticamente por la plataforma de auditoría Savicol.</p>
-        <p style="margin:6px 0 0">Si no esperabas este mensaje, ignóralo o contacta al administrador.</p>
-        <p style="margin:12px 0 0"><a href="${baseUrl}" style="color:#64748B;text-decoration:none">${baseUrl}</a></p>
-      </td></tr>
-    </table>
-  </td></tr>
-</table>
-</body></html>`;
+<html lang="es" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>${this.escape(opts.title)}</title>
+<!--[if mso]>
+<noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+<![endif]-->
+<style>
+  /* ── Forzar Dark Mode en TODOS los clientes ── */
+  :root { color-scheme: dark; supported-color-schemes: dark; }
+
+  /* Gmail dark mode override */
+  u + .email-body .email-wrapper { background: #060E1F !important; }
+
+  /* Apple Mail / iOS dark mode */
+  @media (prefers-color-scheme: dark) {
+    body, .email-wrapper { background-color: #060E1F !important; }
+    .email-card          { background-color: #0D1526 !important; border-color: #1E2D4A !important; }
+    .email-footer        { background-color: #060E1F !important; }
+    .email-body-text     { color: #CBD5E1 !important; }
+    .email-title         { color: #FFFFFF !important; }
+    .email-muted         { color: #64748B !important; }
+    .email-pwd-box       { background-color: #0A111F !important; border-color: #2A3F6A !important; }
   }
+
+  /* Force dark for Outlook.com web */
+  [data-ogsc] body, [data-ogsc] .email-wrapper { background-color: #060E1F !important; }
+  [data-ogsc] .email-card   { background-color: #0D1526 !important; }
+  [data-ogsc] .email-footer { background-color: #060E1F !important; }
+  [data-ogsc] .email-body-text { color: #CBD5E1 !important; }
+
+  /* Prevent white flash on load */
+  html { background-color: #060E1F !important; }
+</style>
+</head>
+<!--[if mso]><body class="email-body" style="background:#060E1F;margin:0;padding:0"><![endif]-->
+<body class="email-body" style="margin:0;padding:0;background-color:#060E1F!important;background:#060E1F;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%" bgcolor="#060E1F">
+
+<!-- Preview text (hidden) -->
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;color:#060E1F">${this.escape(opts.previewText)}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
+
+<!-- Wrapper externo -->
+<div class="email-wrapper" style="background-color:#060E1F;min-height:100vh;padding:32px 16px" bgcolor="#060E1F">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#060E1F;border-collapse:collapse" bgcolor="#060E1F">
+<tr><td align="center" style="background-color:#060E1F;padding:0" bgcolor="#060E1F">
+
+  <!-- Card principal (600px) -->
+  <table class="email-card" role="presentation" cellpadding="0" cellspacing="0" border="0" width="600"
+    style="max-width:600px;width:100%;background-color:#0D1526;border:1px solid #1E2D4A;border-radius:16px;overflow:hidden;border-collapse:separate"
+    bgcolor="#0D1526">
+
+    <!-- Header: gradiente corporativo -->
+    <tr>
+      <td style="background:linear-gradient(135deg,#0B1E4B 0%,#1A3A8F 60%,#0B1E4B 100%);padding:0;line-height:0" bgcolor="#0B1E4B">
+        <!-- Línea acento rojo superior -->
+        <div style="height:4px;background:linear-gradient(90deg,#C41230,#E8192C,#C41230);line-height:0;font-size:0">&nbsp;</div>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
+          <tr>
+            <td style="padding:24px 28px">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse">
+                <tr>
+                  <td style="padding-right:14px;vertical-align:middle">
+                    <!-- Icono AP Audit -->
+                    <div style="width:44px;height:44px;background:linear-gradient(135deg,#C41230,#E8192C);border-radius:10px;display:inline-block;text-align:center;line-height:44px;font-size:18px;font-weight:900;color:#ffffff;font-family:Arial,sans-serif">AP</div>
+                  </td>
+                  <td style="vertical-align:middle">
+                    <p style="margin:0;color:#FFFFFF;font-size:18px;font-weight:800;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;letter-spacing:-0.01em">AP Audit Platform Software</p>
+                    <p style="margin:3px 0 0;color:rgba(255,255,255,0.50);font-size:11px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;letter-spacing:0.06em;text-transform:uppercase">Savicol · Control Interno · Auditoría</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- Cuerpo del email -->
+    <tr>
+      <td class="email-body-cell" style="padding:32px 28px;background-color:#0D1526;color:#CBD5E1;font-size:14px;line-height:1.7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" bgcolor="#0D1526">
+
+        <!-- Título de sección -->
+        <h2 class="email-title" style="margin:0 0 20px;color:#FFFFFF;font-size:20px;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;border-bottom:1px solid #1E2D4A;padding-bottom:14px">
+          ${this.escape(opts.title)}
+        </h2>
+
+        <!-- Contenido dinámico -->
+        <div class="email-body-text" style="color:#CBD5E1;font-size:14px;line-height:1.7">
+          ${opts.body}
+        </div>
+
+        ${opts.ctaText && opts.ctaUrl ? `
+        <!-- CTA Button -->
+        <div style="margin:32px 0 8px;text-align:center">
+          <a href="${opts.ctaUrl}"
+             style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#1A3A8F,#0B1E4B);color:#FFFFFF;font-weight:700;font-size:14px;text-decoration:none;border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;border:1px solid #2557CF;letter-spacing:0.02em"
+             bgcolor="#1A3A8F">
+            ${this.escape(opts.ctaText)} →
+          </a>
+        </div>` : ""}
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td class="email-footer" style="padding:20px 28px;border-top:1px solid #1E2D4A;background-color:#060E1F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif" bgcolor="#060E1F">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
+          <tr>
+            <td style="vertical-align:middle">
+              <p class="email-muted" style="margin:0;color:#475569;font-size:11px;line-height:1.6">
+                Este correo fue enviado automáticamente por AP Audit Platform Software.<br>
+                Si no esperabas este mensaje, ignóralo o contacta al administrador.
+              </p>
+              <p style="margin:8px 0 0">
+                <a href="${baseUrl}" style="color:#2557CF;font-size:11px;text-decoration:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif">${baseUrl}</a>
+              </p>
+            </td>
+            <td style="text-align:right;vertical-align:middle;padding-left:16px;white-space:nowrap">
+              <p class="email-muted" style="margin:0;color:#334155;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif">© 2026 Savicol</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+  </table>
+  <!-- /Card -->
+
+</td></tr>
+</table>
+</div>
+<!-- /Wrapper -->
+
+</body>
+</html>`;
+  }
+
 
   templateInvitation(opts: { name: string; activationUrl: string; expiresAt: Date; invitedBy: string; role: string }): string {
     const body = `
@@ -280,11 +393,14 @@ export class EmailService {
 
   templateTempPassword(opts: { name: string; tempPassword: string; loginUrl: string }): string {
     const body = `
-      <p>Hola <strong>${this.escape(opts.name)}</strong>,</p>
-      <p>Un administrador ha restablecido tu contraseña. A continuación encontrarás una contraseña temporal:</p>
-      <div style="margin:24px 0;padding:16px;background:#0A111F;border:1px solid #2A3F6A;border-radius:8px;text-align:center">
-        <code style="font-family:monospace;font-size:18px;color:#F59E0B;letter-spacing:0.05em">${this.escape(opts.tempPassword)}</code>
-      </div>
+      <p style="color:#CBD5E1">Hola <strong style="color:#FFFFFF">${this.escape(opts.name)}</strong>,</p>
+      <p style="color:#CBD5E1">Un administrador ha restablecido tu contraseña. A continuación encontrarás tu contraseña temporal:</p>
+      <table class="email-pwd-box" role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+        style="background-color:#060E1F;border:1px solid #2A3F6A;border-radius:8px;margin:24px 0;border-collapse:collapse" bgcolor="#060E1F">
+        <tr><td style="padding:20px;text-align:center;background-color:#060E1F" bgcolor="#060E1F">
+          <code style="font-family:'Courier New',Courier,monospace;font-size:22px;font-weight:700;color:#F59E0B;letter-spacing:0.08em;background:transparent">${this.escape(opts.tempPassword)}</code>
+        </td></tr>
+      </table>
       <p><strong style="color:#F59E0B">Por seguridad</strong>, ingresa con esta contraseña y cámbiala inmediatamente desde Configuración → Seguridad.</p>
       <p style="color:#94A3B8;font-size:12px">Esta contraseña es de un solo uso. No la compartas con nadie.</p>`;
     return this.layout({ title: "Tu contraseña temporal", previewText: "Un administrador restableció tu contraseña", body, ctaText: "Ir a la plataforma", ctaUrl: opts.loginUrl });
