@@ -867,11 +867,20 @@ function AparienciaSection({ user }: { user: any }) {
 
   const [previewLogo, setPreviewLogo] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
+  const upsertSetting = useUpsertSetting();
 
   function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Guard de tamaño: 1 MB (se guarda como data URL en backend)
+    if (file.size > 1024 * 1024) {
+      setSaveError("El logo supera 1 MB. Usa una imagen más liviana (idealmente SVG o PNG optimizado).");
+      return;
+    }
+    setSaveError(null);
     const reader = new FileReader();
     reader.onload = ev => {
       const url = ev.target?.result as string;
@@ -881,9 +890,39 @@ function AparienciaSection({ user }: { user: any }) {
     reader.readAsDataURL(file);
   }
 
-  function handleSave() {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      // Persiste el branding en backend → global para TODOS los usuarios
+      await upsertSetting.mutateAsync({
+        key: "brand.logoUrl",
+        value: logoUrl ?? "",
+        type: "IMAGE_URL",
+        category: "branding",
+        isPublic: true,
+      });
+      await upsertSetting.mutateAsync({
+        key: "brand.name",
+        value: companyName,
+        type: "STRING",
+        category: "branding",
+        isPublic: true,
+      });
+      await upsertSetting.mutateAsync({
+        key: "general.defaultTheme",
+        value: theme,
+        type: "STRING",
+        category: "general",
+        isPublic: true,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err: any) {
+      setSaveError(err?.response?.data?.message || err?.message || "No se pudo guardar en el servidor.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const themeOptions: { value: "light" | "dark"; label: string; desc: string; preview: string }[] = [
@@ -1059,11 +1098,23 @@ function AparienciaSection({ user }: { user: any }) {
         </div>
       </div>
 
+      {/* ── Error de guardado ── */}
+      {saveError && (
+        <div className="rounded-lg px-3 py-2 text-xs flex items-center gap-2"
+             style={{ background: "rgba(196,18,48,0.08)", border: "1px solid rgba(196,18,48,0.20)", color: "#C41230" }}>
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {saveError}
+        </div>
+      )}
+
       {/* ── Actions ── */}
       {isAdmin && (
         <div className="flex items-center gap-3 pt-2">
-          <button onClick={handleSave} className="btn-primary gap-2 text-sm">
-            {saved ? <><CheckCircle2 className="w-4 h-4" /> Cambios guardados</> : "Guardar configuración"}
+          <button onClick={handleSave} disabled={saving} className="btn-primary gap-2 text-sm">
+            {saving
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Guardando…</>
+              : saved
+                ? <><CheckCircle2 className="w-4 h-4" /> Guardado · visible para todos</>
+                : "Guardar configuración"}
           </button>
           <button
             onClick={() => { reset(); setPreviewLogo(null); }}
@@ -1074,6 +1125,12 @@ function AparienciaSection({ user }: { user: any }) {
           </button>
         </div>
       )}
+
+      <p className="text-xs flex items-start gap-1.5" style={{ color: "var(--text-muted)" }}>
+        <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: "#10B981" }} />
+        Al guardar, el logo y la configuración se almacenan en el servidor y se aplican
+        a <strong>todos los usuarios</strong> de la plataforma.
+      </p>
     </div>
   );
 }

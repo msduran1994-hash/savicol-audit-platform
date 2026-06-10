@@ -1,0 +1,170 @@
+diff --git a/apps/web/src/app/(dashboard)/configuracion/page.tsx b/apps/web/src/app/(dashboard)/configuracion/page.tsx
+index e3ffbdc..06fcce7 100644
+--- a/apps/web/src/app/(dashboard)/configuracion/page.tsx
++++ b/apps/web/src/app/(dashboard)/configuracion/page.tsx
+@@ -867,11 +867,20 @@ function AparienciaSection({ user }: { user: any }) {
+ 
+   const [previewLogo, setPreviewLogo] = React.useState<string | null>(null);
+   const [saved, setSaved] = React.useState(false);
++  const [saving, setSaving] = React.useState(false);
++  const [saveError, setSaveError] = React.useState<string | null>(null);
+   const fileRef = React.useRef<HTMLInputElement>(null);
++  const upsertSetting = useUpsertSetting();
+ 
+   function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+     const file = e.target.files?.[0];
+     if (!file) return;
++    // Guard de tamaño: 1 MB (se guarda como data URL en backend)
++    if (file.size > 1024 * 1024) {
++      setSaveError("El logo supera 1 MB. Usa una imagen más liviana (idealmente SVG o PNG optimizado).");
++      return;
++    }
++    setSaveError(null);
+     const reader = new FileReader();
+     reader.onload = ev => {
+       const url = ev.target?.result as string;
+@@ -881,9 +890,39 @@ function AparienciaSection({ user }: { user: any }) {
+     reader.readAsDataURL(file);
+   }
+ 
+-  function handleSave() {
+-    setSaved(true);
+-    setTimeout(() => setSaved(false), 2500);
++  async function handleSave() {
++    setSaving(true);
++    setSaveError(null);
++    try {
++      // Persiste el branding en backend → global para TODOS los usuarios
++      await upsertSetting.mutateAsync({
++        key: "brand.logoUrl",
++        value: logoUrl ?? "",
++        type: "IMAGE_URL",
++        category: "branding",
++        isPublic: true,
++      });
++      await upsertSetting.mutateAsync({
++        key: "brand.name",
++        value: companyName,
++        type: "STRING",
++        category: "branding",
++        isPublic: true,
++      });
++      await upsertSetting.mutateAsync({
++        key: "general.defaultTheme",
++        value: theme,
++        type: "STRING",
++        category: "general",
++        isPublic: true,
++      });
++      setSaved(true);
++      setTimeout(() => setSaved(false), 2500);
++    } catch (err: any) {
++      setSaveError(err?.response?.data?.message || err?.message || "No se pudo guardar en el servidor.");
++    } finally {
++      setSaving(false);
++    }
+   }
+ 
+   const themeOptions: { value: "light" | "dark"; label: string; desc: string; preview: string }[] = [
+@@ -1059,11 +1098,23 @@ function AparienciaSection({ user }: { user: any }) {
+         </div>
+       </div>
+ 
++      {/* ── Error de guardado ── */}
++      {saveError && (
++        <div className="rounded-lg px-3 py-2 text-xs flex items-center gap-2"
++             style={{ background: "rgba(196,18,48,0.08)", border: "1px solid rgba(196,18,48,0.20)", color: "#C41230" }}>
++          <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {saveError}
++        </div>
++      )}
++
+       {/* ── Actions ── */}
+       {isAdmin && (
+         <div className="flex items-center gap-3 pt-2">
+-          <button onClick={handleSave} className="btn-primary gap-2 text-sm">
+-            {saved ? <><CheckCircle2 className="w-4 h-4" /> Cambios guardados</> : "Guardar configuración"}
++          <button onClick={handleSave} disabled={saving} className="btn-primary gap-2 text-sm">
++            {saving
++              ? <><Loader2 className="w-4 h-4 animate-spin" /> Guardando…</>
++              : saved
++                ? <><CheckCircle2 className="w-4 h-4" /> Guardado · visible para todos</>
++                : "Guardar configuración"}
+           </button>
+           <button
+             onClick={() => { reset(); setPreviewLogo(null); }}
+@@ -1074,6 +1125,12 @@ function AparienciaSection({ user }: { user: any }) {
+           </button>
+         </div>
+       )}
++
++      <p className="text-xs flex items-start gap-1.5" style={{ color: "var(--text-muted)" }}>
++        <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: "#10B981" }} />
++        Al guardar, el logo y la configuración se almacenan en el servidor y se aplican
++        a <strong>todos los usuarios</strong> de la plataforma.
++      </p>
+     </div>
+   );
+ }
+diff --git a/apps/web/src/app/providers.tsx b/apps/web/src/app/providers.tsx
+index 9ccccd7..ca6a81d 100644
+--- a/apps/web/src/app/providers.tsx
++++ b/apps/web/src/app/providers.tsx
+@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+ import { Toaster } from "react-hot-toast";
+ import { useState } from "react";
+ import { ThemeProvider } from "@/components/system/theme-provider";
++import { BrandHydration } from "@/components/system/brand-hydration";
+ 
+ export function Providers({ children }: { children: React.ReactNode }) {
+   const [queryClient] = useState(() => new QueryClient({
+@@ -12,6 +13,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
+   return (
+     <QueryClientProvider client={queryClient}>
+       <ThemeProvider>
++        <BrandHydration />
+         {children}
+         <Toaster
+           position="top-right"
+diff --git a/apps/web/src/components/system/brand-hydration.tsx b/apps/web/src/components/system/brand-hydration.tsx
+new file mode 100644
+index 0000000..dd6dafb
+--- /dev/null
++++ b/apps/web/src/components/system/brand-hydration.tsx
+@@ -0,0 +1,37 @@
++"use client";
++import { useEffect } from "react";
++import { useSettingsPublic, getSetting } from "@/hooks/useSettings";
++import { useAppearanceStore } from "@/store/appearance.store";
++
++/**
++ * Carga el branding global (logo, nombre, tema) desde el backend (settings públicos)
++ * y lo sincroniza en el appearance store. Se monta una vez en Providers.
++ *
++ * Prioridad: si el Admin guardó un logo en backend → se aplica a TODOS los usuarios.
++ * Persiste sobre el localStorage local porque el branding corporativo es global.
++ */
++export function BrandHydration() {
++  const { data: settings } = useSettingsPublic();
++  const { setLogoUrl, setCompanyName, logoUrl, companyName } = useAppearanceStore();
++
++  useEffect(() => {
++    if (!settings) return;
++
++    const remoteLogo    = getSetting(settings, "brand.logoUrl");
++    const remoteName    = getSetting(settings, "brand.name");
++
++    // Logo: el backend manda. Si está vacío en backend, respeta el local (o default SVG).
++    if (remoteLogo && remoteLogo.trim() && remoteLogo !== logoUrl) {
++      setLogoUrl(remoteLogo);
++    }
++
++    if (remoteName && remoteName.trim() && remoteName !== companyName) {
++      // brand.name puede traer "Savicol Audit Platform" → usamos solo la 1ª palabra como marca corta
++      const shortName = remoteName.split(" ")[0];
++      setCompanyName(shortName);
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [settings]);
++
++  return null;
++}
