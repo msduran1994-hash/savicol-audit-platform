@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/auth.store";
 
 // ─────────────────────────────────────────────────────────────
 // AP Audit Platform Software — Login Page v2
@@ -35,6 +36,7 @@ function IconSVG({ name }: { name: string }) {
 
 export default function LoginPage() {
   const router = useRouter();
+  const setUser = useAuthStore((s) => s.setUser);
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [showPwd,  setShowPwd]  = useState(false);
@@ -114,8 +116,7 @@ export default function LoginPage() {
       const data = await res.json();
       if (data.mfaRequired) { router.push("/mfa"); return; }
       if (data.accessToken) {
-        sessionStorage.setItem("access_token", data.accessToken);
-        sessionStorage.setItem("user", JSON.stringify(data.user));
+        setUser(data.user, data.accessToken);
         router.push("/");
       } else {
         throw new Error(data.message || "Credenciales inválidas");
