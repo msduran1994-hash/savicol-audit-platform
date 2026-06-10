@@ -6,7 +6,7 @@ import { SessionWatcher } from "@/components/layout/session-watcher";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard>
-      <div className="flex h-screen overflow-hidden bg-[#070B14]">
+      <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg-base)" }}>
         {/* Sincroniza API ↔ Zustand cuando el usuario está autenticado */}
         <DataHydration />
         {/* Monitoriza inactividad y dispara warning/logout según rol */}

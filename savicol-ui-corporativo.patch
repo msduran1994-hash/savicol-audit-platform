@@ -40,11 +40,19 @@ index 7741901..adbd56e 100644
 +import { Eye, EyeOff, Lock, Mail, AlertCircle, Shield, CheckCircle2 } from "lucide-react";
  import { cn } from "@/lib/utils";
  import { useAuthStore } from "@/store/auth.store";
+<<<<<<< ours
  
 @@ -14,12 +14,19 @@ const loginSchema = z.object({
  });
  type LoginForm = z.infer<typeof loginSchema>;
  
+=======
+
+@@ -14,12 +14,19 @@ const loginSchema = z.object({
+ });
+ type LoginForm = z.infer<typeof loginSchema>;
+
+>>>>>>> theirs
 +const features = [
 +  "Cronograma de Auditoría 2026",
 +  "KPIs de Control Interno",
@@ -60,7 +68,11 @@ index 7741901..adbd56e 100644
    const [isLoading, setIsLoading] = useState(false);
 -  const [error, setError] = useState("");
 +  const [error, setError]       = useState("");
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
    const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
      resolver: zodResolver(loginSchema),
 @@ -45,7 +52,6 @@ export default function LoginPage() {
@@ -73,7 +85,11 @@ index 7741901..adbd56e 100644
        } else {
 @@ -59,186 +65,248 @@ export default function LoginPage() {
    };
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
    return (
 -    <div className="min-h-screen flex bg-[#070B14] overflow-hidden">
 -      {/* Left panel — branding */}
@@ -110,7 +126,11 @@ index 7741901..adbd56e 100644
 +             style={{ background: "rgba(255,255,255,0.05)", filter: "blur(30px)" }} />
 +        <div className="absolute top-1/2 left-1/2 w-32 h-32 rounded-full animate-float-delay"
 +             style={{ background: "rgba(196,18,48,0.05)", filter: "blur(20px)" }} />
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
          {/* Logo */}
 -        <div className="relative z-10 flex items-center gap-3">
 -          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-glow-blue">
@@ -139,7 +159,11 @@ index 7741901..adbd56e 100644
 +            </div>
            </div>
          </div>
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -        {/* Hero text */}
 -        <div className="relative z-10 space-y-6">
 -          <div className="space-y-3">
@@ -173,7 +197,11 @@ index 7741901..adbd56e 100644
 -            Sistema integrado de auditoría, control interno, seguimiento operativo
 -            y análisis ejecutivo para Savicol.
 -          </p>
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -          {/* Feature pills */}
 -          <div className="flex flex-wrap gap-2">
 -            {["Dashboard Ejecutivo", "Cronograma 2026", "KPIs Interactivos", "Trazabilidad"].map(f => (
@@ -196,7 +224,11 @@ index 7741901..adbd56e 100644
 -          </div>
 +          </ul>
          </div>
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
          {/* Bottom stats */}
 -        <div className="relative z-10 grid grid-cols-3 gap-4">
 -          {[
@@ -230,7 +262,11 @@ index 7741901..adbd56e 100644
 +          </p>
          </div>
        </div>
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -      {/* Right panel — form */}
 -      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12">
 -        <div className="w-full max-w-md animate-slide-up">
@@ -254,7 +290,11 @@ index 7741901..adbd56e 100644
 +              <p className="text-xs font-semibold tracking-widest uppercase" style={{ color: "#C41230" }}>Audit Platform</p>
              </div>
            </div>
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -          <div className="mb-8">
 -            <h2 className="font-display text-3xl font-bold text-white">Iniciar Sesión</h2>
 -            <p className="text-[#94A3B8] mt-2 text-sm">
@@ -264,7 +304,11 @@ index 7741901..adbd56e 100644
 +          {/* Card */}
 +          <div className="rounded-2xl p-8"
 +               style={{ background: "#FFFFFF", border: "1px solid #E2E8F0", boxShadow: "0 4px 24px rgba(26,58,143,0.09)" }}>
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
 -            {/* Email */}
 -            <div className="space-y-1.5">
@@ -293,7 +337,11 @@ index 7741901..adbd56e 100644
 +                Accede con tus credenciales corporativas
 +              </p>
              </div>
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -            {/* Password */}
 -            <div className="space-y-1.5">
 -              <label className="text-sm font-medium text-[#94A3B8]">Contraseña</label>
@@ -344,7 +392,11 @@ index 7741901..adbd56e 100644
 -                </p>
 -              )}
 -            </div>
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -            {/* Error */}
 -            {error && (
 -              <div className="rounded-lg border border-red-500/30 bg-red-950/30 px-4 py-3 text-sm text-red-400 flex items-center gap-2">
@@ -406,7 +458,11 @@ index 7741901..adbd56e 100644
 -                </span>
 -              )}
 -            </button>
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -            {/* MFA note */}
 -            <p className="text-center text-xs text-[#475569]">
 -              <Lock className="inline w-3 h-3 mr-1" />
@@ -419,7 +475,11 @@ index 7741901..adbd56e 100644
 +                  <AlertCircle className="w-4 h-4 shrink-0" /> {error}
 +                </div>
 +              )}
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -            {/* Forgot password */}
 -            <p className="text-center text-xs">
 -              <a href="/olvide" className="text-[#94A3B8] hover:text-amber-400 transition-colors">
@@ -447,7 +507,11 @@ index 7741901..adbd56e 100644
 +                  </span>
 +                )}
 +              </button>
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -          <div className="mt-8 pt-6 border-t border-[#1E2D4A] text-center text-xs text-[#475569]">
 -            © {new Date().getFullYear()} Savicol · Audit Platform v1.0
 +              {/* MFA note */}
@@ -481,7 +545,11 @@ index 35becf5..1a27201 100644
 @@ -856,6 +856,230 @@ function PlaceholderSection({ label }: { label: string }) {
    );
  }
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 +/* ── Apariencia ─────────────────────────────────────────── */
 +function AparienciaSection({ user }: { user: any }) {
 +  const isAdmin = user?.role === "ADMIN";
@@ -716,11 +784,19 @@ index 0ac5c1a..7d47460 100644
 @@ -1,119 +1,213 @@
 -@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
 +@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+<<<<<<< ours
  
  @tailwind base;
  @tailwind components;
  @tailwind utilities;
  
+=======
+
+ @tailwind base;
+ @tailwind components;
+ @tailwind utilities;
+
+>>>>>>> theirs
 +/* ══════════════════════════════════════════════════════════════
 +   SAVICOL CORPORATE DESIGN SYSTEM
 +   Light (default) + Dark (.dark)
@@ -760,7 +836,11 @@ index 0ac5c1a..7d47460 100644
 +  --card-shadow: 0 2px 12px rgba(26,58,143,0.07);
 +  --card-border: #E2E8F0;
  }
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -* { box-sizing: border-box; margin: 0; padding: 0; }
 +.dark {
 +  /* ── Dark Mode: Executive Obsidian ── */
@@ -768,7 +848,11 @@ index 0ac5c1a..7d47460 100644
 +  --bg-surface:   #0D1526;
 +  --bg-elevated:  #1A2540;
 +  --bg-overlay:   #243356;
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -html { scroll-behavior: smooth; }
 +  --border-subtle:  #1E2D4A;
 +  --border-default: #2A3F6A;
@@ -792,7 +876,11 @@ index 0ac5c1a..7d47460 100644
 +  --card-shadow: 0 4px 24px rgba(0,0,0,0.40);
 +  --card-border: #1E2D4A;
 +}
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 +/* ══ Base ══ */
 +* { box-sizing: border-box; margin: 0; padding: 0; }
 +html { scroll-behavior: smooth; }
@@ -807,7 +895,11 @@ index 0ac5c1a..7d47460 100644
    -moz-osx-font-smoothing: grayscale;
 +  transition: background-color 0.25s ease, color 0.25s ease;
  }
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -/* Custom scrollbar */
 -::-webkit-scrollbar { width: 4px; height: 4px; }
 -::-webkit-scrollbar-track { background: #0D1526; }
@@ -822,7 +914,11 @@ index 0ac5c1a..7d47460 100644
 +::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 +::selection { background: rgba(26,58,143,0.18); color: var(--text-primary); }
 +.dark ::selection { background: rgba(59,130,246,0.28); color: #F8FAFC; }
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 +/* ══ Components ══ */
  @layer components {
 -  /* Status badges */
@@ -857,7 +953,11 @@ index 0ac5c1a..7d47460 100644
    }
 +  .card-hover:hover { box-shadow: 0 6px 24px rgba(26,58,143,0.13); }
 +  .dark .card-hover:hover { box-shadow: 0 6px 24px rgba(0,0,0,0.45); }
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -  /* Inputs */
    .input-base {
 -    @apply w-full rounded-lg border border-[#1E2D4A] bg-[#0D1526] px-3 py-2 text-sm text-[#F8FAFC]
@@ -875,7 +975,11 @@ index 0ac5c1a..7d47460 100644
 +    box-shadow: 0 0 0 3px rgba(26,58,143,0.12);
    }
 +  .dark .input-base:focus { border-color: #3B82F6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -  /* Buttons */
    .btn-primary {
 -    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-[#3B82F6] px-4 py-2
@@ -917,7 +1021,11 @@ index 0ac5c1a..7d47460 100644
 +    color: var(--text-secondary);
    }
 +  .btn-ghost:hover { background: var(--bg-elevated); color: var(--text-primary); }
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -  /* Tables */
 -  .table-row-hover {
 -    @apply transition-colors hover:bg-[#1A2540]/50;
@@ -945,7 +1053,11 @@ index 0ac5c1a..7d47460 100644
 +  .table-row-hover { @apply transition-colors; }
 +  .table-row-hover:hover { background: var(--bg-elevated); }
  }
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -/* Gradient text */
 -.text-gradient-gold {
 -  background: linear-gradient(135deg, #F59E0B, #FCD34D);
@@ -972,7 +1084,11 @@ index 0ac5c1a..7d47460 100644
 +  background: linear-gradient(135deg, #F59E0B, #FCD34D);
 +  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
  }
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -/* Shimmer loading */
 +/* ══ Shimmer ══ */
  .shimmer {
@@ -981,7 +1097,11 @@ index 0ac5c1a..7d47460 100644
    background-size: 200% 100%;
    animation: shimmer 1.5s infinite linear;
  }
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -/* Noise overlay for depth */
 -.noise-overlay::before {
 -  content: '';
@@ -1004,7 +1124,11 @@ index e24dddc..b04ac67 100644
 +++ b/apps/web/src/app/layout.tsx
 @@ -5,19 +5,27 @@ import { Providers } from "./providers";
  import { GoogleAnalytics } from "@/components/system/google-analytics";
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
  export const metadata: Metadata = {
 -  title: { default: "Audit Platform Savicol", template: "%s | Savicol" },
 +  title: { default: "Audit Platform · Savicol", template: "%s | Savicol" },
@@ -1019,7 +1143,11 @@ index e24dddc..b04ac67 100644
 +    apple: "/favicon.svg",
 +  },
  };
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
  export default function RootLayout({ children }: { children: React.ReactNode }) {
    return (
 -    <html lang="es" className="dark">
@@ -1043,11 +1171,19 @@ index 6c197a3..9ccccd7 100644
  import { Toaster } from "react-hot-toast";
  import { useState } from "react";
 +import { ThemeProvider } from "@/components/system/theme-provider";
+<<<<<<< ours
  
  export function Providers({ children }: { children: React.ReactNode }) {
    const [queryClient] = useState(() => new QueryClient({
 @@ -10,21 +11,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
  
+=======
+
+ export function Providers({ children }: { children: React.ReactNode }) {
+   const [queryClient] = useState(() => new QueryClient({
+@@ -10,21 +11,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
+
+>>>>>>> theirs
    return (
      <QueryClientProvider client={queryClient}>
 -      {children}
@@ -1090,7 +1226,11 @@ index 2a540c6..99ccd7a 100644
 @@ -14,7 +14,6 @@ import { useAuthStore } from "@/store/auth.store";
  import { APP_NAME, APP_COMPANY } from "@/lib/constants";
  import { useState } from "react";
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -// ─── NAV DE LA PLATAFORMA PRINCIPAL ───────────────────────────────────────────
  const MAIN_NAV = [
    { href: "/",              label: "Dashboard",       icon: LayoutDashboard, badge: null },
@@ -1098,7 +1238,11 @@ index 2a540c6..99ccd7a 100644
 @@ -23,21 +22,19 @@ const MAIN_NAV = [
    { href: "/configuracion", label: "Configuración",   icon: Settings,        badge: null },
  ];
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -// ─── NAV INTERNO DEL MÓDULO GRANJAS ───────────────────────────────────────────
  const GRANJAS_NAV = [
 -  { href: "/granjas",            label: "Dashboard",        icon: LayoutDashboard,   badge: null },
@@ -1122,7 +1266,11 @@ index 2a540c6..99ccd7a 100644
 +  { href: "/granjas/actividad",  label: "Actividad",        icon: Activity,         badge: null },
 +  { href: "/granjas/documentos", label: "Documentos",       icon: Files,            badge: null },
  ];
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -// ─── NAV INTERNO DEL MÓDULO RUTAS ────────────────────────────────────────────
  const RUTAS_NAV = [
    { href: "/rutas",              label: "Dashboard",         icon: LayoutDashboard, badge: null },
@@ -1130,7 +1278,11 @@ index 2a540c6..99ccd7a 100644
 @@ -47,7 +44,6 @@ const RUTAS_NAV = [
    { href: "/rutas/informe",      label: "Informe Ejecutivo", icon: Sparkles,        badge: null },
  ];
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -// ─── NAV INTERNO DEL MÓDULO CEDIS ────────────────────────────────────────────
  const CEDIS_NAV = [
    { href: "/cedis",              label: "Dashboard",         icon: LayoutDashboard, badge: null },
@@ -1138,7 +1290,11 @@ index 2a540c6..99ccd7a 100644
 @@ -66,104 +62,82 @@ function detectWorkspace(pathname: string): Workspace {
    return "auditoria";
  }
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 +type AccentKey = "corp" | "amber" | "cyan" | "emerald";
 +
 +const ACCENT: Record<AccentKey, { active: string; activeBg: string; bar: string }> = {
@@ -1200,13 +1356,21 @@ index 2a540c6..99ccd7a 100644
 +  rutas:     { brand: "Acompañamiento Rutas",   subtitle: "Módulo Rutas",   logoIcon: Truck,    navTitle: "Módulo Rutas",  accent: "cyan",    nav: RUTAS_NAV   },
 +  cedis:     { brand: "Auditoría CEDIS",        subtitle: "Módulo CEDIS",   logoIcon: Warehouse,navTitle: "Módulo CEDIS",  accent: "emerald", nav: CEDIS_NAV   },
  };
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
  export function Sidebar() {
 -  const pathname = usePathname();
 +  const pathname  = usePathname();
    const { user, logout } = useAuthStore();
    const [collapsed, setCollapsed] = useState(false);
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
    const workspace = detectWorkspace(pathname);
 -  const meta = META[workspace];
 -  const LogoIcon = meta.logoIcon;
@@ -1220,7 +1384,11 @@ index 2a540c6..99ccd7a 100644
 +  const meta      = META[workspace];
 +  const a         = ACCENT[meta.accent];
 +  const LogoIcon  = meta.logoIcon;
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
    return (
      <aside
        className={cn(
@@ -1253,7 +1421,11 @@ index 2a540c6..99ccd7a 100644
        >
          {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
        </button>
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -      {/* Logo */}
 -      <div className="flex items-center gap-3 p-4 h-16 border-b border-[#1E2D4A]">
 -        <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-glow-blue bg-gradient-to-br", meta.logoGradient)}>
@@ -1273,7 +1445,11 @@ index 2a540c6..99ccd7a 100644
            </div>
          )}
        </div>
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
        {/* Navigation */}
 -      <nav className="flex-1 px-2.5 py-4 space-y-1 overflow-y-auto">
 +      <nav className="flex-1 px-2.5 py-4 space-y-0.5 overflow-y-auto">
@@ -1337,7 +1513,11 @@ index 2a540c6..99ccd7a 100644
            );
          })}
        </nav>
+<<<<<<< ours
  
+=======
+
+>>>>>>> theirs
 -      {/* User */}
 -      <div className="p-2.5 border-t border-[#1E2D4A] space-y-1">
 +      {/* User + Logout */}

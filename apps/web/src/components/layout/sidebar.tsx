@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
 import { APP_NAME, APP_COMPANY } from "@/lib/constants";
+import { SavicolLogo } from "@/components/ui/savicol-logo";
 import { useState } from "react";
 
 const MAIN_NAV = [
@@ -119,17 +120,25 @@ export function Sidebar() {
       </button>
 
       {/* Logo / Brand */}
-      <div className="flex items-center gap-3 px-4 h-16" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-             style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)" }}>
-          <LogoIcon className="w-4.5 h-4.5 text-white" />
-        </div>
-        {!collapsed && (
-          <div className="overflow-hidden">
-            <p className="font-black text-white text-sm leading-none truncate tracking-tight">{meta.brand}</p>
-            <p className="text-[10px] font-bold tracking-[0.15em] uppercase mt-0.5"
-               style={{ color: "#C41230" }}>{meta.subtitle}</p>
-          </div>
+      <div className="flex items-center gap-3 px-4 h-16 overflow-hidden" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+        {workspace === "auditoria" ? (
+          collapsed
+            ? <SavicolLogo variant="mark" size="sm" inverted />
+            : <SavicolLogo variant="full" size="sm" inverted />
+        ) : (
+          <>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                 style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)" }}>
+              <LogoIcon className="w-4.5 h-4.5 text-white" />
+            </div>
+            {!collapsed && (
+              <div className="overflow-hidden">
+                <p className="font-black text-white text-sm leading-none truncate tracking-tight">{meta.brand}</p>
+                <p className="text-[10px] font-bold tracking-[0.15em] uppercase mt-0.5"
+                   style={{ color: "#C41230" }}>{meta.subtitle}</p>
+              </div>
+            )}
+          </>
         )}
       </div>
 

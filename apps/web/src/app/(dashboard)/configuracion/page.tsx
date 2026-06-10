@@ -5,6 +5,8 @@ import {
   Users, Plus, Mail, Edit2, Trash2, Power, KeyRound, Copy, X, AlertCircle,
   Loader2, RefreshCw, Activity,
 } from "lucide-react";
+import { SavicolLogo } from "@/components/ui/savicol-logo";
+import { useAppearanceStore } from "@/store/appearance.store";
 import { useAuthStore } from "@/store/auth.store";
 import { cn } from "@/lib/utils";
 import {
@@ -861,11 +863,7 @@ function AparienciaSection({ user }: { user: any }) {
   const isAdmin = user?.role === "ADMIN";
   const { theme, fontSize, logoUrl, companyName,
           setTheme, setFontSize, setLogoUrl, setCompanyName, reset }
-    = (typeof window !== "undefined"
-        ? require("@/store/appearance.store").useAppearanceStore()
-        : { theme: "light", fontSize: "md", logoUrl: null, companyName: "Savicol",
-            setTheme: () => {}, setFontSize: () => {}, setLogoUrl: () => {},
-            setCompanyName: () => {}, reset: () => {} });
+    = useAppearanceStore();
 
   const [previewLogo, setPreviewLogo] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState(false);
@@ -982,28 +980,28 @@ function AparienciaSection({ user }: { user: any }) {
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Logo corporativo</h3>
         <div className="rounded-xl p-4 space-y-4"
              style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
-          {/* Preview */}
-          <div className="flex items-center gap-4">
-            <div className="w-24 h-16 rounded-xl flex items-center justify-center"
-                 style={{ background: "var(--bg-elevated)", border: "1px dashed var(--border-default)" }}>
-              {(previewLogo || logoUrl) ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={previewLogo || logoUrl!} alt="Logo" className="max-h-12 max-w-full object-contain" />
-              ) : (
-                <div className="text-center">
-                  <Shield className="w-6 h-6 mx-auto" style={{ color: "#1A3A8F" }} />
-                  <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Logo actual</p>
-                </div>
-              )}
+          {/* Preview en dos contextos */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* Sobre fondo claro */}
+            <div className="rounded-xl p-4 flex flex-col items-center gap-2"
+                 style={{ background: "#F4F6FA", border: "1px solid #E2E8F0" }}>
+              <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "#94A3B8" }}>Light Mode</p>
+              <SavicolLogo variant="full" size="sm" />
             </div>
-            <div>
-              <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                {logoUrl ? "Logo personalizado" : "Logo SAVICOL predeterminado"}
-              </p>
-              <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                PNG, SVG, JPG o WebP · Máx 2 MB
-              </p>
+            {/* Sobre fondo oscuro */}
+            <div className="rounded-xl p-4 flex flex-col items-center gap-2"
+                 style={{ background: "#1A3A8F", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "rgba(255,255,255,0.45)" }}>Sidebar</p>
+              <SavicolLogo variant="full" size="sm" inverted />
             </div>
+          </div>
+          <div>
+            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+              {logoUrl ? "✓ Logo personalizado activo" : "Logo SAVICOL predeterminado"}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+              Formatos: PNG, SVG, JPG, WebP · Recomendado: SVG o PNG con fondo transparente · Máx 2 MB
+            </p>
           </div>
 
           {isAdmin && (

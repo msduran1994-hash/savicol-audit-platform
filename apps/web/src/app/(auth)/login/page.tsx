@@ -4,9 +4,10 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff, Lock, Mail, AlertCircle, Shield, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
+import { SavicolLogo } from "@/components/ui/savicol-logo";
 
 const loginSchema = z.object({
   email:    z.string().email("Email inválido"),
@@ -92,24 +93,7 @@ export default function LoginPage() {
 
         {/* Logo */}
         <div className="relative z-10 p-10">
-          <div className="flex items-center gap-4">
-            {/* Shield logo mark */}
-            <div className="relative w-14 h-14 flex-shrink-0">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
-                   style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)" }}>
-                <Shield className="w-7 h-7 text-white" />
-              </div>
-              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center"
-                   style={{ background: "#C41230" }}>
-                <CheckCircle2 className="w-3 h-3 text-white" />
-              </div>
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-white tracking-tight">SAVICOL</h1>
-              <p className="text-xs font-semibold tracking-[0.2em] uppercase mt-0.5"
-                 style={{ color: "rgba(255,255,255,0.55)" }}>Audit Platform</p>
-            </div>
-          </div>
+          <SavicolLogo variant="full" size="lg" inverted />
         </div>
 
         {/* Hero content */}
@@ -177,15 +161,8 @@ export default function LoginPage() {
         <div className="w-full max-w-md animate-fade-in-up">
 
           {/* Mobile logo */}
-          <div className="flex items-center gap-3 mb-8 lg:hidden">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-                 style={{ background: "#1A3A8F" }}>
-              <Shield className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="font-black text-lg" style={{ color: "#1A3A8F" }}>SAVICOL</p>
-              <p className="text-xs font-semibold tracking-widest uppercase" style={{ color: "#C41230" }}>Audit Platform</p>
-            </div>
+          <div className="mb-8 lg:hidden">
+            <SavicolLogo variant="full" size="md" />
           </div>
 
           {/* Card */}
