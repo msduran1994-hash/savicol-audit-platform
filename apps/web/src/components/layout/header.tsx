@@ -31,7 +31,7 @@ export function Header({ title, subtitle }: HeaderProps) {
       className="h-14 flex items-center justify-between px-6 sticky top-0 z-10 backdrop-blur-sm"
       style={{
         borderBottom: "1px solid var(--border-subtle)",
-        background: "rgba(var(--bg-surface-rgb, 255,255,255), 0.90)",
+        background: "var(--header-bg)",
       }}
     >
       {/* Page title */}
