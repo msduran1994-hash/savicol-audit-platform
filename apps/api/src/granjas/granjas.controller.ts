@@ -9,13 +9,15 @@ import { GranjasExecutiveService, GranjasExecutiveFilters } from "./granjas-exec
 import { KpiAlertsService } from "./kpi-alerts.service";
 import { AuditActivitiesAiService } from "../audit-activities/audit-activities-ai.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { RolesGuard } from "../auth/guards/roles.guard";
+import { Roles } from "../auth/decorators/roles.decorator";
 
 interface AuthRequest extends Request {
   user: { id: string; email: string; role: string; name: string };
 }
 
 @Controller("granjas")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class GranjasController {
   constructor(
     private svc: GranjasService,
@@ -110,17 +112,20 @@ export class GranjasController {
   findOne(@Param("id") id: string) { return this.svc.findGranja(id); }
 
   @Post()
+  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
   create(@Body() dto: CreateGranjaDto, @Req() req: AuthRequest) {
     return this.svc.createGranja(dto, req.user.id);
   }
 
   @Patch(":id")
+  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
   update(@Param("id") id: string, @Body() dto: Partial<CreateGranjaDto>, @Req() req: AuthRequest) {
     return this.svc.updateGranja(id, dto, req.user.id);
   }
 
   @Delete(":id")
   @HttpCode(HttpStatus.OK)
+  @Roles("ADMIN", "SUPERVISOR")
   remove(@Param("id") id: string, @Req() req: AuthRequest) {
     return this.svc.removeGranja(id, req.user.id);
   }
@@ -137,11 +142,13 @@ export class GranjasController {
   }
 
   @Post("hallazgos")
+  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
   createHallazgo(@Body() dto: CreateHallazgoDto, @Req() req: AuthRequest) {
     return this.svc.createHallazgo(dto, req.user.id);
   }
 
   @Patch("hallazgos/:id")
+  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
   updateHallazgo(
     @Param("id") id: string,
     @Body() dto: Partial<CreateHallazgoDto>,
@@ -152,6 +159,7 @@ export class GranjasController {
 
   @Delete("hallazgos/:id")
   @HttpCode(HttpStatus.OK)
+  @Roles("ADMIN", "SUPERVISOR")
   removeHallazgo(@Param("id") id: string, @Req() req: AuthRequest) {
     return this.svc.removeHallazgo(id, req.user.id);
   }
@@ -163,17 +171,20 @@ export class GranjasController {
   }
 
   @Post("kpis")
+  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
   createKPI(@Body() dto: CreateKPIDto, @Req() req: AuthRequest) {
     return this.svc.createKPI(dto, req.user.id);
   }
 
   @Patch("kpis/:id")
+  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
   updateKPI(@Param("id") id: string, @Body() dto: Partial<CreateKPIDto>, @Req() req: AuthRequest) {
     return this.svc.updateKPI(id, dto, req.user.id);
   }
 
   @Delete("kpis/:id")
   @HttpCode(HttpStatus.OK)
+  @Roles("ADMIN", "SUPERVISOR")
   removeKPI(@Param("id") id: string, @Req() req: AuthRequest) {
     return this.svc.removeKPI(id, req.user.id);
   }
@@ -185,17 +196,20 @@ export class GranjasController {
   }
 
   @Post("auditorias")
+  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
   createAuditoria(@Body() dto: CreateAuditoriaDto, @Req() req: AuthRequest) {
     return this.svc.createAuditoria(dto, req.user.id);
   }
 
   @Patch("auditorias/:id")
+  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
   updateAuditoria(@Param("id") id: string, @Body() dto: Partial<CreateAuditoriaDto>, @Req() req: AuthRequest) {
     return this.svc.updateAuditoria(id, dto, req.user.id);
   }
 
   @Delete("auditorias/:id")
   @HttpCode(HttpStatus.OK)
+  @Roles("ADMIN", "SUPERVISOR")
   removeAuditoria(@Param("id") id: string, @Req() req: AuthRequest) {
     return this.svc.removeAuditoria(id, req.user.id);
   }
@@ -207,6 +221,7 @@ export class GranjasController {
   }
 
   @Post("auditorias/:id/checklist")
+  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
   saveChecklist(
     @Param("id") id: string,
     @Body() body: { respuestas: Array<{ preguntaId: string; respuesta: string; observacion?: string }> },
@@ -215,6 +230,7 @@ export class GranjasController {
   }
 
   @Post("auditorias/:id/checklist/generate-hallazgos")
+  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
   generateHallazgos(
     @Param("id") id: string,
     @Body() body: {

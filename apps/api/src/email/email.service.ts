@@ -1,15 +1,18 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// EMAIL SERVICE · abstracción SMTP (Gmail Workspace · genérico SMTP · no-op)
+// EMAIL SERVICE · SMTP nodemailer + Brevo HTTP API + Resend HTTP API
 // ═══════════════════════════════════════════════════════════════════════════════
-// Vars de entorno requeridas para envío real:
-//   SMTP_HOST       (ej. smtp.gmail.com)
-//   SMTP_PORT       (ej. 587)
-//   SMTP_USER       (cuenta corporativa)
-//   SMTP_PASS       (App Password en Gmail Workspace)
-//   SMTP_FROM       (display name + email, ej. "Savicol Audit <noreply@savicol.com>")
-//   APP_BASE_URL    (para construir links absolutos, ej. https://app.savicol.com)
+// Vars requeridas para Brevo API (modo recomendado en Railway):
+//   BREVO_API_KEY   → xsmtpsib-... (Settings > API Keys en app.brevo.com)
+//   SMTP_FROM       → "Auditoría Savicol <auditoriasavicol@gmail.com>"
+//   APP_BASE_URL    → https://savicol-audit-platform-web.vercel.app
 //
-// Si SMTP_HOST está vacío → modo no-op (loguea pero no envía)
+// Vars para Resend API (alternativa):
+//   RESEND_API_KEY  → re_...
+//
+// Vars para SMTP clásico (fallback):
+//   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS
+//
+// Prioridad: BREVO_API_KEY > RESEND_API_KEY > SMTP_HOST > no-op
 // ═══════════════════════════════════════════════════════════════════════════════
 import { Injectable, Logger } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
@@ -21,80 +24,170 @@ export interface EmailEnvelope {
   text?:    string;
   replyTo?: string;
   cc?:      string[];
-  bcc?:     string[];
+  bcc?:     string[]
 }
 
 export interface EmailDispatchResult {
   ok: boolean;
   messageId?: string;
   error?: string;
-  mode: "smtp" | "noop";
+  mode: "brevo" | "resend" | "smtp" | "noop";
 }
+
+type EmailMode = "brevo" | "resend" | "smtp" | "noop";
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private transporter: nodemailer.Transporter | null = null;
   private from: string;
-  private noopMode: boolean;
+  private mode: EmailMode;
+  private brevoKey: string | null = null;
+  private resendKey: string | null = null;
 
   constructor() {
-    const host = process.env.SMTP_HOST;
-    const port = Number(process.env.SMTP_PORT ?? 587);
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    this.from  = process.env.SMTP_FROM ?? "Savicol Audit <noreply@savicol.com>";
+    this.from = process.env.SMTP_FROM ?? "Savicol Audit <noreply@savicol.com>";
 
-    this.noopMode = !host || !user || !pass;
-    if (this.noopMode || !host || !user || !pass) {
-      this.logger.warn(
-        "[EmailService] Modo NO-OP · SMTP_HOST/USER/PASS no configurados. " +
-        "Los correos se loguearán pero NO se enviarán. " +
-        "Configura SMTP_* en Railway → Variables para activar envío real. " +
-        `Estado actual: host=${host ? "✓" : "✗"} user=${user ? "✓" : "✗"} pass=${pass ? "✓" : "✗"}`,
-      );
+    const brevoKey  = process.env.BREVO_API_KEY?.trim();
+    const resendKey = process.env.RESEND_API_KEY?.trim();
+    const smtpHost  = process.env.SMTP_HOST?.trim();
+    const smtpUser  = process.env.SMTP_USER?.trim();
+    const smtpPass  = process.env.SMTP_PASS?.trim();
+
+    // ── Modo 1: Brevo HTTP API (recomendado en Railway) ──────────────────
+    if (brevoKey) {
+      this.mode     = "brevo";
+      this.brevoKey = brevoKey;
+      this.logger.log(`[EmailService] Modo BREVO API · from=${this.from}`);
       return;
     }
 
-    // Limpiar espacios de App Password Gmail (la web los pone visualmente pero el server no los acepta)
-    const cleanPass = pass.replace(/\s+/g, "");
+    // ── Modo 2: Resend HTTP API ───────────────────────────────────────────
+    if (resendKey) {
+      this.mode      = "resend";
+      this.resendKey = resendKey;
+      this.logger.log(`[EmailService] Modo RESEND API · from=${this.from}`);
+      return;
+    }
 
-    this.transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,                // 465 = TLS implícito, 587 = STARTTLS
-      requireTLS: port === 587,            // fuerza STARTTLS en 587
-      auth: { user, pass: cleanPass },
-      tls: {
-        // Permite TLS aunque el certificado no esté en cadena (debug Gmail Workspace)
-        rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false",
-      },
-      // Logger útil para debug en Railway (NODE_ENV=development)
-      logger: process.env.SMTP_DEBUG === "true",
-      debug:  process.env.SMTP_DEBUG === "true",
-    });
+    // ── Modo 3: SMTP nodemailer (bloqueado en Railway Starter) ────────────
+    if (smtpHost && smtpUser && smtpPass) {
+      this.mode = "smtp";
+      const port     = Number(process.env.SMTP_PORT ?? 587);
+      const cleanPw  = smtpPass.replace(/\s+/g, "");
+      this.transporter = nodemailer.createTransport({
+        host: smtpHost, port,
+        secure: port === 465,
+        requireTLS: port === 587,
+        auth: { user: smtpUser, pass: cleanPw },
+        tls: { rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false" },
+        logger: process.env.SMTP_DEBUG === "true",
+        debug:  process.env.SMTP_DEBUG === "true",
+      });
+      this.logger.log(`[EmailService] Modo SMTP · ${smtpHost}:${port} · from=${this.from}`);
+      this.transporter.verify((err) => {
+        if (err) this.logger.error(`[EmailService] ⚠️ verify() falló: ${err.message}. Los envíos pueden fallar. Verifica credenciales SMTP.`);
+        else      this.logger.log(`[EmailService] ✅ Conexión SMTP verificada · listo para enviar`);
+      });
+      return;
+    }
 
-    this.logger.log(`[EmailService] SMTP listo · ${host}:${port} · from=${this.from}`);
-
-    // Test de conectividad async · no bloquea startup pero loguea el resultado
-    this.transporter.verify((err) => {
-      if (err) {
-        this.logger.error(`[EmailService] ⚠️ verify() falló: ${err.message}. Los envíos pueden fallar. Verifica credenciales SMTP.`);
-      } else {
-        this.logger.log(`[EmailService] ✅ Conexión SMTP verificada · listo para enviar`);
-      }
-    });
+    // ── Modo 4: No-op ─────────────────────────────────────────────────────
+    this.mode = "noop";
+    this.logger.warn(
+      "[EmailService] Modo NO-OP · configura BREVO_API_KEY, RESEND_API_KEY o SMTP_* en Railway → Variables. " +
+      `Estado: brevo=${brevoKey ? "✓" : "✗"} resend=${resendKey ? "✓" : "✗"} smtp=${smtpHost ? "✓" : "✗"}`,
+    );
   }
 
-  /**
-   * Envía un correo. En modo no-op solo loguea el envelope.
-   * Nunca lanza · siempre retorna ok=true|false para que el caller decida.
-   */
+  // ──────────────────────────────────────────────────────────────────────────
+  // SEND
+  // ──────────────────────────────────────────────────────────────────────────
+
   async send(envelope: EmailEnvelope): Promise<EmailDispatchResult> {
-    if (this.noopMode || !this.transporter) {
-      this.logger.log(`[EmailService NOOP] → ${envelope.to} · ${envelope.subject}`);
-      return { ok: true, mode: "noop", messageId: `noop-${Date.now()}` };
+    switch (this.mode) {
+      case "brevo":  return this.sendBrevo(envelope);
+      case "resend": return this.sendResend(envelope);
+      case "smtp":   return this.sendSmtp(envelope);
+      default:
+        this.logger.log(`[EmailService NOOP] → ${envelope.to} · ${envelope.subject}`);
+        return { ok: true, mode: "noop", messageId: `noop-${Date.now()}` };
     }
+  }
+
+  // ── Brevo HTTP API ────────────────────────────────────────────────────────
+  private async sendBrevo(envelope: EmailEnvelope): Promise<EmailDispatchResult> {
+    const toList = Array.isArray(envelope.to) ? envelope.to : [envelope.to];
+    const [fromName, fromEmail] = this.parseFrom(this.from);
+
+    const body = JSON.stringify({
+      sender:      { name: fromName, email: fromEmail },
+      to:          toList.map(e => ({ email: e })),
+      cc:          envelope.cc?.map(e => ({ email: e })),
+      bcc:         envelope.bcc?.map(e => ({ email: e })),
+      replyTo:     envelope.replyTo ? { email: envelope.replyTo } : undefined,
+      subject:     envelope.subject,
+      htmlContent: envelope.html,
+      textContent: envelope.text ?? this.stripHtml(envelope.html),
+    });
+
+    try {
+      const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "accept":       "application/json",
+          "api-key":      this.brevoKey!,
+          "content-type": "application/json",
+        },
+        body,
+      });
+      const data: any = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? `Brevo ${res.status}`);
+      this.logger.log(`[EmailService BREVO] ✓ ${envelope.to} · ${envelope.subject} · ${data.messageId}`);
+      return { ok: true, mode: "brevo", messageId: data.messageId };
+    } catch (e: any) {
+      this.logger.error(`[EmailService BREVO] ✗ ${envelope.to}: ${e?.message}`);
+      return { ok: false, mode: "brevo", error: e?.message ?? "Brevo error" };
+    }
+  }
+
+  // ── Resend HTTP API ───────────────────────────────────────────────────────
+  private async sendResend(envelope: EmailEnvelope): Promise<EmailDispatchResult> {
+    const toList = Array.isArray(envelope.to) ? envelope.to : [envelope.to];
+
+    const body = JSON.stringify({
+      from:     this.from,
+      to:       toList,
+      cc:       envelope.cc,
+      bcc:      envelope.bcc,
+      reply_to: envelope.replyTo,
+      subject:  envelope.subject,
+      html:     envelope.html,
+      text:     envelope.text ?? this.stripHtml(envelope.html),
+    });
+
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${this.resendKey}`,
+          "Content-Type":  "application/json",
+        },
+        body,
+      });
+      const data: any = await res.json();
+      if (!res.ok) throw new Error(data?.message ?? `Resend ${res.status}`);
+      this.logger.log(`[EmailService RESEND] ✓ ${envelope.to} · ${envelope.subject} · ${data.id}`);
+      return { ok: true, mode: "resend", messageId: data.id };
+    } catch (e: any) {
+      this.logger.error(`[EmailService RESEND] ✗ ${envelope.to}: ${e?.message}`);
+      return { ok: false, mode: "resend", error: e?.message ?? "Resend error" };
+    }
+  }
+
+  // ── SMTP nodemailer ───────────────────────────────────────────────────────
+  private async sendSmtp(envelope: EmailEnvelope): Promise<EmailDispatchResult> {
+    if (!this.transporter) return { ok: false, mode: "smtp", error: "transporter not initialized" };
     try {
       const info = await this.transporter.sendMail({
         from:    this.from,
@@ -114,15 +207,36 @@ export class EmailService {
     }
   }
 
-  // ────────────────────────────────────────────────────────────────────────
-  // TEMPLATES
-  // ────────────────────────────────────────────────────────────────────────
+  // ──────────────────────────────────────────────────────────────────────────
+  // HELPERS
+  // ──────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Envuelve contenido HTML en un layout corporativo (header amarillo + footer).
-   */
+  /** Parsea "Nombre Apellido <email@dom.com>" → ["Nombre Apellido", "email@dom.com"] */
+  private parseFrom(from: string): [string, string] {
+    const m = from.match(/^(.+)<([^>]+)>\s*$/);
+    if (m) return [m[1].trim(), m[2].trim()];
+    return ["Savicol Audit", from.trim()];
+  }
+
+  private escape(s: string): string {
+    return String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]!));
+  }
+
+  private stripHtml(html: string): string {
+    return html.replace(/<style[\s\S]*?<\/style>/gi, "")
+               .replace(/<[^>]+>/g, " ")
+               .replace(/\s+/g, " ")
+               .trim();
+  }
+
+  get isConfigured(): boolean { return this.mode !== "noop"; }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TEMPLATES (sin cambios — preservados intactos)
+  // ──────────────────────────────────────────────────────────────────────────
+
   layout(opts: { title: string; previewText: string; body: string; ctaText?: string; ctaUrl?: string }): string {
-    const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
+    const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
     return `<!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${this.escape(opts.title)}</title></head>
@@ -153,7 +267,6 @@ export class EmailService {
 </body></html>`;
   }
 
-  /** Helper: invitación nueva con link de activación */
   templateInvitation(opts: { name: string; activationUrl: string; expiresAt: Date; invitedBy: string; role: string }): string {
     const body = `
       <p>Hola <strong>${this.escape(opts.name)}</strong>,</p>
@@ -162,14 +275,9 @@ export class EmailService {
       <p style="color:#94A3B8;font-size:12px;margin-top:24px">Si el botón no funciona, copia este enlace en tu navegador:<br>
         <span style="color:#06B6D4;word-break:break-all">${opts.activationUrl}</span>
       </p>`;
-    return this.layout({
-      title: "Activa tu cuenta Savicol Audit",
-      previewText: `${opts.invitedBy} te invita a Savicol Audit`,
-      body, ctaText: "Activar mi cuenta", ctaUrl: opts.activationUrl,
-    });
+    return this.layout({ title: "Activa tu cuenta Savicol Audit", previewText: `${opts.invitedBy} te invita a Savicol Audit`, body, ctaText: "Activar mi cuenta", ctaUrl: opts.activationUrl });
   }
 
-  /** Helper: contraseña temporal asignada por admin */
   templateTempPassword(opts: { name: string; tempPassword: string; loginUrl: string }): string {
     const body = `
       <p>Hola <strong>${this.escape(opts.name)}</strong>,</p>
@@ -179,27 +287,17 @@ export class EmailService {
       </div>
       <p><strong style="color:#F59E0B">Por seguridad</strong>, ingresa con esta contraseña y cámbiala inmediatamente desde Configuración → Seguridad.</p>
       <p style="color:#94A3B8;font-size:12px">Esta contraseña es de un solo uso. No la compartas con nadie.</p>`;
-    return this.layout({
-      title: "Tu contraseña temporal",
-      previewText: "Un administrador restableció tu contraseña",
-      body, ctaText: "Ir a la plataforma", ctaUrl: opts.loginUrl,
-    });
+    return this.layout({ title: "Tu contraseña temporal", previewText: "Un administrador restableció tu contraseña", body, ctaText: "Ir a la plataforma", ctaUrl: opts.loginUrl });
   }
 
-  /** Helper: link de recuperación de contraseña (auto-servicio) */
   templatePasswordReset(opts: { name: string; resetUrl: string; expiresAt: Date }): string {
     const body = `
       <p>Hola <strong>${this.escape(opts.name)}</strong>,</p>
       <p>Recibimos una solicitud para restablecer tu contraseña. Si no fuiste tú, ignora este correo.</p>
       <p>Para crear una nueva contraseña, haz click en el botón. El enlace expira el <strong>${opts.expiresAt.toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}</strong>.</p>`;
-    return this.layout({
-      title: "Restablecer contraseña",
-      previewText: "Solicitud de restablecimiento de contraseña",
-      body, ctaText: "Crear nueva contraseña", ctaUrl: opts.resetUrl,
-    });
+    return this.layout({ title: "Restablecer contraseña", previewText: "Solicitud de restablecimiento de contraseña", body, ctaText: "Crear nueva contraseña", ctaUrl: opts.resetUrl });
   }
 
-  /** Helper: cambio de rol */
   templateRoleChanged(opts: { name: string; oldRole: string; newRole: string; changedBy: string }): string {
     const body = `
       <p>Hola <strong>${this.escape(opts.name)}</strong>,</p>
@@ -210,14 +308,9 @@ export class EmailService {
         <tr><td style="padding:6px 12px;color:#94A3B8">Realizado por:</td><td style="padding:6px 12px;color:#FFFFFF">${this.escape(opts.changedBy)}</td></tr>
       </table>
       <p style="color:#94A3B8;font-size:12px">Los cambios de permisos tomarán efecto en tu próximo inicio de sesión.</p>`;
-    return this.layout({
-      title: "Cambio de rol en tu cuenta",
-      previewText: `Tu rol cambió a ${opts.newRole}`,
-      body,
-    });
+    return this.layout({ title: "Cambio de rol en tu cuenta", previewText: `Tu rol cambió a ${opts.newRole}`, body });
   }
 
-  /** Helper: hallazgo asignado a un responsable */
   templateHallazgoAssigned(opts: { name: string; titulo: string; criticidad: string; recurso: string; link?: string }): string {
     const colorCrit = opts.criticidad.toUpperCase().includes("CRIT") ? "#EF4444"
       : opts.criticidad.toUpperCase().includes("ALT") ? "#F59E0B" : "#3B82F6";
@@ -229,25 +322,6 @@ export class EmailService {
         <p style="margin:0;color:#FFFFFF;font-size:15px;font-weight:600">${this.escape(opts.titulo)}</p>
         <p style="margin:6px 0 0;color:#94A3B8;font-size:12px">Recurso: ${this.escape(opts.recurso)}</p>
       </div>`;
-    return this.layout({
-      title: "Nuevo hallazgo asignado",
-      previewText: opts.titulo,
-      body, ctaText: opts.link ? "Ver hallazgo" : undefined, ctaUrl: opts.link,
-    });
+    return this.layout({ title: "Nuevo hallazgo asignado", previewText: opts.titulo, body, ctaText: opts.link ? "Ver hallazgo" : undefined, ctaUrl: opts.link });
   }
-
-  // ────────────────────────────────────────────────────────────────────────
-  // UTILS
-  // ────────────────────────────────────────────────────────────────────────
-  private escape(s: string): string {
-    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]!));
-  }
-  private stripHtml(html: string): string {
-    return html.replace(/<style[\s\S]*?<\/style>/gi, "")
-               .replace(/<[^>]+>/g, " ")
-               .replace(/\s+/g, " ")
-               .trim();
-  }
-
-  get isConfigured(): boolean { return !this.noopMode; }
 }

@@ -40,4 +40,4 @@ WORKDIR /app/apps/api
 EXPOSE 4000
 
 # Al arrancar: sync schema → seed (ADMIN + datos demo) → arrancar API
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss --skip-generate && npx prisma db seed && node dist/main"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate && npx prisma db seed && node dist/main"]

@@ -132,7 +132,7 @@ export class UsersService {
 
     // Correo de bienvenida con la contraseña temporal (no-op si SMTP no config)
     if (!dto.password) {
-      const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
+      const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
       await this.email.send({
         to: user.email,
         subject: "Tu cuenta Savicol Audit · contraseña temporal",
@@ -270,7 +270,7 @@ export class UsersService {
     ]);
 
     // Notificación in-app + email con la contraseña temporal
-    const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
+    const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
     await this.notif.create({
       userId: id,
       kind: "PASSWORD_RESET",
@@ -343,9 +343,29 @@ export class UsersService {
       metadata: { targetEmail: targetUser.email, targetRole: targetUser.role },
     });
 
-    // Cascade implícito: User → sessions, auditChanges, accessLogs (definido en schema)
+    // Revocar invitaciones pendientes asociadas al email del usuario eliminado
+    await this.prisma.userInvitation.updateMany({
+      where: { email: targetUser.email, status: "PENDING" },
+      data:  { status: "REVOKED" },
+    });
+
+    // Desvincular y limpiar referencias FK antes de borrar el usuario.
+    // AccessLog y AuditActivityLog usan SET NULL → se conserva el historial de auditoría
+    // con userId = null (el registro queda pero sin referencia al usuario eliminado).
+    await this.prisma.$transaction([
+      // SET NULL explícito (por si prisma db push aún no aplicó el schema)
+      this.prisma.accessLog.updateMany({ where: { userId: id }, data: { userId: null } }),
+      this.prisma.auditActivityLog.updateMany({ where: { userId: id }, data: { userId: null } }),
+      // AuditActivity creadas por este usuario → desvincular
+      this.prisma.auditActivity.updateMany({ where: { createdById: id }, data: { createdById: null } }),
+      // Borrar datos de sesión/notificaciones/tokens (no tienen valor histórico)
+      this.prisma.session.deleteMany({ where: { userId: id } }),
+      this.prisma.notification.deleteMany({ where: { userId: id } }),
+      this.prisma.passwordResetToken.deleteMany({ where: { userId: id } }),
+    ]);
+
     await this.prisma.user.delete({ where: { id } });
-    return { message: "Usuario eliminado correctamente" };
+    return { ok: true, message: "Usuario eliminado correctamente", email: targetUser.email };
   }
 
   // ────────────────────────────────────────────────────────

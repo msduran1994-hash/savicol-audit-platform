@@ -191,7 +191,7 @@ export class KpiAlertsService {
       userByKey.set(u.name.toLowerCase(), u);
     }
 
-    const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
+    const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
     const result: ReminderResult = {
       scannedAt: scan.scannedAt,
       remindersSent: 0,

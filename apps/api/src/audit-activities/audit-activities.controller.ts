@@ -12,7 +12,7 @@ interface AuthRequest extends Request {
   user: { id: string; email: string; role: string; name: string };
 }
 
-@Controller("audit-activities")
+@Controller(["audit-activities", "cronograma"])
 @UseGuards(JwtAuthGuard)
 export class AuditActivitiesController {
   constructor(

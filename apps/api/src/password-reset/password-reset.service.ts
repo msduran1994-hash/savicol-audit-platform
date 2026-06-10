@@ -64,7 +64,7 @@ export class PasswordResetService {
       },
     });
 
-    const base = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
+    const base = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
     const resetUrl = `${base}/restablecer?token=${tokenRaw}`;
     const html = this.email.templatePasswordReset({ name: user.name, resetUrl, expiresAt });
     await this.email.send({

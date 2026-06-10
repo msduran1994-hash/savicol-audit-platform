@@ -73,7 +73,7 @@ export class InvitationsService {
     });
 
     // Link de activación · APP_BASE_URL apunta al frontend
-    const base = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
+    const base = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
     const activationUrl = `${base}/activar?token=${tokenRaw}`;
 
     // Enviar correo (no-op si SMTP no configurado · queda registrado emailSent=false)
@@ -136,7 +136,7 @@ export class InvitationsService {
     if (!inv) throw new NotFoundException("Invitación no encontrada");
     if (inv.status !== "PENDING") throw new BadRequestException(`Solo se pueden reenviar invitaciones PENDING (estado actual: ${inv.status})`);
 
-    const base = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
+    const base = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
     const activationUrl = `${base}/activar?token=${inv.token}`;
     const html = this.email.templateInvitation({
       name: inv.name, activationUrl, expiresAt: inv.expiresAt,

@@ -8,9 +8,11 @@ import {
 import { CedisExecutiveService, CedisExecutiveFilters } from "./cedis-executive.service";
 import { AuditActivitiesAiService } from "../audit-activities/audit-activities-ai.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { RolesGuard } from "../auth/guards/roles.guard";
+import { Roles } from "../auth/decorators/roles.decorator";
 
 @Controller("cedis")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class CedisController {
   constructor(
     private svc: CedisService,
@@ -73,9 +75,9 @@ export class CedisController {
 
   @Get(":id") findOne(@Param("id") id: string) { return this.svc.findCedi(id); }
 
-  @Post()                  create(@Body() dto: CreateCediDto)                        { return this.svc.createCedi(dto); }
-  @Patch(":id")            update(@Param("id") id: string, @Body() dto: Partial<CreateCediDto>) { return this.svc.updateCedi(id, dto); }
-  @Delete(":id") @HttpCode(HttpStatus.OK) remove(@Param("id") id: string)            { return this.svc.removeCedi(id); }
+  @Post()    @Roles("ADMIN", "AUDITOR", "SUPERVISOR")                create(@Body() dto: CreateCediDto)                        { return this.svc.createCedi(dto); }
+  @Patch(":id") @Roles("ADMIN", "AUDITOR", "SUPERVISOR")         update(@Param("id") id: string, @Body() dto: Partial<CreateCediDto>) { return this.svc.updateCedi(id, dto); }
+  @Delete(":id") @HttpCode(HttpStatus.OK) @Roles("ADMIN", "SUPERVISOR") remove(@Param("id") id: string) { return this.svc.removeCedi(id); }
 
   // ── AUDITORÍAS ──
   @Get("auditorias/list")
@@ -87,9 +89,9 @@ export class CedisController {
     return this.svc.findAllAuditorias({ cediId, estado, mes: mes ? +mes : undefined });
   }
 
-  @Post("auditorias")  createAuditoria(@Body() dto: CreateAuditoriaCediDto) { return this.svc.createAuditoria(dto); }
-  @Patch("auditorias/:id") updateAuditoria(@Param("id") id: string, @Body() dto: Partial<CreateAuditoriaCediDto>) { return this.svc.updateAuditoria(id, dto); }
-  @Delete("auditorias/:id") @HttpCode(HttpStatus.OK) removeAuditoria(@Param("id") id: string) { return this.svc.removeAuditoria(id); }
+  @Post("auditorias")    @Roles("ADMIN", "AUDITOR", "SUPERVISOR") createAuditoria(@Body() dto: CreateAuditoriaCediDto) { return this.svc.createAuditoria(dto); }
+  @Patch("auditorias/:id") @Roles("ADMIN", "AUDITOR", "SUPERVISOR") updateAuditoria(@Param("id") id: string, @Body() dto: Partial<CreateAuditoriaCediDto>) { return this.svc.updateAuditoria(id, dto); }
+  @Delete("auditorias/:id") @HttpCode(HttpStatus.OK) @Roles("ADMIN", "SUPERVISOR") removeAuditoria(@Param("id") id: string) { return this.svc.removeAuditoria(id); }
 
   // ── HALLAZGOS ──
   @Get("hallazgos/list")
@@ -102,15 +104,17 @@ export class CedisController {
     return this.svc.findAllHallazgos({ cediId, categoria, estado, criticidad });
   }
 
-  @Post("hallazgos") createHallazgo(@Body() dto: CreateHallazgoCediDto) { return this.svc.createHallazgo(dto); }
+  @Post("hallazgos") @Roles("ADMIN", "AUDITOR", "SUPERVISOR") createHallazgo(@Body() dto: CreateHallazgoCediDto) { return this.svc.createHallazgo(dto); }
 
   @Patch("hallazgos/:id")
+  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
   updateHallazgo(@Param("id") id: string, @Body() dto: Partial<CreateHallazgoCediDto>) {
     return this.svc.updateHallazgo(id, dto);
   }
 
   @Delete("hallazgos/:id")
   @HttpCode(HttpStatus.OK)
+  @Roles("ADMIN", "SUPERVISOR")
   removeHallazgo(@Param("id") id: string) {
     return this.svc.removeHallazgo(id);
   }

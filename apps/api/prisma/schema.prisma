@@ -56,6 +56,8 @@ model Session {
   createdAt    DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // ─── AUDIT ACTIVITIES (Plataforma Cronograma) ────────────────────────────────
@@ -77,7 +79,7 @@ model AuditActivity {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  createdBy User?              @relation("CreatedByUser", fields: [createdById], references: [id])
+  createdBy User?              @relation("CreatedByUser", fields: [createdById], references: [id], onDelete: SetNull)
   logs      AuditActivityLog[]
 
   @@index([auditorId])
@@ -88,14 +90,14 @@ model AuditActivity {
 model AuditActivityLog {
   id         String   @id @default(cuid())
   activityId String
-  userId     String
+  userId     String?
   action     String        // CREATED | UPDATED | DELETED
   oldValues  String?       // JSON
   newValues  String?       // JSON
   changedAt  DateTime @default(now())
 
   activity AuditActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  user     User          @relation(fields: [userId], references: [id])
+  user     User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([activityId])
 }
@@ -103,7 +105,7 @@ model AuditActivityLog {
 // ─── ACCESS LOG ───────────────────────────────────────────────────────────────
 model AccessLog {
   id        String   @id @default(cuid())
-  userId    String
+  userId    String?
   action    String
   resource  String?
   ipAddress String?
@@ -111,7 +113,7 @@ model AccessLog {
   metadata  String?      // JSON
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([createdAt])
@@ -150,7 +152,7 @@ model Granja {
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 
-  veterinario     TecnicoVeterinario?  @relation(fields: [tecnicoVeterinarioId], references: [id])
+  veterinario     TecnicoVeterinario?  @relation(fields: [tecnicoVeterinarioId], references: [id], onDelete: SetNull)
   auditorias      AuditoriaGranja[]
   hallazgos       Hallazgo[]
   kpis            KPI[]
@@ -237,7 +239,7 @@ model Hallazgo {
   updatedAt         DateTime @updatedAt
 
   granja     Granja              @relation(fields: [granjaId], references: [id], onDelete: Cascade)
-  auditoria  AuditoriaGranja?    @relation(fields: [auditoriaId], references: [id])
+  auditoria  AuditoriaGranja?    @relation(fields: [auditoriaId], references: [id], onDelete: SetNull)
   evidencias EvidenciaHallazgo[]
   kpis       KPI[]
 
@@ -279,7 +281,7 @@ model KPI {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  hallazgo Hallazgo? @relation(fields: [hallazgoId], references: [id])
+  hallazgo Hallazgo? @relation(fields: [hallazgoId], references: [id], onDelete: SetNull)
   granja   Granja    @relation(fields: [granjaId], references: [id], onDelete: Cascade)
 
   @@index([granjaId])
@@ -452,11 +454,11 @@ model Acompanamiento {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  cliente    Cliente              @relation(fields: [clienteId],   references: [id])
-  ruta       Ruta                 @relation(fields: [rutaId],      references: [id])
-  vehiculo   Vehiculo             @relation(fields: [vehiculoId],  references: [id])
-  conductor  Conductor            @relation(fields: [conductorId], references: [id])
-  auxiliar   Auxiliar?            @relation(fields: [auxiliarId],  references: [id])
+  cliente    Cliente              @relation(fields: [clienteId],   references: [id], onDelete: Restrict)
+  ruta       Ruta                 @relation(fields: [rutaId],      references: [id], onDelete: Restrict)
+  vehiculo   Vehiculo             @relation(fields: [vehiculoId],  references: [id], onDelete: Restrict)
+  conductor  Conductor            @relation(fields: [conductorId], references: [id], onDelete: Restrict)
+  auxiliar   Auxiliar?            @relation(fields: [auxiliarId],  references: [id], onDelete: SetNull)
   evidencias EvidenciaRuta[]
   acciones   AccionCumplimiento[]
 
@@ -574,7 +576,7 @@ model HallazgoCedi {
   updatedAt         DateTime  @updatedAt
 
   cedi      Cedi           @relation(fields: [cediId], references: [id], onDelete: Cascade)
-  auditoria AuditoriaCedi? @relation(fields: [auditoriaId], references: [id])
+  auditoria AuditoriaCedi? @relation(fields: [auditoriaId], references: [id], onDelete: SetNull)
 
   @@index([cediId])
   @@index([categoria])
@@ -599,7 +601,7 @@ model EvidenciaCedi {
   isDemo        Boolean  @default(false)
 
   cedi      Cedi           @relation(fields: [cediId], references: [id], onDelete: Cascade)
-  auditoria AuditoriaCedi? @relation(fields: [auditoriaId], references: [id])
+  auditoria AuditoriaCedi? @relation(fields: [auditoriaId], references: [id], onDelete: SetNull)
 
   @@index([cediId])
   @@index([auditoriaId])

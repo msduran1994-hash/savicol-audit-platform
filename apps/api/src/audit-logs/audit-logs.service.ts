@@ -106,8 +106,10 @@ export class AuditLogsService {
       }),
     ]);
 
-    // Hidratar usuarios
-    const userIds = topUsersRaw.map(u => u.userId);
+    // Hidratar usuarios — userId puede ser null (usuarios eliminados · SET NULL)
+    const userIds = topUsersRaw
+      .map(u => u.userId)
+      .filter((id): id is string => id !== null);
     const users = await this.prisma.user.findMany({
       where: { id: { in: userIds } },
       select: { id: true, name: true, email: true, role: true },
@@ -119,7 +121,7 @@ export class AuditLogsService {
       byAction: byActionRaw.map(a => ({ action: a.action, count: (a._count as any)?.id ?? 0 })),
       topUsers: topUsersRaw.map(t => ({
         userId: t.userId, count: (t._count as any)?.id ?? 0,
-        user: usersMap[t.userId] ?? { id: t.userId, name: "(eliminado)", email: "", role: "" },
+        user: (t.userId && usersMap[t.userId]) || { id: t.userId ?? "", name: "(eliminado)", email: "", role: "" },
       })),
     };
   }

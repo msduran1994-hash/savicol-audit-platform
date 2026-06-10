@@ -1,0 +1,1390 @@
+diff --git a/apps/api/Dockerfile b/apps/api/Dockerfile
+index 93e15aa..ffe3731 100644
+--- a/apps/api/Dockerfile
++++ b/apps/api/Dockerfile
+@@ -40,4 +40,4 @@ WORKDIR /app/apps/api
+ EXPOSE 4000
+ 
+ # Al arrancar: sync schema → seed (ADMIN + datos demo) → arrancar API
+-CMD ["sh", "-c", "npx prisma db push --accept-data-loss --skip-generate && npx prisma db seed && node dist/main"]
++CMD ["sh", "-c", "npx prisma db push --skip-generate && npx prisma db seed && node dist/main"]
+diff --git a/apps/api/prisma/schema.prisma b/apps/api/prisma/schema.prisma
+index 2d9f0e7..d0300ae 100644
+--- a/apps/api/prisma/schema.prisma
++++ b/apps/api/prisma/schema.prisma
+@@ -56,6 +56,8 @@ model Session {
+   createdAt    DateTime @default(now())
+ 
+   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
++
++  @@index([userId])
+ }
+ 
+ // ─── AUDIT ACTIVITIES (Plataforma Cronograma) ────────────────────────────────
+@@ -77,7 +79,7 @@ model AuditActivity {
+   createdAt    DateTime @default(now())
+   updatedAt    DateTime @updatedAt
+ 
+-  createdBy User?              @relation("CreatedByUser", fields: [createdById], references: [id])
++  createdBy User?              @relation("CreatedByUser", fields: [createdById], references: [id], onDelete: SetNull)
+   logs      AuditActivityLog[]
+ 
+   @@index([auditorId])
+@@ -88,14 +90,14 @@ model AuditActivity {
+ model AuditActivityLog {
+   id         String   @id @default(cuid())
+   activityId String
+-  userId     String
++  userId     String?
+   action     String        // CREATED | UPDATED | DELETED
+   oldValues  String?       // JSON
+   newValues  String?       // JSON
+   changedAt  DateTime @default(now())
+ 
+   activity AuditActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+-  user     User          @relation(fields: [userId], references: [id])
++  user     User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+ 
+   @@index([activityId])
+ }
+@@ -103,7 +105,7 @@ model AuditActivityLog {
+ // ─── ACCESS LOG ───────────────────────────────────────────────────────────────
+ model AccessLog {
+   id        String   @id @default(cuid())
+-  userId    String
++  userId    String?
+   action    String
+   resource  String?
+   ipAddress String?
+@@ -111,7 +113,7 @@ model AccessLog {
+   metadata  String?      // JSON
+   createdAt DateTime @default(now())
+ 
+-  user User @relation(fields: [userId], references: [id])
++  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+ 
+   @@index([userId])
+   @@index([createdAt])
+@@ -150,7 +152,7 @@ model Granja {
+   createdAt                   DateTime @default(now())
+   updatedAt                   DateTime @updatedAt
+ 
+-  veterinario     TecnicoVeterinario?  @relation(fields: [tecnicoVeterinarioId], references: [id])
++  veterinario     TecnicoVeterinario?  @relation(fields: [tecnicoVeterinarioId], references: [id], onDelete: SetNull)
+   auditorias      AuditoriaGranja[]
+   hallazgos       Hallazgo[]
+   kpis            KPI[]
+@@ -237,7 +239,7 @@ model Hallazgo {
+   updatedAt         DateTime @updatedAt
+ 
+   granja     Granja              @relation(fields: [granjaId], references: [id], onDelete: Cascade)
+-  auditoria  AuditoriaGranja?    @relation(fields: [auditoriaId], references: [id])
++  auditoria  AuditoriaGranja?    @relation(fields: [auditoriaId], references: [id], onDelete: SetNull)
+   evidencias EvidenciaHallazgo[]
+   kpis       KPI[]
+ 
+@@ -279,7 +281,7 @@ model KPI {
+   createdAt             DateTime  @default(now())
+   updatedAt             DateTime  @updatedAt
+ 
+-  hallazgo Hallazgo? @relation(fields: [hallazgoId], references: [id])
++  hallazgo Hallazgo? @relation(fields: [hallazgoId], references: [id], onDelete: SetNull)
+   granja   Granja    @relation(fields: [granjaId], references: [id], onDelete: Cascade)
+ 
+   @@index([granjaId])
+@@ -452,11 +454,11 @@ model Acompanamiento {
+   createdAt           DateTime @default(now())
+   updatedAt           DateTime @updatedAt
+ 
+-  cliente    Cliente              @relation(fields: [clienteId],   references: [id])
+-  ruta       Ruta                 @relation(fields: [rutaId],      references: [id])
+-  vehiculo   Vehiculo             @relation(fields: [vehiculoId],  references: [id])
+-  conductor  Conductor            @relation(fields: [conductorId], references: [id])
+-  auxiliar   Auxiliar?            @relation(fields: [auxiliarId],  references: [id])
++  cliente    Cliente              @relation(fields: [clienteId],   references: [id], onDelete: Restrict)
++  ruta       Ruta                 @relation(fields: [rutaId],      references: [id], onDelete: Restrict)
++  vehiculo   Vehiculo             @relation(fields: [vehiculoId],  references: [id], onDelete: Restrict)
++  conductor  Conductor            @relation(fields: [conductorId], references: [id], onDelete: Restrict)
++  auxiliar   Auxiliar?            @relation(fields: [auxiliarId],  references: [id], onDelete: SetNull)
+   evidencias EvidenciaRuta[]
+   acciones   AccionCumplimiento[]
+ 
+@@ -574,7 +576,7 @@ model HallazgoCedi {
+   updatedAt         DateTime  @updatedAt
+ 
+   cedi      Cedi           @relation(fields: [cediId], references: [id], onDelete: Cascade)
+-  auditoria AuditoriaCedi? @relation(fields: [auditoriaId], references: [id])
++  auditoria AuditoriaCedi? @relation(fields: [auditoriaId], references: [id], onDelete: SetNull)
+ 
+   @@index([cediId])
+   @@index([categoria])
+@@ -599,7 +601,7 @@ model EvidenciaCedi {
+   isDemo        Boolean  @default(false)
+ 
+   cedi      Cedi           @relation(fields: [cediId], references: [id], onDelete: Cascade)
+-  auditoria AuditoriaCedi? @relation(fields: [auditoriaId], references: [id])
++  auditoria AuditoriaCedi? @relation(fields: [auditoriaId], references: [id], onDelete: SetNull)
+ 
+   @@index([cediId])
+   @@index([auditoriaId])
+diff --git a/apps/api/src/audit-activities/audit-activities.controller.ts b/apps/api/src/audit-activities/audit-activities.controller.ts
+index 0a71dd5..74f8b8b 100644
+--- a/apps/api/src/audit-activities/audit-activities.controller.ts
++++ b/apps/api/src/audit-activities/audit-activities.controller.ts
+@@ -12,7 +12,7 @@ interface AuthRequest extends Request {
+   user: { id: string; email: string; role: string; name: string };
+ }
+ 
+-@Controller("audit-activities")
++@Controller(["audit-activities", "cronograma"])
+ @UseGuards(JwtAuthGuard)
+ export class AuditActivitiesController {
+   constructor(
+diff --git a/apps/api/src/audit-logs/audit-logs.service.ts b/apps/api/src/audit-logs/audit-logs.service.ts
+index 3a8665f..ff6eddd 100644
+--- a/apps/api/src/audit-logs/audit-logs.service.ts
++++ b/apps/api/src/audit-logs/audit-logs.service.ts
+@@ -106,8 +106,10 @@ export class AuditLogsService {
+       }),
+     ]);
+ 
+-    // Hidratar usuarios
+-    const userIds = topUsersRaw.map(u => u.userId);
++    // Hidratar usuarios — userId puede ser null (usuarios eliminados · SET NULL)
++    const userIds = topUsersRaw
++      .map(u => u.userId)
++      .filter((id): id is string => id !== null);
+     const users = await this.prisma.user.findMany({
+       where: { id: { in: userIds } },
+       select: { id: true, name: true, email: true, role: true },
+@@ -119,7 +121,7 @@ export class AuditLogsService {
+       byAction: byActionRaw.map(a => ({ action: a.action, count: (a._count as any)?.id ?? 0 })),
+       topUsers: topUsersRaw.map(t => ({
+         userId: t.userId, count: (t._count as any)?.id ?? 0,
+-        user: usersMap[t.userId] ?? { id: t.userId, name: "(eliminado)", email: "", role: "" },
++        user: (t.userId && usersMap[t.userId]) || { id: t.userId ?? "", name: "(eliminado)", email: "", role: "" },
+       })),
+     };
+   }
+diff --git a/apps/api/src/cedis/cedis.controller.ts b/apps/api/src/cedis/cedis.controller.ts
+index c6b680c..e899488 100644
+--- a/apps/api/src/cedis/cedis.controller.ts
++++ b/apps/api/src/cedis/cedis.controller.ts
+@@ -8,9 +8,11 @@ import {
+ import { CedisExecutiveService, CedisExecutiveFilters } from "./cedis-executive.service";
+ import { AuditActivitiesAiService } from "../audit-activities/audit-activities-ai.service";
+ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
++import { RolesGuard } from "../auth/guards/roles.guard";
++import { Roles } from "../auth/decorators/roles.decorator";
+ 
+ @Controller("cedis")
+-@UseGuards(JwtAuthGuard)
++@UseGuards(JwtAuthGuard, RolesGuard)
+ export class CedisController {
+   constructor(
+     private svc: CedisService,
+@@ -73,9 +75,9 @@ export class CedisController {
+ 
+   @Get(":id") findOne(@Param("id") id: string) { return this.svc.findCedi(id); }
+ 
+-  @Post()                  create(@Body() dto: CreateCediDto)                        { return this.svc.createCedi(dto); }
+-  @Patch(":id")            update(@Param("id") id: string, @Body() dto: Partial<CreateCediDto>) { return this.svc.updateCedi(id, dto); }
+-  @Delete(":id") @HttpCode(HttpStatus.OK) remove(@Param("id") id: string)            { return this.svc.removeCedi(id); }
++  @Post()    @Roles("ADMIN", "AUDITOR", "SUPERVISOR")                create(@Body() dto: CreateCediDto)                        { return this.svc.createCedi(dto); }
++  @Patch(":id") @Roles("ADMIN", "AUDITOR", "SUPERVISOR")         update(@Param("id") id: string, @Body() dto: Partial<CreateCediDto>) { return this.svc.updateCedi(id, dto); }
++  @Delete(":id") @HttpCode(HttpStatus.OK) @Roles("ADMIN", "SUPERVISOR") remove(@Param("id") id: string) { return this.svc.removeCedi(id); }
+ 
+   // ── AUDITORÍAS ──
+   @Get("auditorias/list")
+@@ -87,9 +89,9 @@ export class CedisController {
+     return this.svc.findAllAuditorias({ cediId, estado, mes: mes ? +mes : undefined });
+   }
+ 
+-  @Post("auditorias")  createAuditoria(@Body() dto: CreateAuditoriaCediDto) { return this.svc.createAuditoria(dto); }
+-  @Patch("auditorias/:id") updateAuditoria(@Param("id") id: string, @Body() dto: Partial<CreateAuditoriaCediDto>) { return this.svc.updateAuditoria(id, dto); }
+-  @Delete("auditorias/:id") @HttpCode(HttpStatus.OK) removeAuditoria(@Param("id") id: string) { return this.svc.removeAuditoria(id); }
++  @Post("auditorias")    @Roles("ADMIN", "AUDITOR", "SUPERVISOR") createAuditoria(@Body() dto: CreateAuditoriaCediDto) { return this.svc.createAuditoria(dto); }
++  @Patch("auditorias/:id") @Roles("ADMIN", "AUDITOR", "SUPERVISOR") updateAuditoria(@Param("id") id: string, @Body() dto: Partial<CreateAuditoriaCediDto>) { return this.svc.updateAuditoria(id, dto); }
++  @Delete("auditorias/:id") @HttpCode(HttpStatus.OK) @Roles("ADMIN", "SUPERVISOR") removeAuditoria(@Param("id") id: string) { return this.svc.removeAuditoria(id); }
+ 
+   // ── HALLAZGOS ──
+   @Get("hallazgos/list")
+@@ -102,15 +104,17 @@ export class CedisController {
+     return this.svc.findAllHallazgos({ cediId, categoria, estado, criticidad });
+   }
+ 
+-  @Post("hallazgos") createHallazgo(@Body() dto: CreateHallazgoCediDto) { return this.svc.createHallazgo(dto); }
++  @Post("hallazgos") @Roles("ADMIN", "AUDITOR", "SUPERVISOR") createHallazgo(@Body() dto: CreateHallazgoCediDto) { return this.svc.createHallazgo(dto); }
+ 
+   @Patch("hallazgos/:id")
++  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
+   updateHallazgo(@Param("id") id: string, @Body() dto: Partial<CreateHallazgoCediDto>) {
+     return this.svc.updateHallazgo(id, dto);
+   }
+ 
+   @Delete("hallazgos/:id")
+   @HttpCode(HttpStatus.OK)
++  @Roles("ADMIN", "SUPERVISOR")
+   removeHallazgo(@Param("id") id: string) {
+     return this.svc.removeHallazgo(id);
+   }
+diff --git a/apps/api/src/email/email.controller.ts b/apps/api/src/email/email.controller.ts
+index 2fe903a..c260b37 100644
+--- a/apps/api/src/email/email.controller.ts
++++ b/apps/api/src/email/email.controller.ts
+@@ -23,26 +23,31 @@ export class EmailController {
+    */
+   @Get("status")
+   status() {
+-    const host = process.env.SMTP_HOST ?? null;
+-    const port = process.env.SMTP_PORT ?? "587";
+-    const user = process.env.SMTP_USER ?? null;
+-    const hasPass = !!process.env.SMTP_PASS;
+-    const from = process.env.SMTP_FROM ?? null;
+-    const baseUrl = process.env.APP_BASE_URL ?? null;
++    const hasBrevo  = !!process.env.BREVO_API_KEY?.trim();
++    const hasResend = !!process.env.RESEND_API_KEY?.trim();
++    const host      = process.env.SMTP_HOST ?? null;
++    const port      = process.env.SMTP_PORT ?? "587";
++    const smtpUser  = process.env.SMTP_USER ?? null;
++    const hasPass   = !!process.env.SMTP_PASS;
++    const from      = process.env.SMTP_FROM ?? null;
++    const baseUrl   = process.env.APP_BASE_URL ?? null;
++
++    const activeMode = hasBrevo ? "brevo" : hasResend ? "resend" : host ? "smtp" : "noop";
+ 
+     return {
+       configured: this.email.isConfigured,
+-      mode: this.email.isConfigured ? "smtp" : "noop",
++      mode: activeMode,
++      brevo: { keySet: hasBrevo },
++      resend: { keySet: hasResend },
+       smtp: {
+         host,
+         port,
+-        user: user ? user.replace(/(.{2}).*(@.*)/, "$1***$2") : null, // mask
++        user: smtpUser ? smtpUser.replace(/(.{2}).*(@.*)/, "$1***$2") : null,
+         passSet: hasPass,
+-        passLength: hasPass ? (process.env.SMTP_PASS?.length ?? 0) : 0,
+         from,
+       },
+       appBaseUrl: baseUrl,
+-      diagnostics: this.buildDiagnostics(host, user, hasPass, baseUrl),
++      diagnostics: this.buildDiagnostics(hasBrevo, hasResend, host, smtpUser, hasPass, baseUrl),
+     };
+   }
+ 
+@@ -69,7 +74,7 @@ export class EmailController {
+           <tr><td style="padding:4px 10px;color:#94A3B8">Enviado por:</td><td style="padding:4px 10px;color:#FFF">${req.user.name} (${req.user.email})</td></tr>
+           <tr><td style="padding:4px 10px;color:#94A3B8">Destinatario:</td><td style="padding:4px 10px;color:#FFF">${to}</td></tr>
+           <tr><td style="padding:4px 10px;color:#94A3B8">Timestamp:</td><td style="padding:4px 10px;color:#FFF">${new Date().toISOString()}</td></tr>
+-          <tr><td style="padding:4px 10px;color:#94A3B8">Modo:</td><td style="padding:4px 10px;color:#F59E0B">SMTP activo</td></tr>
++          <tr><td style="padding:4px 10px;color:#94A3B8">Modo:</td><td style="padding:4px 10px;color:#F59E0B">${process.env.BREVO_API_KEY ? "Brevo API" : process.env.RESEND_API_KEY ? "Resend API" : "SMTP"}</td></tr>
+         </table>
+         <p style="color:#94A3B8;font-size:11px;margin-top:24px">
+           Si recibes este correo es porque alguien (probablemente tú) ha solicitado un test desde
+@@ -99,27 +104,24 @@ export class EmailController {
+   }
+ 
+   // ── helpers de diagnóstico ──────────────────────────────────────────────
+-  private buildDiagnostics(host: string | null, user: string | null, hasPass: boolean, baseUrl: string | null): string[] {
++  private buildDiagnostics(hasBrevo: boolean, hasResend: boolean, host: string | null, smtpUser: string | null, hasPass: boolean, baseUrl: string | null): string[] {
+     const issues: string[] = [];
+-    if (!host)    issues.push("❌ SMTP_HOST no está configurado en Railway · setea smtp.gmail.com para Gmail Workspace");
+-    if (!user)    issues.push("❌ SMTP_USER no está configurado · usa una cuenta corporativa @savicol.com");
+-    if (!hasPass) issues.push("❌ SMTP_PASS no está configurado · genera una App Password en myaccount.google.com/security");
+-    if (!baseUrl) issues.push("⚠️ APP_BASE_URL no configurada · los links en correos pueden fallar · setea https://savicol-audit-platform.vercel.app");
+-    if (host && hasPass && process.env.SMTP_PASS && process.env.SMTP_PASS.length < 16) {
+-      issues.push("⚠️ SMTP_PASS parece tener menos de 16 caracteres · App Password Gmail debe ser de 16 chars (sin espacios)");
+-    }
+-    if (host === "smtp.gmail.com" && process.env.SMTP_PORT === "465") {
+-      issues.push("⚠️ Puerto 465 detectado · Gmail recomienda 587 (STARTTLS)");
+-    }
+-    if (issues.length === 0 && host) {
+-      issues.push("✅ Configuración SMTP completa · listo para enviar");
++    if (hasBrevo) {
++      issues.push("✅ Modo BREVO API activo · envío via HTTP/443 · sin bloqueo Railway");
++    } else if (hasResend) {
++      issues.push("✅ Modo RESEND API activo · envío via HTTP/443");
++    } else if (host && smtpUser && hasPass) {
++      issues.push("⚠️ Modo SMTP activo · Railway puede bloquear puertos 25/465/587 · se recomienda BREVO_API_KEY");
++    } else {
++      issues.push("❌ Sin configuración de email · configura BREVO_API_KEY en Railway → Variables");
+     }
++    if (!baseUrl) issues.push("⚠️ APP_BASE_URL no configurada · los links en correos pueden fallar");
+     return issues;
+   }
+ 
+   private buildHint(mode: string, ok: boolean, error?: string): string {
+     if (mode === "noop") {
+-      return "El servicio está en modo NO-OP. Para activar envío real, configura SMTP_HOST, SMTP_USER y SMTP_PASS en Railway → Variables, y redeploya el servicio API.";
++      return "El servicio está en modo NO-OP. Configura BREVO_API_KEY en Railway → Variables y redeploya.";
+     }
+     if (ok) {
+       return "✅ Email enviado exitosamente. Revisa la bandeja de entrada en máximo 1-2 minutos. Si no aparece, revisa spam/promociones.";
+diff --git a/apps/api/src/email/email.service.ts b/apps/api/src/email/email.service.ts
+index d794ed7..078588c 100644
+--- a/apps/api/src/email/email.service.ts
++++ b/apps/api/src/email/email.service.ts
+@@ -1,15 +1,18 @@
+ // ═══════════════════════════════════════════════════════════════════════════════
+-// EMAIL SERVICE · abstracción SMTP (Gmail Workspace · genérico SMTP · no-op)
++// EMAIL SERVICE · SMTP nodemailer + Brevo HTTP API + Resend HTTP API
+ // ═══════════════════════════════════════════════════════════════════════════════
+-// Vars de entorno requeridas para envío real:
+-//   SMTP_HOST       (ej. smtp.gmail.com)
+-//   SMTP_PORT       (ej. 587)
+-//   SMTP_USER       (cuenta corporativa)
+-//   SMTP_PASS       (App Password en Gmail Workspace)
+-//   SMTP_FROM       (display name + email, ej. "Savicol Audit <noreply@savicol.com>")
+-//   APP_BASE_URL    (para construir links absolutos, ej. https://app.savicol.com)
++// Vars requeridas para Brevo API (modo recomendado en Railway):
++//   BREVO_API_KEY   → xsmtpsib-... (Settings > API Keys en app.brevo.com)
++//   SMTP_FROM       → "Auditoría Savicol <auditoriasavicol@gmail.com>"
++//   APP_BASE_URL    → https://savicol-audit-platform-web.vercel.app
+ //
+-// Si SMTP_HOST está vacío → modo no-op (loguea pero no envía)
++// Vars para Resend API (alternativa):
++//   RESEND_API_KEY  → re_...
++//
++// Vars para SMTP clásico (fallback):
++//   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS
++//
++// Prioridad: BREVO_API_KEY > RESEND_API_KEY > SMTP_HOST > no-op
+ // ═══════════════════════════════════════════════════════════════════════════════
+ import { Injectable, Logger } from "@nestjs/common";
+ import * as nodemailer from "nodemailer";
+@@ -21,80 +24,170 @@ export interface EmailEnvelope {
+   text?:    string;
+   replyTo?: string;
+   cc?:      string[];
+-  bcc?:     string[];
++  bcc?:     string[]
+ }
+ 
+ export interface EmailDispatchResult {
+   ok: boolean;
+   messageId?: string;
+   error?: string;
+-  mode: "smtp" | "noop";
++  mode: "brevo" | "resend" | "smtp" | "noop";
+ }
+ 
++type EmailMode = "brevo" | "resend" | "smtp" | "noop";
++
+ @Injectable()
+ export class EmailService {
+   private readonly logger = new Logger(EmailService.name);
+   private transporter: nodemailer.Transporter | null = null;
+   private from: string;
+-  private noopMode: boolean;
++  private mode: EmailMode;
++  private brevoKey: string | null = null;
++  private resendKey: string | null = null;
+ 
+   constructor() {
+-    const host = process.env.SMTP_HOST;
+-    const port = Number(process.env.SMTP_PORT ?? 587);
+-    const user = process.env.SMTP_USER;
+-    const pass = process.env.SMTP_PASS;
+-    this.from  = process.env.SMTP_FROM ?? "Savicol Audit <noreply@savicol.com>";
+-
+-    this.noopMode = !host || !user || !pass;
+-    if (this.noopMode || !host || !user || !pass) {
+-      this.logger.warn(
+-        "[EmailService] Modo NO-OP · SMTP_HOST/USER/PASS no configurados. " +
+-        "Los correos se loguearán pero NO se enviarán. " +
+-        "Configura SMTP_* en Railway → Variables para activar envío real. " +
+-        `Estado actual: host=${host ? "✓" : "✗"} user=${user ? "✓" : "✗"} pass=${pass ? "✓" : "✗"}`,
+-      );
++    this.from = process.env.SMTP_FROM ?? "Savicol Audit <noreply@savicol.com>";
++
++    const brevoKey  = process.env.BREVO_API_KEY?.trim();
++    const resendKey = process.env.RESEND_API_KEY?.trim();
++    const smtpHost  = process.env.SMTP_HOST?.trim();
++    const smtpUser  = process.env.SMTP_USER?.trim();
++    const smtpPass  = process.env.SMTP_PASS?.trim();
++
++    // ── Modo 1: Brevo HTTP API (recomendado en Railway) ──────────────────
++    if (brevoKey) {
++      this.mode     = "brevo";
++      this.brevoKey = brevoKey;
++      this.logger.log(`[EmailService] Modo BREVO API · from=${this.from}`);
+       return;
+     }
+ 
+-    // Limpiar espacios de App Password Gmail (la web los pone visualmente pero el server no los acepta)
+-    const cleanPass = pass.replace(/\s+/g, "");
+-
+-    this.transporter = nodemailer.createTransport({
+-      host,
+-      port,
+-      secure: port === 465,                // 465 = TLS implícito, 587 = STARTTLS
+-      requireTLS: port === 587,            // fuerza STARTTLS en 587
+-      auth: { user, pass: cleanPass },
+-      tls: {
+-        // Permite TLS aunque el certificado no esté en cadena (debug Gmail Workspace)
+-        rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false",
+-      },
+-      // Logger útil para debug en Railway (NODE_ENV=development)
+-      logger: process.env.SMTP_DEBUG === "true",
+-      debug:  process.env.SMTP_DEBUG === "true",
+-    });
++    // ── Modo 2: Resend HTTP API ───────────────────────────────────────────
++    if (resendKey) {
++      this.mode      = "resend";
++      this.resendKey = resendKey;
++      this.logger.log(`[EmailService] Modo RESEND API · from=${this.from}`);
++      return;
++    }
+ 
+-    this.logger.log(`[EmailService] SMTP listo · ${host}:${port} · from=${this.from}`);
++    // ── Modo 3: SMTP nodemailer (bloqueado en Railway Starter) ────────────
++    if (smtpHost && smtpUser && smtpPass) {
++      this.mode = "smtp";
++      const port     = Number(process.env.SMTP_PORT ?? 587);
++      const cleanPw  = smtpPass.replace(/\s+/g, "");
++      this.transporter = nodemailer.createTransport({
++        host: smtpHost, port,
++        secure: port === 465,
++        requireTLS: port === 587,
++        auth: { user: smtpUser, pass: cleanPw },
++        tls: { rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false" },
++        logger: process.env.SMTP_DEBUG === "true",
++        debug:  process.env.SMTP_DEBUG === "true",
++      });
++      this.logger.log(`[EmailService] Modo SMTP · ${smtpHost}:${port} · from=${this.from}`);
++      this.transporter.verify((err) => {
++        if (err) this.logger.error(`[EmailService] ⚠️ verify() falló: ${err.message}. Los envíos pueden fallar. Verifica credenciales SMTP.`);
++        else      this.logger.log(`[EmailService] ✅ Conexión SMTP verificada · listo para enviar`);
++      });
++      return;
++    }
+ 
+-    // Test de conectividad async · no bloquea startup pero loguea el resultado
+-    this.transporter.verify((err) => {
+-      if (err) {
+-        this.logger.error(`[EmailService] ⚠️ verify() falló: ${err.message}. Los envíos pueden fallar. Verifica credenciales SMTP.`);
+-      } else {
+-        this.logger.log(`[EmailService] ✅ Conexión SMTP verificada · listo para enviar`);
+-      }
+-    });
++    // ── Modo 4: No-op ─────────────────────────────────────────────────────
++    this.mode = "noop";
++    this.logger.warn(
++      "[EmailService] Modo NO-OP · configura BREVO_API_KEY, RESEND_API_KEY o SMTP_* en Railway → Variables. " +
++      `Estado: brevo=${brevoKey ? "✓" : "✗"} resend=${resendKey ? "✓" : "✗"} smtp=${smtpHost ? "✓" : "✗"}`,
++    );
+   }
+ 
+-  /**
+-   * Envía un correo. En modo no-op solo loguea el envelope.
+-   * Nunca lanza · siempre retorna ok=true|false para que el caller decida.
+-   */
++  // ──────────────────────────────────────────────────────────────────────────
++  // SEND
++  // ──────────────────────────────────────────────────────────────────────────
++
+   async send(envelope: EmailEnvelope): Promise<EmailDispatchResult> {
+-    if (this.noopMode || !this.transporter) {
+-      this.logger.log(`[EmailService NOOP] → ${envelope.to} · ${envelope.subject}`);
+-      return { ok: true, mode: "noop", messageId: `noop-${Date.now()}` };
++    switch (this.mode) {
++      case "brevo":  return this.sendBrevo(envelope);
++      case "resend": return this.sendResend(envelope);
++      case "smtp":   return this.sendSmtp(envelope);
++      default:
++        this.logger.log(`[EmailService NOOP] → ${envelope.to} · ${envelope.subject}`);
++        return { ok: true, mode: "noop", messageId: `noop-${Date.now()}` };
++    }
++  }
++
++  // ── Brevo HTTP API ────────────────────────────────────────────────────────
++  private async sendBrevo(envelope: EmailEnvelope): Promise<EmailDispatchResult> {
++    const toList = Array.isArray(envelope.to) ? envelope.to : [envelope.to];
++    const [fromName, fromEmail] = this.parseFrom(this.from);
++
++    const body = JSON.stringify({
++      sender:      { name: fromName, email: fromEmail },
++      to:          toList.map(e => ({ email: e })),
++      cc:          envelope.cc?.map(e => ({ email: e })),
++      bcc:         envelope.bcc?.map(e => ({ email: e })),
++      replyTo:     envelope.replyTo ? { email: envelope.replyTo } : undefined,
++      subject:     envelope.subject,
++      htmlContent: envelope.html,
++      textContent: envelope.text ?? this.stripHtml(envelope.html),
++    });
++
++    try {
++      const res = await fetch("https://api.brevo.com/v3/smtp/email", {
++        method: "POST",
++        headers: {
++          "accept":       "application/json",
++          "api-key":      this.brevoKey!,
++          "content-type": "application/json",
++        },
++        body,
++      });
++      const data: any = await res.json();
++      if (!res.ok) throw new Error(data?.message ?? `Brevo ${res.status}`);
++      this.logger.log(`[EmailService BREVO] ✓ ${envelope.to} · ${envelope.subject} · ${data.messageId}`);
++      return { ok: true, mode: "brevo", messageId: data.messageId };
++    } catch (e: any) {
++      this.logger.error(`[EmailService BREVO] ✗ ${envelope.to}: ${e?.message}`);
++      return { ok: false, mode: "brevo", error: e?.message ?? "Brevo error" };
+     }
++  }
++
++  // ── Resend HTTP API ───────────────────────────────────────────────────────
++  private async sendResend(envelope: EmailEnvelope): Promise<EmailDispatchResult> {
++    const toList = Array.isArray(envelope.to) ? envelope.to : [envelope.to];
++
++    const body = JSON.stringify({
++      from:     this.from,
++      to:       toList,
++      cc:       envelope.cc,
++      bcc:      envelope.bcc,
++      reply_to: envelope.replyTo,
++      subject:  envelope.subject,
++      html:     envelope.html,
++      text:     envelope.text ?? this.stripHtml(envelope.html),
++    });
++
++    try {
++      const res = await fetch("https://api.resend.com/emails", {
++        method: "POST",
++        headers: {
++          "Authorization": `Bearer ${this.resendKey}`,
++          "Content-Type":  "application/json",
++        },
++        body,
++      });
++      const data: any = await res.json();
++      if (!res.ok) throw new Error(data?.message ?? `Resend ${res.status}`);
++      this.logger.log(`[EmailService RESEND] ✓ ${envelope.to} · ${envelope.subject} · ${data.id}`);
++      return { ok: true, mode: "resend", messageId: data.id };
++    } catch (e: any) {
++      this.logger.error(`[EmailService RESEND] ✗ ${envelope.to}: ${e?.message}`);
++      return { ok: false, mode: "resend", error: e?.message ?? "Resend error" };
++    }
++  }
++
++  // ── SMTP nodemailer ───────────────────────────────────────────────────────
++  private async sendSmtp(envelope: EmailEnvelope): Promise<EmailDispatchResult> {
++    if (!this.transporter) return { ok: false, mode: "smtp", error: "transporter not initialized" };
+     try {
+       const info = await this.transporter.sendMail({
+         from:    this.from,
+@@ -114,15 +207,36 @@ export class EmailService {
+     }
+   }
+ 
+-  // ────────────────────────────────────────────────────────────────────────
+-  // TEMPLATES
+-  // ────────────────────────────────────────────────────────────────────────
++  // ──────────────────────────────────────────────────────────────────────────
++  // HELPERS
++  // ──────────────────────────────────────────────────────────────────────────
++
++  /** Parsea "Nombre Apellido <email@dom.com>" → ["Nombre Apellido", "email@dom.com"] */
++  private parseFrom(from: string): [string, string] {
++    const m = from.match(/^(.+)<([^>]+)>\s*$/);
++    if (m) return [m[1].trim(), m[2].trim()];
++    return ["Savicol Audit", from.trim()];
++  }
++
++  private escape(s: string): string {
++    return String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]!));
++  }
++
++  private stripHtml(html: string): string {
++    return html.replace(/<style[\s\S]*?<\/style>/gi, "")
++               .replace(/<[^>]+>/g, " ")
++               .replace(/\s+/g, " ")
++               .trim();
++  }
++
++  get isConfigured(): boolean { return this.mode !== "noop"; }
++
++  // ──────────────────────────────────────────────────────────────────────────
++  // TEMPLATES (sin cambios — preservados intactos)
++  // ──────────────────────────────────────────────────────────────────────────
+ 
+-  /**
+-   * Envuelve contenido HTML en un layout corporativo (header amarillo + footer).
+-   */
+   layout(opts: { title: string; previewText: string; body: string; ctaText?: string; ctaUrl?: string }): string {
+-    const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
++    const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
+     return `<!DOCTYPE html>
+ <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+ <title>${this.escape(opts.title)}</title></head>
+@@ -153,7 +267,6 @@ export class EmailService {
+ </body></html>`;
+   }
+ 
+-  /** Helper: invitación nueva con link de activación */
+   templateInvitation(opts: { name: string; activationUrl: string; expiresAt: Date; invitedBy: string; role: string }): string {
+     const body = `
+       <p>Hola <strong>${this.escape(opts.name)}</strong>,</p>
+@@ -162,14 +275,9 @@ export class EmailService {
+       <p style="color:#94A3B8;font-size:12px;margin-top:24px">Si el botón no funciona, copia este enlace en tu navegador:<br>
+         <span style="color:#06B6D4;word-break:break-all">${opts.activationUrl}</span>
+       </p>`;
+-    return this.layout({
+-      title: "Activa tu cuenta Savicol Audit",
+-      previewText: `${opts.invitedBy} te invita a Savicol Audit`,
+-      body, ctaText: "Activar mi cuenta", ctaUrl: opts.activationUrl,
+-    });
++    return this.layout({ title: "Activa tu cuenta Savicol Audit", previewText: `${opts.invitedBy} te invita a Savicol Audit`, body, ctaText: "Activar mi cuenta", ctaUrl: opts.activationUrl });
+   }
+ 
+-  /** Helper: contraseña temporal asignada por admin */
+   templateTempPassword(opts: { name: string; tempPassword: string; loginUrl: string }): string {
+     const body = `
+       <p>Hola <strong>${this.escape(opts.name)}</strong>,</p>
+@@ -179,27 +287,17 @@ export class EmailService {
+       </div>
+       <p><strong style="color:#F59E0B">Por seguridad</strong>, ingresa con esta contraseña y cámbiala inmediatamente desde Configuración → Seguridad.</p>
+       <p style="color:#94A3B8;font-size:12px">Esta contraseña es de un solo uso. No la compartas con nadie.</p>`;
+-    return this.layout({
+-      title: "Tu contraseña temporal",
+-      previewText: "Un administrador restableció tu contraseña",
+-      body, ctaText: "Ir a la plataforma", ctaUrl: opts.loginUrl,
+-    });
++    return this.layout({ title: "Tu contraseña temporal", previewText: "Un administrador restableció tu contraseña", body, ctaText: "Ir a la plataforma", ctaUrl: opts.loginUrl });
+   }
+ 
+-  /** Helper: link de recuperación de contraseña (auto-servicio) */
+   templatePasswordReset(opts: { name: string; resetUrl: string; expiresAt: Date }): string {
+     const body = `
+       <p>Hola <strong>${this.escape(opts.name)}</strong>,</p>
+       <p>Recibimos una solicitud para restablecer tu contraseña. Si no fuiste tú, ignora este correo.</p>
+       <p>Para crear una nueva contraseña, haz click en el botón. El enlace expira el <strong>${opts.expiresAt.toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}</strong>.</p>`;
+-    return this.layout({
+-      title: "Restablecer contraseña",
+-      previewText: "Solicitud de restablecimiento de contraseña",
+-      body, ctaText: "Crear nueva contraseña", ctaUrl: opts.resetUrl,
+-    });
++    return this.layout({ title: "Restablecer contraseña", previewText: "Solicitud de restablecimiento de contraseña", body, ctaText: "Crear nueva contraseña", ctaUrl: opts.resetUrl });
+   }
+ 
+-  /** Helper: cambio de rol */
+   templateRoleChanged(opts: { name: string; oldRole: string; newRole: string; changedBy: string }): string {
+     const body = `
+       <p>Hola <strong>${this.escape(opts.name)}</strong>,</p>
+@@ -210,14 +308,9 @@ export class EmailService {
+         <tr><td style="padding:6px 12px;color:#94A3B8">Realizado por:</td><td style="padding:6px 12px;color:#FFFFFF">${this.escape(opts.changedBy)}</td></tr>
+       </table>
+       <p style="color:#94A3B8;font-size:12px">Los cambios de permisos tomarán efecto en tu próximo inicio de sesión.</p>`;
+-    return this.layout({
+-      title: "Cambio de rol en tu cuenta",
+-      previewText: `Tu rol cambió a ${opts.newRole}`,
+-      body,
+-    });
++    return this.layout({ title: "Cambio de rol en tu cuenta", previewText: `Tu rol cambió a ${opts.newRole}`, body });
+   }
+ 
+-  /** Helper: hallazgo asignado a un responsable */
+   templateHallazgoAssigned(opts: { name: string; titulo: string; criticidad: string; recurso: string; link?: string }): string {
+     const colorCrit = opts.criticidad.toUpperCase().includes("CRIT") ? "#EF4444"
+       : opts.criticidad.toUpperCase().includes("ALT") ? "#F59E0B" : "#3B82F6";
+@@ -229,25 +322,6 @@ export class EmailService {
+         <p style="margin:0;color:#FFFFFF;font-size:15px;font-weight:600">${this.escape(opts.titulo)}</p>
+         <p style="margin:6px 0 0;color:#94A3B8;font-size:12px">Recurso: ${this.escape(opts.recurso)}</p>
+       </div>`;
+-    return this.layout({
+-      title: "Nuevo hallazgo asignado",
+-      previewText: opts.titulo,
+-      body, ctaText: opts.link ? "Ver hallazgo" : undefined, ctaUrl: opts.link,
+-    });
+-  }
+-
+-  // ────────────────────────────────────────────────────────────────────────
+-  // UTILS
+-  // ────────────────────────────────────────────────────────────────────────
+-  private escape(s: string): string {
+-    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]!));
++    return this.layout({ title: "Nuevo hallazgo asignado", previewText: opts.titulo, body, ctaText: opts.link ? "Ver hallazgo" : undefined, ctaUrl: opts.link });
+   }
+-  private stripHtml(html: string): string {
+-    return html.replace(/<style[\s\S]*?<\/style>/gi, "")
+-               .replace(/<[^>]+>/g, " ")
+-               .replace(/\s+/g, " ")
+-               .trim();
+-  }
+-
+-  get isConfigured(): boolean { return !this.noopMode; }
+ }
+diff --git a/apps/api/src/granjas/granjas.controller.ts b/apps/api/src/granjas/granjas.controller.ts
+index 1ff37b3..7a2aed1 100644
+--- a/apps/api/src/granjas/granjas.controller.ts
++++ b/apps/api/src/granjas/granjas.controller.ts
+@@ -9,13 +9,15 @@ import { GranjasExecutiveService, GranjasExecutiveFilters } from "./granjas-exec
+ import { KpiAlertsService } from "./kpi-alerts.service";
+ import { AuditActivitiesAiService } from "../audit-activities/audit-activities-ai.service";
+ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
++import { RolesGuard } from "../auth/guards/roles.guard";
++import { Roles } from "../auth/decorators/roles.decorator";
+ 
+ interface AuthRequest extends Request {
+   user: { id: string; email: string; role: string; name: string };
+ }
+ 
+ @Controller("granjas")
+-@UseGuards(JwtAuthGuard)
++@UseGuards(JwtAuthGuard, RolesGuard)
+ export class GranjasController {
+   constructor(
+     private svc: GranjasService,
+@@ -110,17 +112,20 @@ export class GranjasController {
+   findOne(@Param("id") id: string) { return this.svc.findGranja(id); }
+ 
+   @Post()
++  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
+   create(@Body() dto: CreateGranjaDto, @Req() req: AuthRequest) {
+     return this.svc.createGranja(dto, req.user.id);
+   }
+ 
+   @Patch(":id")
++  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
+   update(@Param("id") id: string, @Body() dto: Partial<CreateGranjaDto>, @Req() req: AuthRequest) {
+     return this.svc.updateGranja(id, dto, req.user.id);
+   }
+ 
+   @Delete(":id")
+   @HttpCode(HttpStatus.OK)
++  @Roles("ADMIN", "SUPERVISOR")
+   remove(@Param("id") id: string, @Req() req: AuthRequest) {
+     return this.svc.removeGranja(id, req.user.id);
+   }
+@@ -137,11 +142,13 @@ export class GranjasController {
+   }
+ 
+   @Post("hallazgos")
++  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
+   createHallazgo(@Body() dto: CreateHallazgoDto, @Req() req: AuthRequest) {
+     return this.svc.createHallazgo(dto, req.user.id);
+   }
+ 
+   @Patch("hallazgos/:id")
++  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
+   updateHallazgo(
+     @Param("id") id: string,
+     @Body() dto: Partial<CreateHallazgoDto>,
+@@ -152,6 +159,7 @@ export class GranjasController {
+ 
+   @Delete("hallazgos/:id")
+   @HttpCode(HttpStatus.OK)
++  @Roles("ADMIN", "SUPERVISOR")
+   removeHallazgo(@Param("id") id: string, @Req() req: AuthRequest) {
+     return this.svc.removeHallazgo(id, req.user.id);
+   }
+@@ -163,17 +171,20 @@ export class GranjasController {
+   }
+ 
+   @Post("kpis")
++  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
+   createKPI(@Body() dto: CreateKPIDto, @Req() req: AuthRequest) {
+     return this.svc.createKPI(dto, req.user.id);
+   }
+ 
+   @Patch("kpis/:id")
++  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
+   updateKPI(@Param("id") id: string, @Body() dto: Partial<CreateKPIDto>, @Req() req: AuthRequest) {
+     return this.svc.updateKPI(id, dto, req.user.id);
+   }
+ 
+   @Delete("kpis/:id")
+   @HttpCode(HttpStatus.OK)
++  @Roles("ADMIN", "SUPERVISOR")
+   removeKPI(@Param("id") id: string, @Req() req: AuthRequest) {
+     return this.svc.removeKPI(id, req.user.id);
+   }
+@@ -185,17 +196,20 @@ export class GranjasController {
+   }
+ 
+   @Post("auditorias")
++  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
+   createAuditoria(@Body() dto: CreateAuditoriaDto, @Req() req: AuthRequest) {
+     return this.svc.createAuditoria(dto, req.user.id);
+   }
+ 
+   @Patch("auditorias/:id")
++  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
+   updateAuditoria(@Param("id") id: string, @Body() dto: Partial<CreateAuditoriaDto>, @Req() req: AuthRequest) {
+     return this.svc.updateAuditoria(id, dto, req.user.id);
+   }
+ 
+   @Delete("auditorias/:id")
+   @HttpCode(HttpStatus.OK)
++  @Roles("ADMIN", "SUPERVISOR")
+   removeAuditoria(@Param("id") id: string, @Req() req: AuthRequest) {
+     return this.svc.removeAuditoria(id, req.user.id);
+   }
+@@ -207,6 +221,7 @@ export class GranjasController {
+   }
+ 
+   @Post("auditorias/:id/checklist")
++  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
+   saveChecklist(
+     @Param("id") id: string,
+     @Body() body: { respuestas: Array<{ preguntaId: string; respuesta: string; observacion?: string }> },
+@@ -215,6 +230,7 @@ export class GranjasController {
+   }
+ 
+   @Post("auditorias/:id/checklist/generate-hallazgos")
++  @Roles("ADMIN", "AUDITOR", "SUPERVISOR")
+   generateHallazgos(
+     @Param("id") id: string,
+     @Body() body: {
+diff --git a/apps/api/src/granjas/kpi-alerts.service.ts b/apps/api/src/granjas/kpi-alerts.service.ts
+index d736891..c812eab 100644
+--- a/apps/api/src/granjas/kpi-alerts.service.ts
++++ b/apps/api/src/granjas/kpi-alerts.service.ts
+@@ -191,7 +191,7 @@ export class KpiAlertsService {
+       userByKey.set(u.name.toLowerCase(), u);
+     }
+ 
+-    const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
++    const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
+     const result: ReminderResult = {
+       scannedAt: scan.scannedAt,
+       remindersSent: 0,
+diff --git a/apps/api/src/invitations/invitations.service.ts b/apps/api/src/invitations/invitations.service.ts
+index 653ece7..c2282a1 100644
+--- a/apps/api/src/invitations/invitations.service.ts
++++ b/apps/api/src/invitations/invitations.service.ts
+@@ -73,7 +73,7 @@ export class InvitationsService {
+     });
+ 
+     // Link de activación · APP_BASE_URL apunta al frontend
+-    const base = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
++    const base = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
+     const activationUrl = `${base}/activar?token=${tokenRaw}`;
+ 
+     // Enviar correo (no-op si SMTP no configurado · queda registrado emailSent=false)
+@@ -136,7 +136,7 @@ export class InvitationsService {
+     if (!inv) throw new NotFoundException("Invitación no encontrada");
+     if (inv.status !== "PENDING") throw new BadRequestException(`Solo se pueden reenviar invitaciones PENDING (estado actual: ${inv.status})`);
+ 
+-    const base = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
++    const base = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
+     const activationUrl = `${base}/activar?token=${inv.token}`;
+     const html = this.email.templateInvitation({
+       name: inv.name, activationUrl, expiresAt: inv.expiresAt,
+diff --git a/apps/api/src/password-reset/password-reset.service.ts b/apps/api/src/password-reset/password-reset.service.ts
+index 14480bd..8033419 100644
+--- a/apps/api/src/password-reset/password-reset.service.ts
++++ b/apps/api/src/password-reset/password-reset.service.ts
+@@ -64,7 +64,7 @@ export class PasswordResetService {
+       },
+     });
+ 
+-    const base = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
++    const base = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
+     const resetUrl = `${base}/restablecer?token=${tokenRaw}`;
+     const html = this.email.templatePasswordReset({ name: user.name, resetUrl, expiresAt });
+     await this.email.send({
+diff --git a/apps/api/src/users/auditores.controller.ts b/apps/api/src/users/auditores.controller.ts
+new file mode 100644
+index 0000000..6f35518
+--- /dev/null
++++ b/apps/api/src/users/auditores.controller.ts
+@@ -0,0 +1,105 @@
++// ─── AUDITORES CONTROLLER ────────────────────────────────────────────────────
++// Alias de /users filtrado por rol AUDITOR — resuelve endpoint que espera el
++// frontend en /api/v1/auditores (404 en producción por falta de módulo).
++// ─────────────────────────────────────────────────────────────────────────────
++import { Controller, Get, Query, UseGuards } from "@nestjs/common";
++import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
++import { PrismaService } from "../prisma/prisma.service";
++
++@Controller("auditores")
++@UseGuards(JwtAuthGuard)
++export class AuditoresController {
++  constructor(private prisma: PrismaService) {}
++
++  /**
++   * GET /auditores
++   * Devuelve usuarios con role AUDITOR activos, con stats de actividad.
++   */
++  @Get()
++  async list(
++    @Query("search") search?: string,
++    @Query("isActive") isActive?: string,
++  ) {
++    const where: any = {
++      role: { in: ["AUDITOR", "SUPERVISOR"] },
++    };
++
++    if (isActive !== undefined) {
++      where.isActive = isActive !== "false";
++    }
++
++    if (search?.trim()) {
++      where.OR = [
++        { name:  { contains: search, mode: "insensitive" } },
++        { email: { contains: search, mode: "insensitive" } },
++      ];
++    }
++
++    const auditores = await this.prisma.user.findMany({
++      where,
++      select: {
++        id: true,
++        name: true,
++        email: true,
++        role: true,
++        isActive: true,
++        avatarUrl: true,
++        createdAt: true,
++        _count: {
++          select: {
++            auditActivities: true,
++            accessLogs: true,
++          },
++        },
++      },
++      orderBy: { name: "asc" },
++    });
++
++    // Contar actividades de cronograma por auditor (AuditActivity.auditorId)
++    const activityCounts = await this.prisma.auditActivity.groupBy({
++      by: ["auditorId"],
++      _count: { id: true },
++    });
++    const actMap = Object.fromEntries(
++      activityCounts.map((a) => [a.auditorId, a._count.id]),
++    );
++
++    return auditores.map((a) => ({
++      id:          a.id,
++      name:        a.name,
++      email:       a.email,
++      role:        a.role,
++      isActive:    a.isActive,
++      avatarUrl:   a.avatarUrl,
++      createdAt:   a.createdAt,
++      stats: {
++        actividadesCronograma: actMap[a.id] ?? 0,
++        logsAcceso:            a._count.accessLogs,
++      },
++    }));
++  }
++
++  /**
++   * GET /auditores/stats
++   * Estadísticas globales de auditores para el dashboard.
++   */
++  @Get("stats")
++  async stats() {
++    const [total, activos, byRole] = await Promise.all([
++      this.prisma.user.count({ where: { role: { in: ["AUDITOR", "SUPERVISOR"] } } }),
++      this.prisma.user.count({ where: { role: { in: ["AUDITOR", "SUPERVISOR"] }, isActive: true } }),
++      this.prisma.user.groupBy({
++        by: ["role"],
++        where: { role: { in: ["AUDITOR", "SUPERVISOR"] } },
++        _count: { id: true },
++      }),
++    ]);
++
++    return {
++      total,
++      activos,
++      inactivos: total - activos,
++      byRole: Object.fromEntries(byRole.map((r) => [r.role, r._count.id])),
++    };
++  }
++}
+diff --git a/apps/api/src/users/users.module.ts b/apps/api/src/users/users.module.ts
+index 7913dda..c2497a7 100644
+--- a/apps/api/src/users/users.module.ts
++++ b/apps/api/src/users/users.module.ts
+@@ -1,11 +1,12 @@
+ import { Module } from "@nestjs/common";
+ import { UsersController } from "./users.controller";
++import { AuditoresController } from "./auditores.controller";
+ import { UsersService } from "./users.service";
+ import { NotificationsModule } from "../notifications/notifications.module";
+ 
+ @Module({
+   imports: [NotificationsModule],   // EmailModule es global
+-  controllers: [UsersController],
++  controllers: [UsersController, AuditoresController],
+   providers: [UsersService],
+   exports: [UsersService],
+ })
+diff --git a/apps/api/src/users/users.service.ts b/apps/api/src/users/users.service.ts
+index 1057f34..beed599 100644
+--- a/apps/api/src/users/users.service.ts
++++ b/apps/api/src/users/users.service.ts
+@@ -132,7 +132,7 @@ export class UsersService {
+ 
+     // Correo de bienvenida con la contraseña temporal (no-op si SMTP no config)
+     if (!dto.password) {
+-      const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
++      const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
+       await this.email.send({
+         to: user.email,
+         subject: "Tu cuenta Savicol Audit · contraseña temporal",
+@@ -270,7 +270,7 @@ export class UsersService {
+     ]);
+ 
+     // Notificación in-app + email con la contraseña temporal
+-    const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform.vercel.app";
++    const baseUrl = process.env.APP_BASE_URL ?? "https://savicol-audit-platform-web.vercel.app";
+     await this.notif.create({
+       userId: id,
+       kind: "PASSWORD_RESET",
+@@ -343,9 +343,29 @@ export class UsersService {
+       metadata: { targetEmail: targetUser.email, targetRole: targetUser.role },
+     });
+ 
+-    // Cascade implícito: User → sessions, auditChanges, accessLogs (definido en schema)
++    // Revocar invitaciones pendientes asociadas al email del usuario eliminado
++    await this.prisma.userInvitation.updateMany({
++      where: { email: targetUser.email, status: "PENDING" },
++      data:  { status: "REVOKED" },
++    });
++
++    // Desvincular y limpiar referencias FK antes de borrar el usuario.
++    // AccessLog y AuditActivityLog usan SET NULL → se conserva el historial de auditoría
++    // con userId = null (el registro queda pero sin referencia al usuario eliminado).
++    await this.prisma.$transaction([
++      // SET NULL explícito (por si prisma db push aún no aplicó el schema)
++      this.prisma.accessLog.updateMany({ where: { userId: id }, data: { userId: null } }),
++      this.prisma.auditActivityLog.updateMany({ where: { userId: id }, data: { userId: null } }),
++      // AuditActivity creadas por este usuario → desvincular
++      this.prisma.auditActivity.updateMany({ where: { createdById: id }, data: { createdById: null } }),
++      // Borrar datos de sesión/notificaciones/tokens (no tienen valor histórico)
++      this.prisma.session.deleteMany({ where: { userId: id } }),
++      this.prisma.notification.deleteMany({ where: { userId: id } }),
++      this.prisma.passwordResetToken.deleteMany({ where: { userId: id } }),
++    ]);
++
+     await this.prisma.user.delete({ where: { id } });
+-    return { message: "Usuario eliminado correctamente" };
++    return { ok: true, message: "Usuario eliminado correctamente", email: targetUser.email };
+   }
+ 
+   // ────────────────────────────────────────────────────────
+diff --git a/apps/web/src/app/(dashboard)/configuracion/page.tsx b/apps/web/src/app/(dashboard)/configuracion/page.tsx
+index aa7fc24..35becf5 100644
+--- a/apps/web/src/app/(dashboard)/configuracion/page.tsx
++++ b/apps/web/src/app/(dashboard)/configuracion/page.tsx
+@@ -875,6 +875,8 @@ function UsuariosSection({ user }: { user: any }) {
+   const [showCreate, setShowCreate] = useState(false);
+   const [editing, setEditing]       = useState<AppUser | null>(null);
+   const [pwdResult, setPwdResult]   = useState<{ email: string; password: string } | null>(null);
++  const [confirmDelete, setConfirmDelete] = useState<AppUser | null>(null);
++  const [deletedEmail, setDeletedEmail]   = useState<string | null>(null);
+ 
+   const usersQ        = useUsers({ search });
+   const createUser    = useCreateUser();
+@@ -1069,22 +1071,13 @@ function UsuariosSection({ user }: { user: any }) {
+                           <KeyRound className="w-3 h-3"/>
+                         </button>
+                         <button
+-                          onClick={async () => {
+-                            if (!isAdmin) return;
+-                            if (u.id === user?.id) {
+-                              alert("No puedes eliminar tu propio usuario");
+-                              return;
+-                            }
+-                            if (!confirm(`¿Eliminar definitivamente a ${u.email}?\nEsta acción no se puede deshacer.`)) return;
+-                            try {
+-                              await deleteUser.mutateAsync(u.id);
+-                            } catch (e: any) {
+-                              alert("Error: " + (e?.response?.data?.message ?? "Falló"));
+-                            }
++                          onClick={() => {
++                            if (!isAdmin || u.id === user?.id) return;
++                            setConfirmDelete(u);
+                           }}
+                           disabled={!isAdmin || deleteUser.isPending || u.id === user?.id}
+                           className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400 disabled:text-[#475569] disabled:cursor-not-allowed"
+-                          title={u.id === user?.id ? "No puedes eliminarte" : "Eliminar"}
++                          title={u.id === user?.id ? "No puedes eliminarte" : "Eliminar usuario"}
+                         >
+                           <Trash2 className="w-3 h-3"/>
+                         </button>
+@@ -1131,6 +1124,30 @@ function UsuariosSection({ user }: { user: any }) {
+       {pwdResult && (
+         <TempPasswordModal data={pwdResult} onClose={() => setPwdResult(null)} />
+       )}
++
++      {/* Modal: Confirmar eliminación */}
++      {confirmDelete && (
++        <ConfirmDeleteModal
++          user={confirmDelete}
++          isPending={deleteUser.isPending}
++          onClose={() => setConfirmDelete(null)}
++          onConfirm={async () => {
++            try {
++              await deleteUser.mutateAsync(confirmDelete.id);
++              setDeletedEmail(confirmDelete.email);
++              setConfirmDelete(null);
++            } catch (e: any) {
++              alert("Error al eliminar: " + (e?.response?.data?.message ?? "Falló"));
++              setConfirmDelete(null);
++            }
++          }}
++        />
++      )}
++
++      {/* Toast: usuario eliminado */}
++      {deletedEmail && (
++        <DeletedToast email={deletedEmail} onClose={() => setDeletedEmail(null)} />
++      )}
+     </div>
+   );
+ }
+@@ -1323,11 +1340,17 @@ function TempPasswordModal({ data, onClose }: {
+         </div>
+ 
+         <div className="space-y-3">
++          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-emerald-300 flex items-start gap-2">
++            <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0"/>
++            <span>
++              Se envió un correo a <strong>{data.email}</strong> con esta contraseña temporal.
++              El usuario debe cambiarla en su primer login.
++            </span>
++          </div>
+           <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 text-xs text-amber-300 flex items-start gap-2">
+             <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0"/>
+             <span>
+-              Esta contraseña <strong>no se mostrará otra vez</strong>. Copiala y entregala al usuario {data.email}.
+-              Debe cambiarla en su primer login.
++              Esta contraseña <strong>no se mostrará otra vez</strong>. Cópiala como respaldo por si el correo no llega.
+             </span>
+           </div>
+ 
+@@ -1349,6 +1372,81 @@ function TempPasswordModal({ data, onClose }: {
+   );
+ }
+ 
++/* ── Modal: Confirmar eliminación de usuario ─────────────────────────────── */
++function ConfirmDeleteModal({ user, isPending, onClose, onConfirm }: {
++  user: AppUser;
++  isPending: boolean;
++  onClose: () => void;
++  onConfirm: () => void;
++}) {
++  return (
++    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
++      <div className="bg-[#0D1526] border border-red-500/40 rounded-2xl p-6 w-full max-w-md shadow-2xl">
++        <div className="flex items-center gap-3 mb-4">
++          <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center shrink-0">
++            <Trash2 className="w-5 h-5 text-red-400"/>
++          </div>
++          <div>
++            <h3 className="font-display font-bold text-white text-base">Eliminar usuario definitivamente</h3>
++            <p className="text-xs text-[#94A3B8] mt-0.5">Esta acción no se puede deshacer</p>
++          </div>
++        </div>
++
++        <div className="bg-[#1A2540] border border-[#2A3F6A] rounded-lg p-3 mb-4 space-y-1">
++          <p className="text-xs text-[#94A3B8]">Usuario a eliminar:</p>
++          <p className="text-sm text-white font-semibold">{user.name}</p>
++          <p className="text-xs text-[#64748B] font-mono">{user.email}</p>
++          <p className="text-xs text-amber-400">Rol: {user.role}</p>
++        </div>
++
++        <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-xs text-red-300 mb-5 space-y-1">
++          <p>• Se eliminará el usuario y todas sus sesiones activas</p>
++          <p>• Sus invitaciones pendientes serán revocadas</p>
++          <p>• El correo <strong>{user.email}</strong> quedará libre para nuevos usuarios</p>
++        </div>
++
++        <div className="flex gap-2">
++          <button
++            onClick={onClose}
++            disabled={isPending}
++            className="flex-1 px-3 py-2 rounded-lg bg-[#1A2540] border border-[#2A3F6A] text-[#94A3B8] text-sm"
++          >
++            Cancelar
++          </button>
++          <button
++            onClick={onConfirm}
++            disabled={isPending}
++            className="flex-1 px-3 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50"
++          >
++            {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Trash2 className="w-3.5 h-3.5"/>}
++            {isPending ? "Eliminando..." : "Eliminar definitivamente"}
++          </button>
++        </div>
++      </div>
++    </div>
++  );
++}
++
++/* ── Toast: confirmación de usuario eliminado ──────────────────────────────── */
++function DeletedToast({ email, onClose }: { email: string; onClose: () => void }) {
++  React.useEffect(() => {
++    const t = setTimeout(onClose, 5000);
++    return () => clearTimeout(t);
++  }, [onClose]);
++
++  return (
++    <div className="fixed bottom-6 right-6 z-50 bg-[#0D1526] border border-emerald-500/40 rounded-xl px-4 py-3 shadow-2xl flex items-center gap-3 max-w-sm">
++      <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0"/>
++      <div>
++        <p className="text-sm font-bold text-emerald-300">Usuario eliminado</p>
++        <p className="text-xs text-[#94A3B8] mt-0.5 font-mono">{email}</p>
++        <p className="text-[10px] text-[#475569] mt-0.5">Invitaciones revocadas · correo liberado</p>
++      </div>
++      <button onClick={onClose} className="ml-2 text-[#475569] hover:text-white"><X className="w-4 h-4"/></button>
++    </div>
++  );
++}
++
+ // ═══════════════════════════════════════════════════════════════════════════════
+ // INVITACIONES · admin
+ // ═══════════════════════════════════════════════════════════════════════════════
+@@ -1947,8 +2045,8 @@ function NotificacionesSection() {
+       <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 text-xs text-[#94A3B8]">
+         <p>
+           <strong className="text-blue-300">Notas:</strong> Las notificaciones in-app aparecen en la campana del header.
+-          Los correos se envían vía SMTP corporativo (configurable en variables de entorno).
+-          Si SMTP no está configurado, los correos se loguean en consola del backend.
++          Los correos se envían vía Brevo API (configurable en variables de entorno de Railway).
++          Si no está configurado, los correos se loguean en consola del backend (modo no-op).
+         </p>
+       </div>
+ 
+@@ -2036,11 +2134,11 @@ function EmailDiagnosticCard() {
+       <div>
+         <h3 className="font-display font-bold text-white text-base flex items-center gap-2">
+           <Mail className="w-4 h-4 text-amber-400"/>
+-          Estado de correo SMTP
++          Estado de correo
+           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 font-bold uppercase">ADMIN</span>
+         </h3>
+         <p className="text-xs text-[#94A3B8] mt-1">
+-          Diagnóstico de conexión SMTP y prueba de envío real.
++          Diagnóstico del servicio de email y prueba de envío real.
+           Si los correos no llegan, ejecuta el test desde aquí para ver el error específico.
+         </p>
+       </div>
+@@ -2070,7 +2168,11 @@ function EmailDiagnosticCard() {
+             </div>
+             <div className="flex-1">
+               <p className={cn("text-sm font-bold", status.configured ? "text-emerald-300" : "text-amber-300")}>
+-                {status.configured ? "SMTP configurado y listo" : "Modo NO-OP · los correos NO se envían"}
++                {status.configured
++                  ? status.mode === "brevo" ? "Brevo API activo · correos funcionando"
++                  : status.mode === "resend" ? "Resend API activo · correos funcionando"
++                  : "SMTP configurado y listo"
++                  : "Modo NO-OP · los correos NO se envían"}
+               </p>
+               <p className="text-[11px] text-[#94A3B8] mt-1">
+                 Modo activo: <code className="text-cyan-300">{status.mode}</code>
+@@ -2082,30 +2184,49 @@ function EmailDiagnosticCard() {
+           <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-lg overflow-hidden">
+             <table className="w-full text-xs">
+               <tbody>
+-                <tr className="border-b border-[#1E2D4A]/40">
+-                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_HOST</td>
+-                  <td className="px-3 py-2 text-white font-mono">{status.smtp.host ?? <span className="text-red-400">no configurado</span>}</td>
+-                </tr>
+-                <tr className="border-b border-[#1E2D4A]/40">
+-                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_PORT</td>
+-                  <td className="px-3 py-2 text-white font-mono">{status.smtp.port}</td>
+-                </tr>
+-                <tr className="border-b border-[#1E2D4A]/40">
+-                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_USER</td>
+-                  <td className="px-3 py-2 text-white font-mono">{status.smtp.user ?? <span className="text-red-400">no configurado</span>}</td>
+-                </tr>
+-                <tr className="border-b border-[#1E2D4A]/40">
+-                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_PASS</td>
+-                  <td className="px-3 py-2 font-mono">
+-                    {status.smtp.passSet
+-                      ? <span className="text-emerald-400">✓ configurada · {status.smtp.passLength} caracteres</span>
+-                      : <span className="text-red-400">no configurada</span>}
+-                  </td>
+-                </tr>
+-                <tr className="border-b border-[#1E2D4A]/40">
+-                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_FROM</td>
+-                  <td className="px-3 py-2 text-white font-mono text-[10px]">{status.smtp.from ?? <span className="text-amber-400">usando default</span>}</td>
+-                </tr>
++                {(status.mode === "brevo" || status.mode === "resend") ? (
++                  <>
++                    <tr className="border-b border-[#1E2D4A]/40">
++                      <td className="px-3 py-2 text-[#94A3B8]">{status.mode === "brevo" ? "BREVO_API_KEY" : "RESEND_API_KEY"}</td>
++                      <td className="px-3 py-2 font-mono">
++                        {(status.mode === "brevo" ? status.brevo?.keySet : status.resend?.keySet)
++                          ? <span className="text-emerald-400">✓ configurada</span>
++                          : <span className="text-red-400">no configurada</span>}
++                      </td>
++                    </tr>
++                    <tr className="border-b border-[#1E2D4A]/40">
++                      <td className="px-3 py-2 text-[#94A3B8]">SMTP_FROM</td>
++                      <td className="px-3 py-2 text-white font-mono text-[10px]">{status.smtp.from ?? <span className="text-amber-400">usando default</span>}</td>
++                    </tr>
++                  </>
++                ) : (
++                  <>
++                    <tr className="border-b border-[#1E2D4A]/40">
++                      <td className="px-3 py-2 text-[#94A3B8]">SMTP_HOST</td>
++                      <td className="px-3 py-2 text-white font-mono">{status.smtp.host ?? <span className="text-red-400">no configurado</span>}</td>
++                    </tr>
++                    <tr className="border-b border-[#1E2D4A]/40">
++                      <td className="px-3 py-2 text-[#94A3B8]">SMTP_PORT</td>
++                      <td className="px-3 py-2 text-white font-mono">{status.smtp.port}</td>
++                    </tr>
++                    <tr className="border-b border-[#1E2D4A]/40">
++                      <td className="px-3 py-2 text-[#94A3B8]">SMTP_USER</td>
++                      <td className="px-3 py-2 text-white font-mono">{status.smtp.user ?? <span className="text-red-400">no configurado</span>}</td>
++                    </tr>
++                    <tr className="border-b border-[#1E2D4A]/40">
++                      <td className="px-3 py-2 text-[#94A3B8]">SMTP_PASS</td>
++                      <td className="px-3 py-2 font-mono">
++                        {status.smtp.passSet
++                          ? <span className="text-emerald-400">✓ configurada</span>
++                          : <span className="text-red-400">no configurada</span>}
++                      </td>
++                    </tr>
++                    <tr className="border-b border-[#1E2D4A]/40">
++                      <td className="px-3 py-2 text-[#94A3B8]">SMTP_FROM</td>
++                      <td className="px-3 py-2 text-white font-mono text-[10px]">{status.smtp.from ?? <span className="text-amber-400">usando default</span>}</td>
++                    </tr>
++                  </>
++                )}
+                 <tr>
+                   <td className="px-3 py-2 text-[#94A3B8]">APP_BASE_URL</td>
+                   <td className="px-3 py-2 text-white font-mono text-[10px]">{status.appBaseUrl ?? <span className="text-amber-400">usando default Vercel</span>}</td>
+@@ -2184,24 +2305,19 @@ function EmailDiagnosticCard() {
+         )}
+       </div>
+ 
+-      {/* Setup instructions */}
++      {/* Setup instructions — solo en modo noop */}
+       {status && !status.configured && (
+         <div className="bg-cyan-500/5 border border-cyan-500/30 rounded-lg p-4 text-xs text-[#E2E8F0] space-y-2">
+-          <p className="font-bold text-cyan-300">📋 Pasos para activar envío real (Gmail Workspace)</p>
++          <p className="font-bold text-cyan-300">📋 Activar envío de correos (Brevo API — recomendado)</p>
+           <ol className="list-decimal list-inside space-y-1.5 text-[#94A3B8] ml-1">
+-            <li>Login en <code className="text-amber-300">myaccount.google.com</code> con cuenta corporativa (debe tener 2FA activado)</li>
+-            <li>Security → 2-Step Verification → <strong>App passwords</strong></li>
+-            <li>Select app: <strong>"Mail"</strong> · Select device: <strong>"Other (Custom name)"</strong> → "Savicol Audit Platform"</li>
+-            <li>Generate · copia los <strong>16 caracteres</strong> (los espacios son visuales, el sistema los limpia)</li>
+-            <li>En Railway → tu servicio API → <strong>Variables</strong>, agrega:</li>
++            <li>Crea cuenta gratuita en <code className="text-amber-300">app.brevo.com</code> (300 emails/día gratis)</li>
++            <li>Ve a <strong>SMTP &amp; API</strong> → <strong>API Keys</strong> → genera una nueva clave</li>
++            <li>En Railway → servicio <strong>savicol-api</strong> → <strong>Variables</strong>, agrega:</li>
+           </ol>
+-          <pre className="bg-[#0A111F] border border-[#1E2D4A] rounded p-3 text-[10px] text-emerald-300 overflow-x-auto leading-tight">{`SMTP_HOST=smtp.gmail.com
+-SMTP_PORT=587
+-SMTP_USER=noreply@savicol.com
+-SMTP_PASS=xxxx xxxx xxxx xxxx
+-SMTP_FROM=Savicol Audit <noreply@savicol.com>
+-APP_BASE_URL=https://savicol-audit-platform.vercel.app`}</pre>
+-          <p className="text-[#94A3B8]">6. Railway redeploya automáticamente · espera ~1 minuto · vuelve aquí y ejecuta el test.</p>
++          <pre className="bg-[#0A111F] border border-[#1E2D4A] rounded p-3 text-[10px] text-emerald-300 overflow-x-auto leading-tight">{`BREVO_API_KEY=xkeysib-...
++SMTP_FROM=Auditoría Savicol <auditoriasavicol@gmail.com>
++APP_BASE_URL=https://savicol-audit-platform-web.vercel.app`}</pre>
++          <p className="text-[#94A3B8]">4. Railway redeploya automáticamente (~2 min) · vuelve aquí y ejecuta el test.</p>
+         </div>
+       )}
+     </div>

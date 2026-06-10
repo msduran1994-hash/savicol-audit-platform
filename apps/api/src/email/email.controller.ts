@@ -23,26 +23,31 @@ export class EmailController {
    */
   @Get("status")
   status() {
-    const host = process.env.SMTP_HOST ?? null;
-    const port = process.env.SMTP_PORT ?? "587";
-    const user = process.env.SMTP_USER ?? null;
-    const hasPass = !!process.env.SMTP_PASS;
-    const from = process.env.SMTP_FROM ?? null;
-    const baseUrl = process.env.APP_BASE_URL ?? null;
+    const hasBrevo  = !!process.env.BREVO_API_KEY?.trim();
+    const hasResend = !!process.env.RESEND_API_KEY?.trim();
+    const host      = process.env.SMTP_HOST ?? null;
+    const port      = process.env.SMTP_PORT ?? "587";
+    const smtpUser  = process.env.SMTP_USER ?? null;
+    const hasPass   = !!process.env.SMTP_PASS;
+    const from      = process.env.SMTP_FROM ?? null;
+    const baseUrl   = process.env.APP_BASE_URL ?? null;
+
+    const activeMode = hasBrevo ? "brevo" : hasResend ? "resend" : host ? "smtp" : "noop";
 
     return {
       configured: this.email.isConfigured,
-      mode: this.email.isConfigured ? "smtp" : "noop",
+      mode: activeMode,
+      brevo: { keySet: hasBrevo },
+      resend: { keySet: hasResend },
       smtp: {
         host,
         port,
-        user: user ? user.replace(/(.{2}).*(@.*)/, "$1***$2") : null, // mask
+        user: smtpUser ? smtpUser.replace(/(.{2}).*(@.*)/, "$1***$2") : null,
         passSet: hasPass,
-        passLength: hasPass ? (process.env.SMTP_PASS?.length ?? 0) : 0,
         from,
       },
       appBaseUrl: baseUrl,
-      diagnostics: this.buildDiagnostics(host, user, hasPass, baseUrl),
+      diagnostics: this.buildDiagnostics(hasBrevo, hasResend, host, smtpUser, hasPass, baseUrl),
     };
   }
 
@@ -69,7 +74,7 @@ export class EmailController {
           <tr><td style="padding:4px 10px;color:#94A3B8">Enviado por:</td><td style="padding:4px 10px;color:#FFF">${req.user.name} (${req.user.email})</td></tr>
           <tr><td style="padding:4px 10px;color:#94A3B8">Destinatario:</td><td style="padding:4px 10px;color:#FFF">${to}</td></tr>
           <tr><td style="padding:4px 10px;color:#94A3B8">Timestamp:</td><td style="padding:4px 10px;color:#FFF">${new Date().toISOString()}</td></tr>
-          <tr><td style="padding:4px 10px;color:#94A3B8">Modo:</td><td style="padding:4px 10px;color:#F59E0B">SMTP activo</td></tr>
+          <tr><td style="padding:4px 10px;color:#94A3B8">Modo:</td><td style="padding:4px 10px;color:#F59E0B">${process.env.BREVO_API_KEY ? "Brevo API" : process.env.RESEND_API_KEY ? "Resend API" : "SMTP"}</td></tr>
         </table>
         <p style="color:#94A3B8;font-size:11px;margin-top:24px">
           Si recibes este correo es porque alguien (probablemente tú) ha solicitado un test desde
@@ -99,27 +104,24 @@ export class EmailController {
   }
 
   // ── helpers de diagnóstico ──────────────────────────────────────────────
-  private buildDiagnostics(host: string | null, user: string | null, hasPass: boolean, baseUrl: string | null): string[] {
+  private buildDiagnostics(hasBrevo: boolean, hasResend: boolean, host: string | null, smtpUser: string | null, hasPass: boolean, baseUrl: string | null): string[] {
     const issues: string[] = [];
-    if (!host)    issues.push("❌ SMTP_HOST no está configurado en Railway · setea smtp.gmail.com para Gmail Workspace");
-    if (!user)    issues.push("❌ SMTP_USER no está configurado · usa una cuenta corporativa @savicol.com");
-    if (!hasPass) issues.push("❌ SMTP_PASS no está configurado · genera una App Password en myaccount.google.com/security");
-    if (!baseUrl) issues.push("⚠️ APP_BASE_URL no configurada · los links en correos pueden fallar · setea https://savicol-audit-platform.vercel.app");
-    if (host && hasPass && process.env.SMTP_PASS && process.env.SMTP_PASS.length < 16) {
-      issues.push("⚠️ SMTP_PASS parece tener menos de 16 caracteres · App Password Gmail debe ser de 16 chars (sin espacios)");
+    if (hasBrevo) {
+      issues.push("✅ Modo BREVO API activo · envío via HTTP/443 · sin bloqueo Railway");
+    } else if (hasResend) {
+      issues.push("✅ Modo RESEND API activo · envío via HTTP/443");
+    } else if (host && smtpUser && hasPass) {
+      issues.push("⚠️ Modo SMTP activo · Railway puede bloquear puertos 25/465/587 · se recomienda BREVO_API_KEY");
+    } else {
+      issues.push("❌ Sin configuración de email · configura BREVO_API_KEY en Railway → Variables");
     }
-    if (host === "smtp.gmail.com" && process.env.SMTP_PORT === "465") {
-      issues.push("⚠️ Puerto 465 detectado · Gmail recomienda 587 (STARTTLS)");
-    }
-    if (issues.length === 0 && host) {
-      issues.push("✅ Configuración SMTP completa · listo para enviar");
-    }
+    if (!baseUrl) issues.push("⚠️ APP_BASE_URL no configurada · los links en correos pueden fallar");
     return issues;
   }
 
   private buildHint(mode: string, ok: boolean, error?: string): string {
     if (mode === "noop") {
-      return "El servicio está en modo NO-OP. Para activar envío real, configura SMTP_HOST, SMTP_USER y SMTP_PASS en Railway → Variables, y redeploya el servicio API.";
+      return "El servicio está en modo NO-OP. Configura BREVO_API_KEY en Railway → Variables y redeploya.";
     }
     if (ok) {
       return "✅ Email enviado exitosamente. Revisa la bandeja de entrada en máximo 1-2 minutos. Si no aparece, revisa spam/promociones.";

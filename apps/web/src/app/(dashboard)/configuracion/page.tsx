@@ -875,6 +875,8 @@ function UsuariosSection({ user }: { user: any }) {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing]       = useState<AppUser | null>(null);
   const [pwdResult, setPwdResult]   = useState<{ email: string; password: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<AppUser | null>(null);
+  const [deletedEmail, setDeletedEmail]   = useState<string | null>(null);
 
   const usersQ        = useUsers({ search });
   const createUser    = useCreateUser();
@@ -1069,22 +1071,13 @@ function UsuariosSection({ user }: { user: any }) {
                           <KeyRound className="w-3 h-3"/>
                         </button>
                         <button
-                          onClick={async () => {
-                            if (!isAdmin) return;
-                            if (u.id === user?.id) {
-                              alert("No puedes eliminar tu propio usuario");
-                              return;
-                            }
-                            if (!confirm(`¿Eliminar definitivamente a ${u.email}?\nEsta acción no se puede deshacer.`)) return;
-                            try {
-                              await deleteUser.mutateAsync(u.id);
-                            } catch (e: any) {
-                              alert("Error: " + (e?.response?.data?.message ?? "Falló"));
-                            }
+                          onClick={() => {
+                            if (!isAdmin || u.id === user?.id) return;
+                            setConfirmDelete(u);
                           }}
                           disabled={!isAdmin || deleteUser.isPending || u.id === user?.id}
                           className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400 disabled:text-[#475569] disabled:cursor-not-allowed"
-                          title={u.id === user?.id ? "No puedes eliminarte" : "Eliminar"}
+                          title={u.id === user?.id ? "No puedes eliminarte" : "Eliminar usuario"}
                         >
                           <Trash2 className="w-3 h-3"/>
                         </button>
@@ -1130,6 +1123,30 @@ function UsuariosSection({ user }: { user: any }) {
       {/* Modal: Resultado contraseña temporal */}
       {pwdResult && (
         <TempPasswordModal data={pwdResult} onClose={() => setPwdResult(null)} />
+      )}
+
+      {/* Modal: Confirmar eliminación */}
+      {confirmDelete && (
+        <ConfirmDeleteModal
+          user={confirmDelete}
+          isPending={deleteUser.isPending}
+          onClose={() => setConfirmDelete(null)}
+          onConfirm={async () => {
+            try {
+              await deleteUser.mutateAsync(confirmDelete.id);
+              setDeletedEmail(confirmDelete.email);
+              setConfirmDelete(null);
+            } catch (e: any) {
+              alert("Error al eliminar: " + (e?.response?.data?.message ?? "Falló"));
+              setConfirmDelete(null);
+            }
+          }}
+        />
+      )}
+
+      {/* Toast: usuario eliminado */}
+      {deletedEmail && (
+        <DeletedToast email={deletedEmail} onClose={() => setDeletedEmail(null)} />
       )}
     </div>
   );
@@ -1323,11 +1340,17 @@ function TempPasswordModal({ data, onClose }: {
         </div>
 
         <div className="space-y-3">
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-emerald-300 flex items-start gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0"/>
+            <span>
+              Se envió un correo a <strong>{data.email}</strong> con esta contraseña temporal.
+              El usuario debe cambiarla en su primer login.
+            </span>
+          </div>
           <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 text-xs text-amber-300 flex items-start gap-2">
             <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0"/>
             <span>
-              Esta contraseña <strong>no se mostrará otra vez</strong>. Copiala y entregala al usuario {data.email}.
-              Debe cambiarla en su primer login.
+              Esta contraseña <strong>no se mostrará otra vez</strong>. Cópiala como respaldo por si el correo no llega.
             </span>
           </div>
 
@@ -1345,6 +1368,81 @@ function TempPasswordModal({ data, onClose }: {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Modal: Confirmar eliminación de usuario ─────────────────────────────── */
+function ConfirmDeleteModal({ user, isPending, onClose, onConfirm }: {
+  user: AppUser;
+  isPending: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-[#0D1526] border border-red-500/40 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center shrink-0">
+            <Trash2 className="w-5 h-5 text-red-400"/>
+          </div>
+          <div>
+            <h3 className="font-display font-bold text-white text-base">Eliminar usuario definitivamente</h3>
+            <p className="text-xs text-[#94A3B8] mt-0.5">Esta acción no se puede deshacer</p>
+          </div>
+        </div>
+
+        <div className="bg-[#1A2540] border border-[#2A3F6A] rounded-lg p-3 mb-4 space-y-1">
+          <p className="text-xs text-[#94A3B8]">Usuario a eliminar:</p>
+          <p className="text-sm text-white font-semibold">{user.name}</p>
+          <p className="text-xs text-[#64748B] font-mono">{user.email}</p>
+          <p className="text-xs text-amber-400">Rol: {user.role}</p>
+        </div>
+
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-xs text-red-300 mb-5 space-y-1">
+          <p>• Se eliminará el usuario y todas sus sesiones activas</p>
+          <p>• Sus invitaciones pendientes serán revocadas</p>
+          <p>• El correo <strong>{user.email}</strong> quedará libre para nuevos usuarios</p>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            disabled={isPending}
+            className="flex-1 px-3 py-2 rounded-lg bg-[#1A2540] border border-[#2A3F6A] text-[#94A3B8] text-sm"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isPending}
+            className="flex-1 px-3 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Trash2 className="w-3.5 h-3.5"/>}
+            {isPending ? "Eliminando..." : "Eliminar definitivamente"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Toast: confirmación de usuario eliminado ──────────────────────────────── */
+function DeletedToast({ email, onClose }: { email: string; onClose: () => void }) {
+  React.useEffect(() => {
+    const t = setTimeout(onClose, 5000);
+    return () => clearTimeout(t);
+  }, [onClose]);
+
+  return (
+    <div className="fixed bottom-6 right-6 z-50 bg-[#0D1526] border border-emerald-500/40 rounded-xl px-4 py-3 shadow-2xl flex items-center gap-3 max-w-sm">
+      <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0"/>
+      <div>
+        <p className="text-sm font-bold text-emerald-300">Usuario eliminado</p>
+        <p className="text-xs text-[#94A3B8] mt-0.5 font-mono">{email}</p>
+        <p className="text-[10px] text-[#475569] mt-0.5">Invitaciones revocadas · correo liberado</p>
+      </div>
+      <button onClick={onClose} className="ml-2 text-[#475569] hover:text-white"><X className="w-4 h-4"/></button>
     </div>
   );
 }
@@ -1947,8 +2045,8 @@ function NotificacionesSection() {
       <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 text-xs text-[#94A3B8]">
         <p>
           <strong className="text-blue-300">Notas:</strong> Las notificaciones in-app aparecen en la campana del header.
-          Los correos se envían vía SMTP corporativo (configurable en variables de entorno).
-          Si SMTP no está configurado, los correos se loguean en consola del backend.
+          Los correos se envían vía Brevo API (configurable en variables de entorno de Railway).
+          Si no está configurado, los correos se loguean en consola del backend (modo no-op).
         </p>
       </div>
 
@@ -2036,11 +2134,11 @@ function EmailDiagnosticCard() {
       <div>
         <h3 className="font-display font-bold text-white text-base flex items-center gap-2">
           <Mail className="w-4 h-4 text-amber-400"/>
-          Estado de correo SMTP
+          Estado de correo
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 font-bold uppercase">ADMIN</span>
         </h3>
         <p className="text-xs text-[#94A3B8] mt-1">
-          Diagnóstico de conexión SMTP y prueba de envío real.
+          Diagnóstico del servicio de email y prueba de envío real.
           Si los correos no llegan, ejecuta el test desde aquí para ver el error específico.
         </p>
       </div>
@@ -2070,7 +2168,11 @@ function EmailDiagnosticCard() {
             </div>
             <div className="flex-1">
               <p className={cn("text-sm font-bold", status.configured ? "text-emerald-300" : "text-amber-300")}>
-                {status.configured ? "SMTP configurado y listo" : "Modo NO-OP · los correos NO se envían"}
+                {status.configured
+                  ? status.mode === "brevo" ? "Brevo API activo · correos funcionando"
+                  : status.mode === "resend" ? "Resend API activo · correos funcionando"
+                  : "SMTP configurado y listo"
+                  : "Modo NO-OP · los correos NO se envían"}
               </p>
               <p className="text-[11px] text-[#94A3B8] mt-1">
                 Modo activo: <code className="text-cyan-300">{status.mode}</code>
@@ -2082,30 +2184,49 @@ function EmailDiagnosticCard() {
           <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-lg overflow-hidden">
             <table className="w-full text-xs">
               <tbody>
-                <tr className="border-b border-[#1E2D4A]/40">
-                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_HOST</td>
-                  <td className="px-3 py-2 text-white font-mono">{status.smtp.host ?? <span className="text-red-400">no configurado</span>}</td>
-                </tr>
-                <tr className="border-b border-[#1E2D4A]/40">
-                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_PORT</td>
-                  <td className="px-3 py-2 text-white font-mono">{status.smtp.port}</td>
-                </tr>
-                <tr className="border-b border-[#1E2D4A]/40">
-                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_USER</td>
-                  <td className="px-3 py-2 text-white font-mono">{status.smtp.user ?? <span className="text-red-400">no configurado</span>}</td>
-                </tr>
-                <tr className="border-b border-[#1E2D4A]/40">
-                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_PASS</td>
-                  <td className="px-3 py-2 font-mono">
-                    {status.smtp.passSet
-                      ? <span className="text-emerald-400">✓ configurada · {status.smtp.passLength} caracteres</span>
-                      : <span className="text-red-400">no configurada</span>}
-                  </td>
-                </tr>
-                <tr className="border-b border-[#1E2D4A]/40">
-                  <td className="px-3 py-2 text-[#94A3B8]">SMTP_FROM</td>
-                  <td className="px-3 py-2 text-white font-mono text-[10px]">{status.smtp.from ?? <span className="text-amber-400">usando default</span>}</td>
-                </tr>
+                {(status.mode === "brevo" || status.mode === "resend") ? (
+                  <>
+                    <tr className="border-b border-[#1E2D4A]/40">
+                      <td className="px-3 py-2 text-[#94A3B8]">{status.mode === "brevo" ? "BREVO_API_KEY" : "RESEND_API_KEY"}</td>
+                      <td className="px-3 py-2 font-mono">
+                        {(status.mode === "brevo" ? status.brevo?.keySet : status.resend?.keySet)
+                          ? <span className="text-emerald-400">✓ configurada</span>
+                          : <span className="text-red-400">no configurada</span>}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-[#1E2D4A]/40">
+                      <td className="px-3 py-2 text-[#94A3B8]">SMTP_FROM</td>
+                      <td className="px-3 py-2 text-white font-mono text-[10px]">{status.smtp.from ?? <span className="text-amber-400">usando default</span>}</td>
+                    </tr>
+                  </>
+                ) : (
+                  <>
+                    <tr className="border-b border-[#1E2D4A]/40">
+                      <td className="px-3 py-2 text-[#94A3B8]">SMTP_HOST</td>
+                      <td className="px-3 py-2 text-white font-mono">{status.smtp.host ?? <span className="text-red-400">no configurado</span>}</td>
+                    </tr>
+                    <tr className="border-b border-[#1E2D4A]/40">
+                      <td className="px-3 py-2 text-[#94A3B8]">SMTP_PORT</td>
+                      <td className="px-3 py-2 text-white font-mono">{status.smtp.port}</td>
+                    </tr>
+                    <tr className="border-b border-[#1E2D4A]/40">
+                      <td className="px-3 py-2 text-[#94A3B8]">SMTP_USER</td>
+                      <td className="px-3 py-2 text-white font-mono">{status.smtp.user ?? <span className="text-red-400">no configurado</span>}</td>
+                    </tr>
+                    <tr className="border-b border-[#1E2D4A]/40">
+                      <td className="px-3 py-2 text-[#94A3B8]">SMTP_PASS</td>
+                      <td className="px-3 py-2 font-mono">
+                        {status.smtp.passSet
+                          ? <span className="text-emerald-400">✓ configurada</span>
+                          : <span className="text-red-400">no configurada</span>}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-[#1E2D4A]/40">
+                      <td className="px-3 py-2 text-[#94A3B8]">SMTP_FROM</td>
+                      <td className="px-3 py-2 text-white font-mono text-[10px]">{status.smtp.from ?? <span className="text-amber-400">usando default</span>}</td>
+                    </tr>
+                  </>
+                )}
                 <tr>
                   <td className="px-3 py-2 text-[#94A3B8]">APP_BASE_URL</td>
                   <td className="px-3 py-2 text-white font-mono text-[10px]">{status.appBaseUrl ?? <span className="text-amber-400">usando default Vercel</span>}</td>
@@ -2184,24 +2305,19 @@ function EmailDiagnosticCard() {
         )}
       </div>
 
-      {/* Setup instructions */}
+      {/* Setup instructions — solo en modo noop */}
       {status && !status.configured && (
         <div className="bg-cyan-500/5 border border-cyan-500/30 rounded-lg p-4 text-xs text-[#E2E8F0] space-y-2">
-          <p className="font-bold text-cyan-300">📋 Pasos para activar envío real (Gmail Workspace)</p>
+          <p className="font-bold text-cyan-300">📋 Activar envío de correos (Brevo API — recomendado)</p>
           <ol className="list-decimal list-inside space-y-1.5 text-[#94A3B8] ml-1">
-            <li>Login en <code className="text-amber-300">myaccount.google.com</code> con cuenta corporativa (debe tener 2FA activado)</li>
-            <li>Security → 2-Step Verification → <strong>App passwords</strong></li>
-            <li>Select app: <strong>"Mail"</strong> · Select device: <strong>"Other (Custom name)"</strong> → "Savicol Audit Platform"</li>
-            <li>Generate · copia los <strong>16 caracteres</strong> (los espacios son visuales, el sistema los limpia)</li>
-            <li>En Railway → tu servicio API → <strong>Variables</strong>, agrega:</li>
+            <li>Crea cuenta gratuita en <code className="text-amber-300">app.brevo.com</code> (300 emails/día gratis)</li>
+            <li>Ve a <strong>SMTP &amp; API</strong> → <strong>API Keys</strong> → genera una nueva clave</li>
+            <li>En Railway → servicio <strong>savicol-api</strong> → <strong>Variables</strong>, agrega:</li>
           </ol>
-          <pre className="bg-[#0A111F] border border-[#1E2D4A] rounded p-3 text-[10px] text-emerald-300 overflow-x-auto leading-tight">{`SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=noreply@savicol.com
-SMTP_PASS=xxxx xxxx xxxx xxxx
-SMTP_FROM=Savicol Audit <noreply@savicol.com>
-APP_BASE_URL=https://savicol-audit-platform.vercel.app`}</pre>
-          <p className="text-[#94A3B8]">6. Railway redeploya automáticamente · espera ~1 minuto · vuelve aquí y ejecuta el test.</p>
+          <pre className="bg-[#0A111F] border border-[#1E2D4A] rounded p-3 text-[10px] text-emerald-300 overflow-x-auto leading-tight">{`BREVO_API_KEY=xkeysib-...
+SMTP_FROM=Auditoría Savicol <auditoriasavicol@gmail.com>
+APP_BASE_URL=https://savicol-audit-platform-web.vercel.app`}</pre>
+          <p className="text-[#94A3B8]">4. Railway redeploya automáticamente (~2 min) · vuelve aquí y ejecuta el test.</p>
         </div>
       )}
     </div>
