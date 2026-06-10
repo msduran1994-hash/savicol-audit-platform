@@ -20,7 +20,7 @@ export function SavicolLogo({ variant = "full", size = "md", className, inverted
   const { logoUrl, companyName } = useAppearanceStore();
   const s = SIZE_MAP[size];
 
-  const imgSrc = logoUrl || (variant !== "text" ? "/logo-savicol.svg" : null);
+  const imgSrc = logoUrl || (variant !== "text" ? "/logo-savicol.png" : null);
 
   if (imgSrc && variant !== "text") {
     const h = variant === "mark" ? s.mark : s.full;
