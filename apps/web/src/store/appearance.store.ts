@@ -19,7 +19,7 @@ export interface AppearanceState {
 }
 
 const DEFAULTS = {
-  theme:       "light" as ThemeMode,
+  theme:       "dark"  as ThemeMode,  // Dark Mode como predeterminado global
   fontSize:    "md"    as FontSize,
   logoUrl:     null    as string | null,
   faviconUrl:  null    as string | null,
