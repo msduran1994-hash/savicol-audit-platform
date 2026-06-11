@@ -38,7 +38,7 @@ const sections = [
   { id: "perfil",       label: "Perfil",          icon: User,      description: "Información personal y credenciales" },
   { id: "usuarios",     label: "Usuarios",         icon: Users,     description: "Crear y gestionar usuarios + roles" },
   { id: "invitaciones", label: "Invitaciones",     icon: Send,      description: "Enviar invitaciones por correo con token temporal" },
-  { id: "auditoria",    label: "Auditoría",        icon: FileSearch, description: "Registro de accesos · sesiones · cambios" },
+  { id: "auditoria",    label: "Auditoría",        icon: FileSearch, description: "Registro de accesos . sesiones . cambios" },
   { id: "seguridad",    label: "Seguridad",        icon: Shield,    description: "MFA, contraseña y sesiones activas" },
   { id: "notificaciones", label: "Notificaciones", icon: Bell,      description: "Alertas y recordatorios de auditoría" },
   { id: "apariencia",   label: "Apariencia",       icon: Palette,   description: "Tema, idioma y preferencias visuales" },
@@ -100,7 +100,7 @@ export default function ConfiguracionPage() {
   );
 }
 
-/* â”€â”€ Perfil â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ Perfil â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 function PerfilSection({ user }: { user: any }) {
   return (
     <div className="space-y-6">
@@ -112,8 +112,8 @@ function PerfilSection({ user }: { user: any }) {
           {user?.name?.slice(0,2).toUpperCase() ?? "AU"}
         </div>
         <div>
-          <p className="font-semibold text-white">{user?.name ?? ""”"}</p>
-          <p className="text-sm text-[#94A3B8]">{user?.email ?? ""”"}</p>
+          <p className="font-semibold text-white">{user?.name ?? """"}</p>
+          <p className="text-sm text-[#94A3B8]">{user?.email ?? """"}</p>
           <span className="inline-flex mt-1 px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium">
             {user?.role ?? "VIEWER"}
           </span>
@@ -123,10 +123,10 @@ function PerfilSection({ user }: { user: any }) {
       {/* Read-only fields */}
       <div className="grid grid-cols-2 gap-4">
         {[
-          { label: "Nombre completo", value: user?.name ?? ""”" },
-          { label: "Correo electrónico", value: user?.email ?? ""”" },
-          { label: "Rol asignado", value: user?.role ?? ""”" },
-          { label: "ID de usuario", value: user?.id ? user.id.slice(0, 12) + "..." : ""”" },
+          { label: "Nombre completo", value: user?.name ?? """" },
+          { label: "Correo electrónico", value: user?.email ?? """" },
+          { label: "Rol asignado", value: user?.role ?? """" },
+          { label: "ID de usuario", value: user?.id ? user.id.slice(0, 12) + "..." : """" },
         ].map(({ label, value }) => (
           <div key={label} className="space-y-1">
             <label className="text-xs text-[#64748B] tracking-wider uppercase">{label}</label>
@@ -138,13 +138,13 @@ function PerfilSection({ user }: { user: any }) {
       </div>
 
       <p className="text-xs text-[#475569] border border-[#1E2D4A] rounded-lg px-3 py-2">
-        â„¹ï¸ Los datos de perfil son administrados por el ADMIN de la plataforma. Para cambios, contacte al administrador del sistema.
+        â"¹ï¸ Los datos de perfil son administrados por el ADMIN de la plataforma. Para cambios, contacte al administrador del sistema.
       </p>
     </div>
   );
 }
 
-/* â”€â”€ Seguridad â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ Seguridad â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 function SeguridadSection() {
   const { user } = useAuthStore();
   const [current, setCurrent] = useState("");
@@ -200,7 +200,7 @@ function SeguridadSection() {
         </div>
       </div>
 
-      {/* Password change · CONECTADO al API */}
+      {/* Password change . CONECTADO al API */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-[#94A3B8]">Cambio de contraseña</h3>
         <div className="space-y-1">
@@ -244,10 +244,10 @@ function SeguridadSection() {
         </button>
       </div>
 
-      {/* SESSION POLICY · timeout por inactividad */}
+      {/* SESSION POLICY . timeout por inactividad */}
       <SessionPolicyCard userRole={user?.role}/>
 
-      {/* MIS SESIONES ACTIVAS · revocar todas */}
+      {/* MIS SESIONES ACTIVAS . revocar todas */}
       <MisSesionesCard userId={user?.id}/>
     </div>
   );
@@ -298,10 +298,10 @@ function SessionPolicyCard({ userRole }: { userRole?: string }) {
             {Object.entries(SESSION_POLICIES).map(([role, p]: any) => (
               <tr key={role} className={cn("border-t border-[#1E2D4A]/40", role === userRole?.toUpperCase() && "bg-amber-500/5")}>
                 <td className="px-3 py-2 text-white font-semibold">
-                  {role === userRole?.toUpperCase() && "â†’ "}{p.label}
+                  {role === userRole?.toUpperCase() && "â†' "}{p.label}
                 </td>
                 <td className="px-3 py-2 text-[#94A3B8]">{p.description}</td>
-                <td className="px-3 py-2 text-center text-amber-300">{p.warningMinutes > 0 ? `${p.warningMinutes}min` : ""”"}</td>
+                <td className="px-3 py-2 text-center text-amber-300">{p.warningMinutes > 0 ? `${p.warningMinutes}min` : """"}</td>
                 <td className="px-3 py-2 text-center text-red-300">{p.timeoutMinutes > 0 ? `${p.timeoutMinutes}min` : "Sin timeout"}</td>
               </tr>
             ))}
@@ -311,7 +311,7 @@ function SessionPolicyCard({ userRole }: { userRole?: string }) {
 
       <p className="text-[10px] text-[#475569]">
         El temporizador se reinicia con cualquier actividad (mouse, teclado, scroll, touch).
-        Las sesiones cerradas por inactividad se registran en <strong className="text-cyan-400">Auditoría â†’ Accesos</strong> con acción LOGOUT y metadata.reason=idle_timeout.
+        Las sesiones cerradas por inactividad se registran en <strong className="text-cyan-400">Auditoría â†' Accesos</strong> con acción LOGOUT y metadata.reason=idle_timeout.
       </p>
     </div>
   );
@@ -326,7 +326,7 @@ function MisSesionesCard({ userId }: { userId?: string }) {
         <p>
           Las sesiones activas globales (todos los usuarios) se gestionan desde
           <a href="#" onClick={(e) => { e.preventDefault(); }} className="text-cyan-400 hover:underline ml-1">
-            Auditoría â†’ Sesiones
+            Auditoría â†' Sesiones
           </a> (solo admin).
         </p>
         <p className="mt-2 text-[10px] text-[#475569]">
@@ -337,7 +337,7 @@ function MisSesionesCard({ userId }: { userId?: string }) {
   );
 }
 
-/* â”€â”€ Datos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ Datos â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 function DatosSection() {
   return (
     <div className="space-y-6">
@@ -345,9 +345,9 @@ function DatosSection() {
 
       <div className="grid gap-3">
         {[
-          { label: "Importación masiva (CSV)", desc: "Carga lotes de granjas, hallazgos, KPIs, cronograma o CEDIS desde CSV", icon: "ðŸ“¥", href: "/configuracion/importar" },
-          { label: "Exportar Excel · módulos", desc: "Cada módulo (Granjas, Rutas, CEDIS, Cronograma) tiene su propio botón Excel/CSV", icon: "ðŸ“Š", href: "/cedis/reportes" },
-          { label: "Power BI · tokens API", desc: "Genera tokens externos para integración Power BI/datos en vivo", icon: "ðŸ”‘", href: undefined, section: "api" as const },
+          { label: "Importación masiva (CSV)", desc: "Carga lotes de granjas, hallazgos, KPIs, cronograma o CEDIS desde CSV", icon: "ðŸ"¥", href: "/configuracion/importar" },
+          { label: "Exportar Excel . módulos", desc: "Cada módulo (Granjas, Rutas, CEDIS, Cronograma) tiene su propio botón Excel/CSV", icon: "ðŸ"Š", href: "/cedis/reportes" },
+          { label: "Power BI . tokens API", desc: "Genera tokens externos para integración Power BI/datos en vivo", icon: "ðŸ"'", href: undefined, section: "api" as const },
         ].map((it: any) => (
           <a
             key={it.label}
@@ -363,20 +363,20 @@ function DatosSection() {
               </div>
             </div>
             <span className="px-3 py-1.5 text-xs rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 group-hover:bg-cyan-500/20">
-              Abrir â†’
+              Abrir â†'
             </span>
           </a>
         ))}
       </div>
 
       <p className="text-xs text-[#475569] border border-[#1E2D4A] rounded-lg px-3 py-2">
-        â„¹ï¸ Las funciones de exportación e importación estarán disponibles tras completar la integración con el API. Solo se procesarán datos reales.
+        â"¹ï¸ Las funciones de exportación e importación estarán disponibles tras completar la integración con el API. Solo se procesarán datos reales.
       </p>
     </div>
   );
 }
 
-/* â”€â”€ API & Tokens · CONECTADO AL API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ API & Tokens . CONECTADO AL API â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 function ApiSection() {
   const { user } = useAuthStore();
   const isAdmin = user?.role === "ADMIN";
@@ -422,26 +422,26 @@ function ApiSection() {
 
   return (
     <div className="space-y-6">
-      <h2 className="font-display font-bold text-lg text-white">API · Power BI · Google Analytics</h2>
+      <h2 className="font-display font-bold text-lg text-white">API . Power BI . Google Analytics</h2>
 
       {/* Banner informativo */}
       <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
         <p className="text-sm text-blue-300 font-medium mb-1">Integraciones activas</p>
         <ul className="text-xs text-[#94A3B8] space-y-1 list-disc list-inside">
-          <li>Power BI · acceso directo a 8 datasets vía X-API-Token</li>
-          <li>Google Analytics 4 · tracking pageviews + eventos custom</li>
-          <li>Power BI embed · iframe configurable desde aquí</li>
+          <li>Power BI . acceso directo a 8 datasets vía X-API-Token</li>
+          <li>Google Analytics 4 . tracking pageviews + eventos custom</li>
+          <li>Power BI embed . iframe configurable desde aquí</li>
         </ul>
       </div>
 
-      {/* â”€â”€ Power BI embed URL â”€â”€ */}
+      {/* â"€â"€ Power BI embed URL â"€â"€ */}
       <div className="card-base p-4 space-y-3">
         <div className="flex items-start gap-3">
           <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
             <Database className="w-4 h-4 text-amber-400"/>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-white">Power BI · URL de embed</p>
+            <p className="text-sm font-semibold text-white">Power BI . URL de embed</p>
             <p className="text-xs text-[#64748B] mt-0.5">
               Pega aquí la URL de Power BI "Publish to web" o "Embed in app"
             </p>
@@ -468,27 +468,27 @@ function ApiSection() {
               href="/indicadores/powerbi"
               className="px-3 py-1.5 rounded-lg bg-[#1A2540] border border-[#2A3F6A] text-xs text-[#94A3B8] hover:text-white"
             >
-              Ver embed â†’
+              Ver embed â†'
             </a>
           )}
           {savedMsg?.key === "integrations.powerBiEmbedUrl" && (
             <span className={cn("text-xs", savedMsg.ok ? "text-emerald-400" : "text-red-400")}>
-              {savedMsg.ok ? "âœ“ Guardado" : "âœ— Error"}
+              {savedMsg.ok ? "âœ" Guardado" : "âœ-- Error"}
             </span>
           )}
         </div>
       </div>
 
-      {/* â”€â”€ Google Analytics ID â”€â”€ */}
+      {/* â"€â"€ Google Analytics ID â"€â"€ */}
       <div className="card-base p-4 space-y-3">
         <div className="flex items-start gap-3">
           <div className="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
             <Activity className="w-4 h-4 text-blue-400"/>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-white">Google Analytics 4 · Measurement ID</p>
+            <p className="text-sm font-semibold text-white">Google Analytics 4 . Measurement ID</p>
             <p className="text-xs text-[#64748B] mt-0.5">
-              Formato G-XXXXXXXXXX (lo encuentras en Admin â†’ Data Streams)
+              Formato G-XXXXXXXXXX (lo encuentras en Admin â†' Data Streams)
             </p>
           </div>
         </div>
@@ -511,18 +511,18 @@ function ApiSection() {
           </button>
           {savedMsg?.key === "integrations.googleAnalyticsId" && (
             <span className={cn("text-xs", savedMsg.ok ? "text-emerald-400" : "text-red-400")}>
-              {savedMsg.ok ? "âœ“ Guardado · refrescá la página para activar" : "âœ— Error"}
+              {savedMsg.ok ? "âœ" Guardado . refrescá la página para activar" : "âœ-- Error"}
             </span>
           )}
         </div>
       </div>
 
-      {/* â”€â”€ API Tokens â”€â”€ */}
+      {/* â"€â"€ API Tokens â"€â"€ */}
       <div className="card-base p-4">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-              <Key className="w-4 h-4 text-amber-400"/> Tokens API · Power BI / scripts externos
+              <Key className="w-4 h-4 text-amber-400"/> Tokens API . Power BI / scripts externos
             </h3>
             <p className="text-xs text-[#64748B] mt-0.5">
               Tokens permanentes para servicios que no inician sesión humana
@@ -630,11 +630,11 @@ function ApiSection() {
         )}
       </div>
 
-      {/* â”€â”€ Instrucciones Power BI Desktop â”€â”€ */}
+      {/* â"€â"€ Instrucciones Power BI Desktop â"€â"€ */}
       <div className="card-base p-4 bg-blue-500/5 border-blue-500/20">
-        <h3 className="text-sm font-semibold text-blue-300 mb-2">ðŸ“Š Conectar Power BI Desktop</h3>
+        <h3 className="text-sm font-semibold text-blue-300 mb-2">ðŸ"Š Conectar Power BI Desktop</h3>
         <ol className="text-xs text-[#94A3B8] space-y-2 list-decimal list-inside">
-          <li>En Power BI Desktop · <code className="text-amber-400">Obtener datos â†’ Web</code></li>
+          <li>En Power BI Desktop . <code className="text-amber-400">Obtener datos â†' Web</code></li>
           <li>Elegí <code className="text-amber-400">Avanzado</code> e ingresá:
             <div className="ml-4 mt-1 space-y-1">
               <p>URL: <code className="text-emerald-300">{apiBase}/api/v1/powerbi/granjas</code></p>
@@ -642,12 +642,12 @@ function ApiSection() {
               <p className="ml-3"><code className="text-emerald-300">X-API-Token = savicol_pk_XXXXXXXX</code></p>
             </div>
           </li>
-          <li>Cargar · Power BI ingiere el JSON automáticamente</li>
+          <li>Cargar . Power BI ingiere el JSON automáticamente</li>
           <li>Repetir para cada dataset: rutas, cedis, hallazgos-granjas, hallazgos-cedis, kpis, cronograma, summary</li>
           <li>Programar refresh en Power BI Service para datos actualizados</li>
         </ol>
         <p className="text-[10px] text-[#475569] mt-3">
-          ðŸ“š Discovery endpoint: <code className="text-amber-400">GET /api/v1/powerbi/metadata</code> · lista todos los datasets disponibles
+          ðŸ"š Discovery endpoint: <code className="text-amber-400">GET /api/v1/powerbi/metadata</code> . lista todos los datasets disponibles
         </p>
       </div>
 
@@ -671,7 +671,7 @@ function ApiSection() {
   );
 }
 
-/* â”€â”€ Modal: Crear API Token â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ Modal: Crear API Token â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 function CreateTokenModal({ onClose, onCreated, mutation }: {
   onClose: () => void;
   onCreated: (r: any) => void;
@@ -683,14 +683,14 @@ function CreateTokenModal({ onClose, onCreated, mutation }: {
   const [error, setError]     = useState("");
 
   const SCOPE_OPTIONS = [
-    { id: "powerbi:read",     label: "Power BI · lectura de datasets" },
-    { id: "reports:read",     label: "Reports · descarga Excel/CSV" },
-    { id: "dashboards:read",  label: "Dashboards · KPIs ejecutivos" },
-    { id: "granjas:read",     label: "Granjas · solo este módulo" },
-    { id: "rutas:read",       label: "Rutas · solo este módulo" },
-    { id: "cedis:read",       label: "CEDIS · solo este módulo" },
-    { id: "hallazgos:read",   label: "Hallazgos · solo este módulo" },
-    { id: "all:read",         label: "Todo · lectura completa" },
+    { id: "powerbi:read",     label: "Power BI . lectura de datasets" },
+    { id: "reports:read",     label: "Reports . descarga Excel/CSV" },
+    { id: "dashboards:read",  label: "Dashboards . KPIs ejecutivos" },
+    { id: "granjas:read",     label: "Granjas . solo este módulo" },
+    { id: "rutas:read",       label: "Rutas . solo este módulo" },
+    { id: "cedis:read",       label: "CEDIS . solo este módulo" },
+    { id: "hallazgos:read",   label: "Hallazgos . solo este módulo" },
+    { id: "all:read",         label: "Todo . lectura completa" },
   ];
 
   const submit = async () => {
@@ -756,7 +756,7 @@ function CreateTokenModal({ onClose, onCreated, mutation }: {
           </div>
 
           <div>
-            <label className="text-xs text-[#64748B]">Expiración (días · dejar vacío = sin expiración)</label>
+            <label className="text-xs text-[#64748B]">Expiración (días . dejar vacío = sin expiración)</label>
             <input
               type="number" min="1" max="365"
               value={expDays}
@@ -791,7 +791,7 @@ function CreateTokenModal({ onClose, onCreated, mutation }: {
   );
 }
 
-/* â”€â”€ Modal: Token recién creado â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ Modal: Token recién creado â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 function TokenRevealModal({ data, onClose }: {
   data: { name: string; token: string };
   onClose: () => void;
@@ -802,7 +802,7 @@ function TokenRevealModal({ data, onClose }: {
       <div className="bg-[#0D1526] border border-amber-500/40 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-display font-bold text-white text-lg flex items-center gap-2">
-            <Key className="w-4 h-4 text-amber-400"/> Token generado · "{data.name}"
+            <Key className="w-4 h-4 text-amber-400"/> Token generado . "{data.name}"
           </h3>
           <button onClick={onClose} className="text-[#475569] hover:text-white"><X className="w-4 h-4"/></button>
         </div>
@@ -845,7 +845,7 @@ function TokenRevealModal({ data, onClose }: {
   );
 }
 
-/* â”€â”€ Placeholder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ Placeholder â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 function PlaceholderSection({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -858,7 +858,7 @@ function PlaceholderSection({ label }: { label: string }) {
   );
 }
 
-/* â”€â”€ Apariencia â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ Apariencia â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 function AparienciaSection({ user }: { user: any }) {
   const isAdmin = user?.role === "ADMIN";
   const { theme, fontSize, logoUrl, companyName,
@@ -894,7 +894,7 @@ function AparienciaSection({ user }: { user: any }) {
     setSaving(true);
     setSaveError(null);
     try {
-      // Persiste el branding en backend â†’ global para TODOS los usuarios
+      // Persiste el branding en backend â†' global para TODOS los usuarios
       await upsertSetting.mutateAsync({
         key: "brand.logoUrl",
         value: logoUrl ?? "",
@@ -926,9 +926,9 @@ function AparienciaSection({ user }: { user: any }) {
   }
 
   const themeOptions: { value: "light" | "dark"; label: string; desc: string; preview: string }[] = [
-    { value: "light", label: "Light Mode", desc: "Corporativo Ejecutivo · Fondo blanco",
+    { value: "light", label: "Light Mode", desc: "Corporativo Ejecutivo . Fondo blanco",
       preview: "bg-white border-gray-200 text-gray-800" },
-    { value: "dark",  label: "Dark Mode",  desc: "Executive Obsidian · Fondo oscuro",
+    { value: "dark",  label: "Dark Mode",  desc: "Executive Obsidian . Fondo oscuro",
       preview: "bg-[#0D1526] border-[#2A3F6A] text-white" },
   ];
 
@@ -954,7 +954,7 @@ function AparienciaSection({ user }: { user: any }) {
         )}
       </div>
 
-      {/* â”€â”€ Tema â”€â”€ */}
+      {/* â"€â"€ Tema â"€â"€ */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Modo de visualización</h3>
         <div className="grid grid-cols-2 gap-3">
@@ -988,7 +988,7 @@ function AparienciaSection({ user }: { user: any }) {
         </div>
       </div>
 
-      {/* â”€â”€ Tipografía â”€â”€ */}
+      {/* â"€â"€ Tipografía â"€â"€ */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Tamaño de fuente</h3>
         <div className="flex gap-2">
@@ -1010,11 +1010,11 @@ function AparienciaSection({ user }: { user: any }) {
           ))}
         </div>
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          Tipografía corporativa: <strong>Inter</strong> · Sistema diseñado para legibilidad ejecutiva
+          Tipografía corporativa: <strong>Inter</strong> . Sistema diseñado para legibilidad ejecutiva
         </p>
       </div>
 
-      {/* â”€â”€ Logo corporativo â”€â”€ */}
+      {/* â"€â"€ Logo corporativo â"€â"€ */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Logo corporativo</h3>
         <div className="rounded-xl p-4 space-y-4"
@@ -1036,10 +1036,10 @@ function AparienciaSection({ user }: { user: any }) {
           </div>
           <div>
             <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-              {logoUrl ? "âœ“ Logo personalizado activo" : "Logo SAVICOL predeterminado"}
+              {logoUrl ? "âœ" Logo personalizado activo" : "Logo SAVICOL predeterminado"}
             </p>
             <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-              Formatos: PNG, SVG, JPG, WebP · Recomendado: SVG o PNG con fondo transparente · Máx 2 MB
+              Formatos: PNG, SVG, JPG, WebP . Recomendado: SVG o PNG con fondo transparente . Máx 2 MB
             </p>
           </div>
 
@@ -1061,7 +1061,7 @@ function AparienciaSection({ user }: { user: any }) {
         </div>
       </div>
 
-      {/* â”€â”€ Nombre empresa â”€â”€ */}
+      {/* â"€â"€ Nombre empresa â"€â"€ */}
       <div className="space-y-2">
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Nombre corporativo</h3>
         <input
@@ -1077,14 +1077,14 @@ function AparienciaSection({ user }: { user: any }) {
         </p>
       </div>
 
-      {/* â”€â”€ Colores corporativos (informativo) â”€â”€ */}
+      {/* â"€â"€ Colores corporativos (informativo) â"€â"€ */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Identidad cromática</h3>
         <div className="grid grid-cols-3 gap-3">
           {[
-            { name: "Azul Corporativo", hex: "#1A3A8F", use: "Sidebar · botones primarios" },
-            { name: "Rojo Corporativo", hex: "#C41230", use: "Acento · alertas · badges" },
-            { name: "Blanco Ejecutivo", hex: "#FFFFFF", use: "Fondos · texto inverso", border: true },
+            { name: "Azul Corporativo", hex: "#1A3A8F", use: "Sidebar . botones primarios" },
+            { name: "Rojo Corporativo", hex: "#C41230", use: "Acento . alertas . badges" },
+            { name: "Blanco Ejecutivo", hex: "#FFFFFF", use: "Fondos . texto inverso", border: true },
           ].map(c => (
             <div key={c.name} className="rounded-xl p-3"
                  style={{ background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
@@ -1098,7 +1098,7 @@ function AparienciaSection({ user }: { user: any }) {
         </div>
       </div>
 
-      {/* â”€â”€ Error de guardado â”€â”€ */}
+      {/* â"€â"€ Error de guardado â"€â"€ */}
       {saveError && (
         <div className="rounded-lg px-3 py-2 text-xs flex items-center gap-2"
              style={{ background: "rgba(196,18,48,0.08)", border: "1px solid rgba(196,18,48,0.20)", color: "#C41230" }}>
@@ -1106,14 +1106,14 @@ function AparienciaSection({ user }: { user: any }) {
         </div>
       )}
 
-      {/* â”€â”€ Actions â”€â”€ */}
+      {/* â"€â"€ Actions â"€â"€ */}
       {isAdmin && (
         <div className="flex items-center gap-3 pt-2">
           <button onClick={handleSave} disabled={saving} className="btn-primary gap-2 text-sm">
             {saving
               ? <><Loader2 className="w-4 h-4 animate-spin" /> Guardando"¦</>
               : saved
-                ? <><CheckCircle2 className="w-4 h-4" /> Guardado · visible para todos</>
+                ? <><CheckCircle2 className="w-4 h-4" /> Guardado . visible para todos</>
                 : "Guardar configuración"}
           </button>
           <button
@@ -1135,14 +1135,14 @@ function AparienciaSection({ user }: { user: any }) {
   );
 }
 
-/* â”€â”€ Usuarios · CONECTADO AL API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ Usuarios . CONECTADO AL API â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 const ROLES_CATALOG = [
-  { id: "ADMIN",      label: "Administrador", desc: "Acceso total · gestiona usuarios, datos y configuración",     color: "#EF4444" },
-  { id: "AUDITOR",    label: "Auditor",       desc: "Crear · Editar · Guardar · Actualizar registros operativos",  color: "#3B82F6" },
-  { id: "SUPERVISOR", label: "Supervisor",    desc: "Supervisa auditores · Aprueba hallazgos",                     color: "#F59E0B" },
-  { id: "AUDITEE",    label: "Auditeo",       desc: "Usuario auditado · Lectura limitada a sus registros",         color: "#06B6D4" },
-  { id: "VIEWER",     label: "Visualizador",  desc: "Solo consulta · no puede modificar registros",                color: "#94A3B8" },
-  { id: "AI_AGENT",   label: "Agente IA",     desc: "Agente automatizado · permisos restringidos",                 color: "#8B5CF6" },
+  { id: "ADMIN",      label: "Administrador", desc: "Acceso total . gestiona usuarios, datos y configuración",     color: "#EF4444" },
+  { id: "AUDITOR",    label: "Auditor",       desc: "Crear . Editar . Guardar . Actualizar registros operativos",  color: "#3B82F6" },
+  { id: "SUPERVISOR", label: "Supervisor",    desc: "Supervisa auditores . Aprueba hallazgos",                     color: "#F59E0B" },
+  { id: "AUDITEE",    label: "Auditeo",       desc: "Usuario auditado . Lectura limitada a sus registros",         color: "#06B6D4" },
+  { id: "VIEWER",     label: "Visualizador",  desc: "Solo consulta . no puede modificar registros",                color: "#94A3B8" },
+  { id: "AI_AGENT",   label: "Agente IA",     desc: "Agente automatizado . permisos restringidos",                 color: "#8B5CF6" },
 ];
 
 const roleColor = (role: string) =>
@@ -1196,9 +1196,9 @@ function UsuariosSection({ user }: { user: any }) {
             {user?.name?.slice(0,2).toUpperCase() ?? "AU"}
           </div>
           <div className="flex-1">
-            <p className="font-semibold text-white">{user?.name ?? ""”"}</p>
+            <p className="font-semibold text-white">{user?.name ?? """"}</p>
             <p className="text-xs text-[#94A3B8] flex items-center gap-1.5 mt-0.5">
-              <Mail className="w-3 h-3"/> {user?.email ?? ""”"}
+              <Mail className="w-3 h-3"/> {user?.email ?? """"}
             </p>
           </div>
           <span
@@ -1370,7 +1370,7 @@ function UsuariosSection({ user }: { user: any }) {
         </div>
         {!isAdmin && (
           <p className="text-xs text-[#475569] mt-3 border border-[#1E2D4A] rounded-lg px-3 py-2">
-            â„¹ï¸ Las acciones de creación, edición, cambio de rol y eliminación requieren rol ADMIN.
+            â"¹ï¸ Las acciones de creación, edición, cambio de rol y eliminación requieren rol ADMIN.
           </p>
         )}
       </div>
@@ -1431,7 +1431,7 @@ function UsuariosSection({ user }: { user: any }) {
   );
 }
 
-/* â”€â”€ Modal: Crear usuario â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ Modal: Crear usuario â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 function CreateUserModal({ onClose, onCreated, mutation }: {
   onClose: () => void;
   onCreated: (r: { email: string; tempPassword?: string }) => void;
@@ -1500,7 +1500,7 @@ function CreateUserModal({ onClose, onCreated, mutation }: {
             </select>
           </div>
           <p className="text-xs text-[#475569] border border-[#1E2D4A] rounded-lg px-3 py-2">
-            â„¹ï¸ Se generará una contraseña temporal de 16 caracteres seguros. El usuario debe cambiarla en su primer login.
+            â"¹ï¸ Se generará una contraseña temporal de 16 caracteres seguros. El usuario debe cambiarla en su primer login.
           </p>
 
           {error && (
@@ -1528,7 +1528,7 @@ function CreateUserModal({ onClose, onCreated, mutation }: {
   );
 }
 
-/* â”€â”€ Modal: Editar usuario â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ Modal: Editar usuario â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 function EditUserModal({ user, onClose, onSaved, mutation }: {
   user: AppUser;
   onClose: () => void;
@@ -1595,7 +1595,7 @@ function EditUserModal({ user, onClose, onSaved, mutation }: {
   );
 }
 
-/* â”€â”€ Modal: Contraseña temporal generada â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ Modal: Contraseña temporal generada â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 function TempPasswordModal({ data, onClose }: {
   data: { email: string; password: string };
   onClose: () => void;
@@ -1651,7 +1651,7 @@ function TempPasswordModal({ data, onClose }: {
   );
 }
 
-/* â”€â”€ Modal: Confirmar eliminación de usuario â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ Modal: Confirmar eliminación de usuario â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 function ConfirmDeleteModal({ user, isPending, onClose, onConfirm }: {
   user: AppUser;
   isPending: boolean;
@@ -1706,7 +1706,7 @@ function ConfirmDeleteModal({ user, isPending, onClose, onConfirm }: {
   );
 }
 
-/* â”€â”€ Toast: confirmación de usuario eliminado â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â"€â"€ Toast: confirmación de usuario eliminado â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 function DeletedToast({ email, onClose }: { email: string; onClose: () => void }) {
   React.useEffect(() => {
     const t = setTimeout(onClose, 5000);
@@ -1719,16 +1719,16 @@ function DeletedToast({ email, onClose }: { email: string; onClose: () => void }
       <div>
         <p className="text-sm font-bold text-emerald-300">Usuario eliminado</p>
         <p className="text-xs text-[#94A3B8] mt-0.5 font-mono">{email}</p>
-        <p className="text-[10px] text-[#475569] mt-0.5">Invitaciones revocadas · correo liberado</p>
+        <p className="text-[10px] text-[#475569] mt-0.5">Invitaciones revocadas . correo liberado</p>
       </div>
       <button onClick={onClose} className="ml-2 text-[#475569] hover:text-white"><X className="w-4 h-4"/></button>
     </div>
   );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// INVITACIONES · admin
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
+// INVITACIONES . admin
+// â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 function InvitacionesSection() {
   const [status, setStatus]       = useState<string>("");
   const [showInvite, setShowInvite] = useState(false);
@@ -1747,7 +1747,7 @@ function InvitacionesSection() {
         <div>
           <h2 className="font-display font-bold text-lg text-white">Invitaciones de usuarios</h2>
           <p className="text-xs text-[#94A3B8] mt-1">
-            Envía invitaciones por correo · el usuario crea su propia contraseña vía token temporal (24h).
+            Envía invitaciones por correo . el usuario crea su propia contraseña vía token temporal (24h).
           </p>
         </div>
         <button onClick={() => setShowInvite(true)} className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-1.5">
@@ -1773,7 +1773,7 @@ function InvitacionesSection() {
         <div className="px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs flex items-start gap-2">
           <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>
           <div>
-            <p className="font-semibold mb-1">SMTP no configurado "” link generado manualmente:</p>
+            <p className="font-semibold mb-1">SMTP no configurado "" link generado manualmente:</p>
             <p className="text-[10px] text-cyan-200 break-all">{resentLink}</p>
             <button onClick={() => { navigator.clipboard.writeText(resentLink); setResentLink(null); }} className="text-[10px] underline mt-1">Copiar y cerrar</button>
           </div>
@@ -1786,7 +1786,7 @@ function InvitacionesSection() {
         ) : items.length === 0 ? (
           <div className="py-10 text-center">
             <Send className="w-8 h-8 text-[#1E2D4A] mx-auto mb-3"/>
-            <p className="text-xs text-[#94A3B8]">No hay invitaciones {status && `· status: ${status}`}</p>
+            <p className="text-xs text-[#94A3B8]">No hay invitaciones {status && `. status: ${status}`}</p>
           </div>
         ) : items.map(inv => {
           const expired = inv.status === "EXPIRED" || (inv.status === "PENDING" && new Date(inv.expiresAt).getTime() < Date.now());
@@ -1807,9 +1807,9 @@ function InvitacionesSection() {
                 </div>
                 <p className="text-[11px] text-[#94A3B8]">{inv.email}</p>
                 <p className="text-[10px] text-[#475569] mt-0.5">
-                  Invitado por {inv.invitedByName} · {new Date(inv.createdAt).toLocaleDateString("es-CO")}
-                  {inv.status === "PENDING" && !expired && ` · expira ${new Date(inv.expiresAt).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })}`}
-                  {inv.status === "ACCEPTED" && inv.acceptedAt && ` · aceptada ${new Date(inv.acceptedAt).toLocaleDateString("es-CO")}`}
+                  Invitado por {inv.invitedByName} . {new Date(inv.createdAt).toLocaleDateString("es-CO")}
+                  {inv.status === "PENDING" && !expired && ` . expira ${new Date(inv.expiresAt).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })}`}
+                  {inv.status === "ACCEPTED" && inv.acceptedAt && ` . aceptada ${new Date(inv.acceptedAt).toLocaleDateString("es-CO")}`}
                 </p>
               </div>
               {inv.status === "PENDING" && (
@@ -1912,7 +1912,7 @@ function InviteModal({ onClose, onSubmit }: {
             <label className="text-xs text-[#94A3B8] mb-1.5 block">Rol</label>
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="input-base">
               {ROLES_CATALOG.filter(r => r.id !== "AI_AGENT").map(r => (
-                <option key={r.id} value={r.id}>{r.label} · {r.id}</option>
+                <option key={r.id} value={r.id}>{r.label} . {r.id}</option>
               ))}
             </select>
           </div>
@@ -1935,9 +1935,9 @@ function InviteModal({ onClose, onSubmit }: {
   );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// AUDITORÁA · access logs + sesiones activas + cambios cronograma
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
+// AUDITORÁA . access logs + sesiones activas + cambios cronograma
+// â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 const ACTION_LABEL: Record<string, string> = {
   LOGIN_SUCCESS:    "Login exitoso",
   LOGIN_FAILED:     "Login fallido",
@@ -2096,9 +2096,9 @@ function AccessLogsTab({ search, setSearch, action, setAction }: {
                           {label}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-[#94A3B8] font-mono">{l.ipAddress ?? ""”"}</td>
+                      <td className="px-3 py-2 text-[#94A3B8] font-mono">{l.ipAddress ?? """"}</td>
                       <td className="px-3 py-2 text-[#475569] truncate max-w-[260px]" title={l.userAgent ?? ""}>
-                        {l.userAgent ? l.userAgent.split(" ").slice(0, 2).join(" ") : ""”"}
+                        {l.userAgent ? l.userAgent.split(" ").slice(0, 2).join(" ") : """"}
                       </td>
                     </tr>
                   );
@@ -2135,9 +2135,9 @@ function SessionsTab() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-white font-semibold truncate">{s.user.name}</p>
-                <p className="text-[10px] text-[#94A3B8] truncate">{s.user.email} · {s.user.role}</p>
+                <p className="text-[10px] text-[#94A3B8] truncate">{s.user.email} . {s.user.role}</p>
                 <p className="text-[10px] text-[#475569] mt-0.5">
-                  IP {s.ipAddress ?? ""”"} · {s.userAgent?.split(" ").slice(0, 2).join(" ") ?? ""”"}
+                  IP {s.ipAddress ?? """"} . {s.userAgent?.split(" ").slice(0, 2).join(" ") ?? """"}
                 </p>
               </div>
               <div className="text-right text-[10px]">
@@ -2191,7 +2191,7 @@ function ActivityLogsTab() {
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-300">{l.action}</span>
                   </td>
                   <td className="px-3 py-2 text-[#94A3B8] truncate max-w-[300px]">
-                    {l.activity?.activity ?? ""”"} ({l.activity?.area})
+                    {l.activity?.activity ?? """"} ({l.activity?.area})
                   </td>
                 </tr>
               ))}
@@ -2203,9 +2203,9 @@ function ActivityLogsTab() {
   );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// NOTIFICACIONES · preferencias por canal (in-app / email) por tipo
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
+// NOTIFICACIONES . preferencias por canal (in-app / email) por tipo
+// â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 const NOTIF_KINDS: Array<{ id: string; label: string; desc: string; severity: string }> = [
   { id: "USER_CREATED",        label: "Usuario creado",          desc: "Cuando se crea tu cuenta o creas usuarios", severity: "INFO" },
   { id: "ROLE_CHANGED",        label: "Cambio de rol",           desc: "Cuando tu rol o el de un usuario cambia",   severity: "INFO" },
@@ -2213,7 +2213,7 @@ const NOTIF_KINDS: Array<{ id: string; label: string; desc: string; severity: st
   { id: "INVITATION_SENT",     label: "Invitación enviada",      desc: "Confirmación de invitación enviada",        severity: "INFO" },
   { id: "HALLAZGO_ASSIGNED",   label: "Hallazgo asignado",       desc: "Cuando se te asigna un nuevo hallazgo",     severity: "WARNING" },
   { id: "KPI_ASSIGNED",        label: "KPI asignado",            desc: "Cuando se te asigna un nuevo KPI/acción",   severity: "INFO" },
-  { id: "ALERT_CRITICAL",      label: "Alertas críticas",        desc: "Sistema · CRITICAL · siempre se envían",    severity: "CRITICAL" },
+  { id: "ALERT_CRITICAL",      label: "Alertas críticas",        desc: "Sistema . CRITICAL . siempre se envían",    severity: "CRITICAL" },
   { id: "ACCESS_GRANTED",      label: "Acceso concedido",        desc: "Notificación cuando inicias sesión nueva",  severity: "INFO" },
   { id: "SYSTEM",              label: "Notificaciones sistema",  desc: "Mantenimiento, actualizaciones, etc.",      severity: "INFO" },
 ];
@@ -2251,7 +2251,7 @@ function NotificacionesSection() {
     try {
       await updateMut.mutateAsync(prefs);
       setDirty(false);
-      setSavedMsg("âœ“ Preferencias guardadas correctamente");
+      setSavedMsg("âœ" Preferencias guardadas correctamente");
       setTimeout(() => setSavedMsg(null), 4000);
     } catch (e: any) {
       setSavedMsg("Error: " + (e?.response?.data?.message ?? e?.message ?? "desconocido"));
@@ -2329,7 +2329,7 @@ function NotificacionesSection() {
         </p>
       </div>
 
-      {/* Diagnóstico SMTP · solo visible para ADMIN */}
+      {/* Diagnóstico SMTP . solo visible para ADMIN */}
       <EmailDiagnosticCard/>
 
       {savedMsg && (
@@ -2378,9 +2378,9 @@ function Toggle({ checked, disabled, onChange }: { checked: boolean; disabled?: 
   );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// EMAIL DIAGNOSTIC CARD · solo admin · estado SMTP + test envío
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
+// EMAIL DIAGNOSTIC CARD . solo admin . estado SMTP + test envío
+// â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-â-
 function EmailDiagnosticCard() {
   const { user } = useAuthStore();
   const isAdmin = user?.role === "ADMIN";
@@ -2401,7 +2401,7 @@ function EmailDiagnosticCard() {
     } catch (e: any) {
       setLastResult({
         ok: false, mode: "noop", to: testTo || user?.email || "",
-        from: ""”", elapsedMs: 0, messageId: null, timestamp: new Date().toISOString(),
+        from: """", elapsedMs: 0, messageId: null, timestamp: new Date().toISOString(),
         error: e?.response?.data?.message ?? e?.message ?? "Error en la solicitud",
         hint: "El backend devolvió error. Revisa los logs de Railway.",
       });
@@ -2448,10 +2448,10 @@ function EmailDiagnosticCard() {
             <div className="flex-1">
               <p className={cn("text-sm font-bold", status.configured ? "text-emerald-300" : "text-amber-300")}>
                 {status.configured
-                  ? status.mode === "brevo" ? "Brevo API activo · correos funcionando"
-                  : status.mode === "resend" ? "Resend API activo · correos funcionando"
+                  ? status.mode === "brevo" ? "Brevo API activo . correos funcionando"
+                  : status.mode === "resend" ? "Resend API activo . correos funcionando"
                   : "SMTP configurado y listo"
-                  : "Modo NO-OP · los correos NO se envían"}
+                  : "Modo NO-OP . los correos NO se envían"}
               </p>
               <p className="text-[11px] text-[#94A3B8] mt-1">
                 Modo activo: <code className="text-cyan-300">{status.mode}</code>
@@ -2469,7 +2469,7 @@ function EmailDiagnosticCard() {
                       <td className="px-3 py-2 text-[#94A3B8]">{status.mode === "brevo" ? "BREVO_API_KEY" : "RESEND_API_KEY"}</td>
                       <td className="px-3 py-2 font-mono">
                         {(status.mode === "brevo" ? status.brevo?.keySet : status.resend?.keySet)
-                          ? <span className="text-emerald-400">âœ“ configurada</span>
+                          ? <span className="text-emerald-400">âœ" configurada</span>
                           : <span className="text-red-400">no configurada</span>}
                       </td>
                     </tr>
@@ -2496,7 +2496,7 @@ function EmailDiagnosticCard() {
                       <td className="px-3 py-2 text-[#94A3B8]">SMTP_PASS</td>
                       <td className="px-3 py-2 font-mono">
                         {status.smtp.passSet
-                          ? <span className="text-emerald-400">âœ“ configurada</span>
+                          ? <span className="text-emerald-400">âœ" configurada</span>
                           : <span className="text-red-400">no configurada</span>}
                       </td>
                     </tr>
@@ -2564,11 +2564,11 @@ function EmailDiagnosticCard() {
                 : <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5"/>}
               <div className="flex-1">
                 <p className={cn("font-bold", lastResult.ok ? "text-emerald-300" : "text-red-300")}>
-                  {lastResult.ok ? "âœ“ Test exitoso" : "âœ— Test fallido"} · modo: {lastResult.mode}
+                  {lastResult.ok ? "âœ" Test exitoso" : "âœ-- Test fallido"} . modo: {lastResult.mode}
                 </p>
                 <p className="text-[10px] text-[#94A3B8] mt-1">
-                  Destinatario: <code>{lastResult.to}</code> ·
-                  Remitente: <code className="text-[9px]">{lastResult.from}</code> ·
+                  Destinatario: <code>{lastResult.to}</code> .
+                  Remitente: <code className="text-[9px]">{lastResult.from}</code> .
                   Tiempo: {lastResult.elapsedMs}ms
                 </p>
                 {lastResult.messageId && (
@@ -2584,19 +2584,19 @@ function EmailDiagnosticCard() {
         )}
       </div>
 
-      {/* Setup instructions "” solo en modo noop */}
+      {/* Setup instructions "" solo en modo noop */}
       {status && !status.configured && (
         <div className="bg-cyan-500/5 border border-cyan-500/30 rounded-lg p-4 text-xs text-[#E2E8F0] space-y-2">
-          <p className="font-bold text-cyan-300">ðŸ“‹ Activar envío de correos (Brevo API "” recomendado)</p>
+          <p className="font-bold text-cyan-300">ðŸ"‹ Activar envío de correos (Brevo API "" recomendado)</p>
           <ol className="list-decimal list-inside space-y-1.5 text-[#94A3B8] ml-1">
             <li>Crea cuenta gratuita en <code className="text-amber-300">app.brevo.com</code> (300 emails/día gratis)</li>
-            <li>Ve a <strong>SMTP &amp; API</strong> â†’ <strong>API Keys</strong> â†’ genera una nueva clave</li>
-            <li>En Railway â†’ servicio <strong>savicol-api</strong> â†’ <strong>Variables</strong>, agrega:</li>
+            <li>Ve a <strong>SMTP &amp; API</strong> â†' <strong>API Keys</strong> â†' genera una nueva clave</li>
+            <li>En Railway â†' servicio <strong>savicol-api</strong> â†' <strong>Variables</strong>, agrega:</li>
           </ol>
           <pre className="bg-[#0A111F] border border-[#1E2D4A] rounded p-3 text-[10px] text-emerald-300 overflow-x-auto leading-tight">{`BREVO_API_KEY=xkeysib-...
 SMTP_FROM=Auditoría Savicol <auditoriasavicol@gmail.com>
 APP_BASE_URL=https://savicol-audit-platform-web.vercel.app`}</pre>
-          <p className="text-[#94A3B8]">4. Railway redeploya automáticamente (~2 min) · vuelve aquí y ejecuta el test.</p>
+          <p className="text-[#94A3B8]">4. Railway redeploya automáticamente (~2 min) . vuelve aquí y ejecuta el test.</p>
         </div>
       )}
     </div>
