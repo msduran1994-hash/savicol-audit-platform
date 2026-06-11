@@ -122,6 +122,9 @@ function useHydrateGranjas() {
 
   useEffect(() => {
     if (!granjasQ.data) return;
+    // FIX: limpiar datos _demo antes de cargar datos reales del API
+    // Garantiza que granjas demo hardcodeadas no persistan entre sesiones
+    setGranjas([]); // reset previo para evitar merge con datos anteriores
     const mapped = granjasQ.data.map((g: any) => ({
       ...g,
       tipoGranja:      labelOf(g.tipoGranja,      TIPO_GRANJA_LABEL),
