@@ -12,7 +12,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
 import { APP_NAME, APP_COMPANY } from "@/lib/constants";
-import { SavicolLogo } from "@/components/ui/savicol-logo";
 import { useState } from "react";
 
 const MAIN_NAV = [
@@ -122,9 +121,34 @@ export function Sidebar() {
       {/* Logo / Brand */}
       <div className="flex items-center gap-3 px-4 h-16 overflow-hidden" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         {workspace === "auditoria" ? (
-          collapsed
-            ? <SavicolLogo variant="mark" size="sm" inverted />
-            : <SavicolLogo variant="full" size="sm" inverted />
+          collapsed ? (
+            /* Collapsed: solo icono AP en gradiente rojo-azul */
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                 style={{ background: "linear-gradient(135deg, #C41230 0%, #1A3A8F 100%)",
+                           boxShadow: "0 2px 12px rgba(196,18,48,0.35)" }}>
+              <span style={{ color: "#FFFFFF", fontWeight: 900, fontSize: 13,
+                              letterSpacing: "-0.03em", fontFamily: "inherit" }}>AP</span>
+            </div>
+          ) : (
+            /* Expanded: wordmark corporativo rojo + azul */
+            <div className="flex flex-col leading-none overflow-hidden">
+              <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
+                <span style={{ fontWeight: 900, fontSize: 15, letterSpacing: "-0.03em",
+                                background: "linear-gradient(90deg, #C41230, #E8192C)",
+                                WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+                                backgroundClip: "text" }}>AUDIT</span>
+                <span style={{ fontWeight: 900, fontSize: 15, letterSpacing: "-0.03em",
+                                background: "linear-gradient(90deg, #4A7AFF, #FFFFFF)",
+                                WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+                                backgroundClip: "text" }}>PLATFORM</span>
+              </div>
+              <span style={{ fontWeight: 700, fontSize: 9, letterSpacing: "0.20em",
+                              textTransform: "uppercase" as const,
+                              background: "linear-gradient(90deg, rgba(255,255,255,0.55), rgba(255,255,255,0.80))",
+                              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+                              backgroundClip: "text", marginTop: 2 }}>SOFTWARE</span>
+            </div>
+          )
         ) : (
           <>
             <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
