@@ -38,8 +38,19 @@ export const useAuthStore = create<AuthState>()(
       setMfaPending: (tempToken) =>
         set({ tempToken, isAuthenticated: false }),
 
-      logout: () =>
-        set({ user: null, accessToken: null, isAuthenticated: false, tempToken: null }),
+      logout: () => {
+        // Limpiar stores de datos para garantizar estado limpio entre sesiones
+        const keysToRemove = [
+          "savicol-granjas-store",
+          "savicol-cedis-store",
+          "savicol-rutas-store",
+          "savicol-audit-store",
+        ];
+        keysToRemove.forEach((k) => {
+          try { localStorage.removeItem(k); } catch { /* SSR */ }
+        });
+        set({ user: null, accessToken: null, isAuthenticated: false, tempToken: null });
+      },
     }),
     {
       name: "savicol-auth",
