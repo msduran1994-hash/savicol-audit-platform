@@ -17,18 +17,23 @@ export default function HallazgosPage() {
 
   const [filtroCat, setFiltroCat] = useState("");
   const [filtroCrit, setFiltroCrit] = useState("");
-  const [filtroRiesgo, setFiltroRiesgo] = useState("");
+  const [filtroRiesgo, setFiltroRiesgo] = useState("");// Filtros nuevos: Auditor · Estado · Granja · Tipo Operativo
+  const [filtroAuditor,       setFiltroAuditor]       = useState("");
+  const [filtroEstado,        setFiltroEstado]        = useState("");
+  const [filtroGranja,        setFiltroGranja]        = useState("");
+  const [filtroTipoOperativo, setFiltroTipoOperativo] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Hallazgo | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-
   const filtered = hallazgos.filter(h => {
     if (filtroCat   && h.categoria  !== filtroCat) return false;
     if (filtroCrit  && h.criticidad !== filtroCrit) return false;
-    if (filtroRiesgo && !h.tiposRiesgo.includes(filtroRiesgo as any)) return false;
+    if (filtroRiesgo && !h.tiposRiesgo.includes(filtroRiesgo as any)) return false;if (filtroAuditor       && h.auditorId      !== filtroAuditor)       return false;
+    if (filtroEstado        && h.estado         !== filtroEstado)        return false;
+    if (filtroGranja        && h.granjaId       !== filtroGranja)        return false;
+    if (filtroTipoOperativo && h.tipoOperativo  !== filtroTipoOperativo) return false;
     return true;
   });
-
   return (
     <div className="flex flex-col min-h-full">
       <Header
@@ -50,6 +55,24 @@ export default function HallazgosPage() {
           <select value={filtroRiesgo} onChange={(e)=>setFiltroRiesgo(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
             <option value="">Todos los riesgos</option>
             {TIPO_RIESGO.map(t => <option key={t}>{t}</option>)}
+          </select><select value={filtroAuditor} onChange={(e)=>setFiltroAuditor(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+            <option value="">Todos los auditores</option>
+            {AUDITORS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <select value={filtroEstado} onChange={(e)=>setFiltroEstado(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+            <option value="">Todos los estados</option>
+            <option value="Abierto">Abierto</option>
+            <option value="En Plan">En Plan</option>
+            <option value="Cerrado">Cerrado</option>
+            <option value="Verificado">Verificado</option>
+          </select>
+          <select value={filtroGranja} onChange={(e)=>setFiltroGranja(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+            <option value="">Todas las granjas</option>
+            {granjas.map((g: any) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+          </select>
+          <select value={filtroTipoOperativo} onChange={(e)=>setFiltroTipoOperativo(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+            <option value="">Todos los tipos</option>
+            {TIPO_OPERATIVO.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
           <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary text-xs ml-auto bg-amber-500 hover:bg-amber-600">
             <Plus className="w-3.5 h-3.5"/>Nuevo Hallazgo
