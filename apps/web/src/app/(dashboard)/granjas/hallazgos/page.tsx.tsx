@@ -1,0 +1,491 @@
+"use client";
+import { useState } from "react";
+import { Header } from "@/components/layout/header";
+import { useGranjasStore } from "@/store/granjas.store";
+import { useShallow } from "zustand/react/shallow";
+import { CATEGORIA_HALLAZGO, CRITICIDAD, TIPO_RIESGO, TIPO_GRANJA, TIPO_OPERATIVO } from "@/lib/granjas.constants";
+import { AUDITORS } from "@/lib/constants";
+import type { Hallazgo } from "@/lib/granjas.types";
+import { AlertTriangle, Filter, Plus, Sparkles, Image, Paperclip, X, Edit2, Trash2 } from "lucide-react";
+
+// ── Clase CSS compartida para selects de filtro ─────────────────────────────
+const SELECT_CLS =
+  "px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white " +
+  "focus:outline-none focus:border-[#4A7AFF] hover:border-[#2A3F6A] transition-colors cursor-pointer";
+
+export default function HallazgosPage() {
+  const hallazgos      = useGranjasStore(useShallow((s) => s.hallazgos));
+  const granjas        = useGranjasStore(useShallow((s) => s.granjas));
+  const addHallazgo    = useGranjasStore((s) => s.addHallazgo);
+  const updateHallazgo = useGranjasStore((s) => s.updateHallazgo);
+  const removeHallazgo = useGranjasStore((s) => s.removeHallazgo);
+
+  // ── Filtros existentes ───────────────────────────────────────────────────
+  const [filtroCat,    setFiltroCat]    = useState("");
+  const [filtroCrit,   setFiltroCrit]   = useState("");
+  const [filtroRiesgo, setFiltroRiesgo] = useState("");
+
+  // ── Filtros nuevos (Auditor · Estado · Granja · Tipo Operativo) ──────────
+  const [filtroAuditor,       setFiltroAuditor]       = useState("");
+  const [filtroEstado,        setFiltroEstado]        = useState("");
+  const [filtroGranja,        setFiltroGranja]        = useState("");
+  const [filtroTipoOperativo, setFiltroTipoOperativo] = useState("");
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing,   setEditing]   = useState<Hallazgo | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // ── Lógica de filtrado ────────────────────────────────────────────────────
+  const filtered = hallazgos.filter(h => {
+    if (filtroCat            && h.categoria         !== filtroCat)            return false;
+    if (filtroCrit           && h.criticidad        !== filtroCrit)           return false;
+    if (filtroRiesgo         && !h.tiposRiesgo.includes(filtroRiesgo as any)) return false;
+    if (filtroAuditor        && h.auditorId         !== filtroAuditor)        return false;
+    if (filtroEstado         && h.estado            !== filtroEstado)         return false;
+    if (filtroGranja         && h.granjaId          !== filtroGranja)         return false;
+    if (filtroTipoOperativo  && h.tipoOperativo     !== filtroTipoOperativo)  return false;
+    return true;
+  });
+
+  // ¿Hay algún filtro activo?
+  const hayFiltros = !!(filtroCat || filtroCrit || filtroRiesgo ||
+                        filtroAuditor || filtroEstado || filtroGranja || filtroTipoOperativo);
+
+  function limpiarFiltros() {
+    setFiltroCat(""); setFiltroCrit(""); setFiltroRiesgo("");
+    setFiltroAuditor(""); setFiltroEstado(""); setFiltroGranja(""); setFiltroTipoOperativo("");
+  }
+
+  return (
+    <div className="flex flex-col min-h-full">
+      <Header
+        title="Hallazgos de Auditoría"
+        subtitle={`${hallazgos.length} hallazgos · ${filtered.length} visibles`}
+      />
+
+      <div className="flex-1 p-6 space-y-6">
+
+        {/* ── Panel de Filtros ─────────────────────────────────────────── */}
+        <div className="card-base p-4 space-y-3">
+
+          {/* Fila 1 — icono + fila principal */}
+          <div className="flex items-center gap-2">
+            <Filter className="w-3.5 h-3.5 text-[#94A3B8] shrink-0"/>
+            <span className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wider">
+              Filtros de búsqueda
+            </span>
+            {hayFiltros && (
+              <button
+                onClick={limpiarFiltros}
+                className="ml-auto flex items-center gap-1 text-[10px] text-[#64748B] hover:text-white
+                           px-2 py-0.5 rounded border border-[#1E2D4A] hover:border-[#4A7AFF] transition-colors"
+              >
+                <X className="w-3 h-3"/>Limpiar filtros
+              </button>
+            )}
+          </div>
+
+          {/* Fila 2 — filtros existentes: Categoría · Criticidad · Riesgo */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <select value={filtroCat} onChange={(e) => setFiltroCat(e.target.value)} className={SELECT_CLS}>
+              <option value="">Todas las categorías</option>
+              {CATEGORIA_HALLAZGO.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+
+            <select value={filtroCrit} onChange={(e) => setFiltroCrit(e.target.value)} className={SELECT_CLS}>
+              <option value="">Toda la criticidad</option>
+              {CRITICIDAD.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+
+            <select value={filtroRiesgo} onChange={(e) => setFiltroRiesgo(e.target.value)} className={SELECT_CLS}>
+              <option value="">Todos los riesgos</option>
+              {TIPO_RIESGO.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+
+          {/* Fila 3 — filtros nuevos: Auditor · Estado · Granja · Tipo Operativo */}
+          <div className="flex items-center gap-2 flex-wrap border-t border-[#1E2D4A] pt-3">
+
+            {/* ── FILTRO: AUDITOR ─────────────────────────────────────── */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-[#64748B] font-medium px-1">Auditor</span>
+              <select
+                value={filtroAuditor}
+                onChange={(e) => setFiltroAuditor(e.target.value)}
+                className={SELECT_CLS}
+              >
+                <option value="">Todos los auditores</option>
+                {AUDITORS.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* ── FILTRO: ESTADO ──────────────────────────────────────── */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-[#64748B] font-medium px-1">Estado</span>
+              <select
+                value={filtroEstado}
+                onChange={(e) => setFiltroEstado(e.target.value)}
+                className={SELECT_CLS}
+              >
+                <option value="">Todos los estados</option>
+                <option value="Abierto">Abierto</option>
+                <option value="En Plan">En Plan</option>
+                <option value="Cerrado">Cerrado</option>
+                <option value="Verificado">Verificado</option>
+              </select>
+            </div>
+
+            {/* ── FILTRO: GRANJA ──────────────────────────────────────── */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-[#64748B] font-medium px-1">Granja</span>
+              <select
+                value={filtroGranja}
+                onChange={(e) => setFiltroGranja(e.target.value)}
+                className={SELECT_CLS}
+              >
+                <option value="">Todas las granjas</option>
+                {granjas.map((g: any) => (
+                  <option key={g.id} value={g.id}>{g.nombre}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* ── FILTRO: TIPO OPERATIVO ──────────────────────────────── */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-[#64748B] font-medium px-1">Tipo Operativo</span>
+              <select
+                value={filtroTipoOperativo}
+                onChange={(e) => setFiltroTipoOperativo(e.target.value)}
+                className={SELECT_CLS}
+              >
+                <option value="">Todos los tipos</option>
+                {TIPO_OPERATIVO.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+
+          </div>
+
+          {/* Contador de resultados + botón Nuevo */}
+          <div className="flex items-center justify-between border-t border-[#1E2D4A] pt-3">
+            <span className="text-xs text-[#64748B]">
+              {hayFiltros
+                ? <><span className="font-semibold text-white">{filtered.length}</span> de {hallazgos.length} hallazgos</>
+                : <><span className="font-semibold text-white">{hallazgos.length}</span> hallazgos totales</>
+              }
+            </span>
+            <button
+              onClick={() => { setEditing(null); setModalOpen(true); }}
+              className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5"/>Nuevo Hallazgo
+            </button>
+          </div>
+        </div>
+
+        {/* ── Lista de hallazgos ──────────────────────────────────────────── */}
+        {filtered.length === 0 ? (
+          <div className="card-base flex flex-col items-center justify-center py-16 text-center">
+            <AlertTriangle className="w-10 h-10 text-[#1E2D4A] mb-4"/>
+            <p className="text-white font-semibold mb-2">
+              {hayFiltros ? "Sin resultados" : "Sin hallazgos"}
+            </p>
+            <p className="text-[#475569] text-sm">
+              {hayFiltros
+                ? "Ningún hallazgo coincide con los filtros seleccionados"
+                : "Click en \"Nuevo Hallazgo\" para crear el primero"}
+            </p>
+            {hayFiltros && (
+              <button onClick={limpiarFiltros}
+                className="mt-4 text-xs text-[#4A7AFF] hover:text-white underline underline-offset-2">
+                Limpiar todos los filtros
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map(h => {
+              const critColor =
+                h.criticidad === "Crítica" ? "#EF4444" :
+                h.criticidad === "Alta"    ? "#F59E0B" :
+                h.criticidad === "Media"   ? "#3B82F6" : "#94A3B8";
+
+              const estadoColor =
+                h.estado === "Abierto"    ? { bg: "#EF444418", text: "#EF4444", border: "#EF444430" } :
+                h.estado === "En Plan"    ? { bg: "#F59E0B18", text: "#F59E0B", border: "#F59E0B30" } :
+                h.estado === "Cerrado"    ? { bg: "#10B98118", text: "#10B981", border: "#10B98130" } :
+                                            { bg: "#3B82F618", text: "#3B82F6", border: "#3B82F630" };
+
+              return (
+                <div key={h.id} className="card-base card-hover">
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider"
+                              style={{ background: `${critColor}18`, color: critColor, border: `1px solid ${critColor}30` }}>
+                          {h.criticidad}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1A2540] text-[#94A3B8] border border-[#2A3F6A]">{h.categoria}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                              style={{ background: estadoColor.bg, color: estadoColor.text, border: `1px solid ${estadoColor.border}` }}>
+                          {h.estado}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                          {h.tipoOperativo}
+                        </span>
+                      </div>
+                      <h3 className="font-display font-bold text-white text-base">{h.titulo}</h3>
+                      <p className="text-xs text-[#94A3B8] mt-1">{h.granjaNombre} · {h.auditorNombre} · {h.fechaVisita}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => { setEditing(h); setModalOpen(true); }} className="p-1.5 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar">
+                        <Edit2 className="w-3.5 h-3.5"/>
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`¿Eliminar hallazgo "${h.titulo}"?\nEsta acción no se puede deshacer.`)) return;
+                          try { await removeHallazgo(h.id); }
+                          catch (e: any) { alert("Error al eliminar: " + (e?.response?.data?.message ?? e?.message ?? "desconocido")); }
+                        }}
+                        className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-3.5 h-3.5"/>
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-sm text-[#94A3B8] mb-3 leading-relaxed">{h.descripcion}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap mb-3">
+                    {h.tiposRiesgo.map(r => (
+                      <span key={r} className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-300 border border-red-500/20">Riesgo {r}</span>
+                    ))}
+                  </div>
+                  {h.recomendacionesIA && (
+                    <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 mb-3">
+                      <p className="text-xs text-amber-400 font-semibold flex items-center gap-1.5 mb-1">
+                        <Sparkles className="w-3 h-3"/> Recomendaciones IA
+                      </p>
+                      <p className="text-xs text-[#94A3B8] leading-relaxed">{h.recomendacionesIA}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {modalOpen && (
+        <HallazgoModal
+          hallazgo={editing}
+          granjas={granjas}
+          error={saveError}
+          onClose={() => { setModalOpen(false); setSaveError(null); }}
+          onSave={async (h) => {
+            setSaveError(null);
+            try {
+              if (editing) await updateHallazgo(editing.id, h);
+              else         await addHallazgo(h as any);
+              setModalOpen(false);
+            } catch (e: any) {
+              const raw = e?.response?.data;
+              let msg = "Error al guardar";
+              if (raw) {
+                if (typeof raw === "string") msg = raw;
+                else if (raw.message) msg = Array.isArray(raw.message) ? raw.message.join(" · ") : String(raw.message);
+                else if (raw.error)   msg = String(raw.error);
+              } else if (e?.message) {
+                msg = e.message;
+              }
+              if (e?.response?.status) msg = `HTTP ${e.response.status} · ${msg}`;
+              setSaveError(msg);
+              console.error("[Hallazgos] error guardando:", e);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
+  hallazgo: Hallazgo | null;
+  granjas: any[];
+  onClose: () => void;
+  onSave: (h: Partial<Hallazgo>) => Promise<void> | void;
+  error?: string | null;
+}) {
+  const defaultGranja = hallazgo ? granjas.find(g => g.id === hallazgo.granjaId) ?? granjas[0] : granjas[0];
+
+  const [form, setForm] = useState<Partial<Hallazgo>>(hallazgo ?? {
+    titulo: "",
+    granjaId:     defaultGranja?.id ?? "",
+    granjaNombre: defaultGranja?.nombre ?? "",
+    auditorId:    AUDITORS[0]?.id ?? "",
+    auditorNombre:AUDITORS[0]?.name ?? "",
+    tipoGranja:    defaultGranja?.tipoGranja ?? "Propia",
+    tipoOperativo: defaultGranja?.tipoOperativo ?? "Engorde",
+    fechaVisita:   new Date().toISOString().slice(0,10),
+    categoria:     "Bioseguridad",
+    tiposRiesgo:   [],
+    criticidad:    "Media",
+    estado:        "Abierto",
+    descripcion:   "",
+    recomendacionesIA: "",
+  });
+
+  const [submitting, setSubmitting] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  function toggleRiesgo(r: typeof TIPO_RIESGO[number]) {
+    setForm((f) => {
+      const list = f.tiposRiesgo ?? [];
+      return { ...f, tiposRiesgo: list.includes(r) ? list.filter(x => x !== r) : [...list, r] };
+    });
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setValidationError(null);
+
+    if (!form.titulo?.trim()) {
+      setValidationError("El título del hallazgo es obligatorio");
+      return;
+    }
+    if (!form.granjaId) {
+      setValidationError("Selecciona una granja del listado");
+      return;
+    }
+    if (!form.descripcion?.trim()) {
+      setValidationError("La descripción del hallazgo es obligatoria");
+      return;
+    }
+    if (granjas.length === 0) {
+      setValidationError("No hay granjas en el sistema. Crea una granja primero en /granjas/registro");
+      return;
+    }
+
+    const granja  = granjas.find(g => g.id === form.granjaId);
+    const auditor = AUDITORS.find(a => a.id === form.auditorId);
+
+    const payload: Partial<Hallazgo> = {
+      ...form,
+      titulo:        form.titulo.trim(),
+      descripcion:   form.descripcion.trim(),
+      recomendacionesIA: form.recomendacionesIA?.trim() || undefined,
+      granjaNombre:  granja?.nombre ?? form.granjaNombre,
+      auditorNombre: auditor?.name  ?? form.auditorNombre,
+      tipoGranja:    granja?.tipoGranja    ?? form.tipoGranja,
+      tipoOperativo: granja?.tipoOperativo ?? form.tipoOperativo,
+    };
+
+    setSubmitting(true);
+    try {
+      await onSave(payload);
+    } catch {
+      // Error se muestra en el banner desde el padre
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col shadow-card">
+        <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
+          <h2 className="font-display font-bold text-white text-lg">{hallazgo ? "Editar Hallazgo" : "Nuevo Hallazgo"}</h2>
+          <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
+        </header>
+
+        <form onSubmit={submit} className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <F label="Título *">
+            <input value={form.titulo} onChange={(e)=>setForm({...form, titulo: e.target.value})} required className="input-base"/>
+          </F>
+          <div className="grid grid-cols-2 gap-3">
+            <F label="Granja">
+              <select value={form.granjaId} onChange={(e)=>setForm({...form, granjaId: e.target.value})} className="input-base">
+                {granjas.map((g:any) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+              </select>
+            </F>
+            <F label="Auditor">
+              <select value={form.auditorId} onChange={(e)=>setForm({...form, auditorId: e.target.value})} className="input-base">
+                {AUDITORS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </F>
+            <F label="Categoría">
+              <select value={form.categoria} onChange={(e)=>setForm({...form, categoria: e.target.value as any})} className="input-base">
+                {CATEGORIA_HALLAZGO.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </F>
+            <F label="Criticidad">
+              <select value={form.criticidad} onChange={(e)=>setForm({...form, criticidad: e.target.value as any})} className="input-base">
+                {CRITICIDAD.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </F>
+            <F label="Estado">
+              <select value={form.estado} onChange={(e)=>setForm({...form, estado: e.target.value as any})} className="input-base">
+                <option>Abierto</option><option>En Plan</option><option>Cerrado</option><option>Verificado</option>
+              </select>
+            </F>
+            <F label="Fecha Visita">
+              <input type="date" value={form.fechaVisita} onChange={(e)=>setForm({...form, fechaVisita: e.target.value})} className="input-base"/>
+            </F>
+          </div>
+          <F label="Descripción">
+            <textarea value={form.descripcion} onChange={(e)=>setForm({...form, descripcion: e.target.value})} rows={3} className="input-base resize-none"/>
+          </F>
+          <F label="Tipos de Riesgo (multiselección)">
+            <div className="flex flex-wrap gap-2">
+              {TIPO_RIESGO.map(r => {
+                const active = form.tiposRiesgo?.includes(r) ?? false;
+                return (
+                  <button key={r} type="button" onClick={()=>toggleRiesgo(r)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${active
+                      ? "bg-red-500/15 text-red-300 border-red-500/30"
+                      : "bg-[#1A2540] text-[#94A3B8] border-[#2A3F6A] hover:text-white"}`}>
+                    {r}
+                  </button>
+                );
+              })}
+            </div>
+          </F>
+          <F label="Recomendaciones IA (opcional)">
+            <textarea value={form.recomendacionesIA ?? ""} onChange={(e)=>setForm({...form, recomendacionesIA: e.target.value})} rows={2} className="input-base resize-none"/>
+          </F>
+        </form>
+
+        {(validationError || error) && (
+          <div className="mx-6 mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>
+            <span>{validationError ?? error}</span>
+          </div>
+        )}
+
+        <footer className="flex items-center justify-end gap-2 px-6 py-3 border-t border-[#1E2D4A]">
+          <button type="button" onClick={onClose} className="btn-ghost text-xs" disabled={submitting}>Cancelar</button>
+          <button
+            type="submit"
+            onClick={submit}
+            disabled={submitting}
+            className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-2 disabled:opacity-50"
+          >
+            {submitting && <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"/>}
+            {submitting ? "Guardando..." : (hallazgo ? "Guardar" : "Crear hallazgo")}
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function F({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="text-xs text-[#94A3B8] font-medium mb-1.5 block">{label}</span>
+      {children}
+    </label>
+  );
+}
