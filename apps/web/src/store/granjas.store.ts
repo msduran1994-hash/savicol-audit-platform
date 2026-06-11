@@ -413,7 +413,7 @@ const defaultFilters: GranjasFilters = {
 export const useGranjasStore = create<GranjasState>()(
   persist(
     (set, get) => ({
-      granjas: GRANJAS_DEMO,
+      granjas: [],           // FIX: sin datos demo — DataHydration carga desde API
       auditorias: AUDITORIAS_DEMO,
       hallazgos: HALLAZGOS_DEMO,
       kpis: KPIS_DEMO,
