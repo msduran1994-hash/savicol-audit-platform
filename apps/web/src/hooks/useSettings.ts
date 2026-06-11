@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { apiGet, apiPost, apiDelete, apiPatch } from "@/lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").trim();
 
 export interface Setting {
   id: string;
