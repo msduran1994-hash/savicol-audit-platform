@@ -1,7 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { useAuthStore } from "@/store/auth.store";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").trim();
 
 export const api = axios.create({
   baseURL: `${BASE_URL}/api/v1`,
