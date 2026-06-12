@@ -102,7 +102,19 @@ export default function HallazgosPage() {
                           {h.criticidad}
                         </span>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1A2540] text-[#94A3B8] border border-[#2A3F6A]">{h.categoria}</span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">{h.estado}</span>
+                       <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                              style={
+                                h.estado === "ABIERTO"    || h.estado === "Abierto"    ? { background:"rgba(239,68,68,0.15)",  color:"#EF4444", border:"1px solid rgba(239,68,68,0.30)"  } :
+                                h.estado === "EN_PLAN"    || h.estado === "En Plan"    ? { background:"rgba(249,115,22,0.15)", color:"#F97316", border:"1px solid rgba(249,115,22,0.30)" } :
+                                h.estado === "CERRADO"    || h.estado === "Cerrado"    ? { background:"rgba(34,197,94,0.15)",  color:"#22C55E", border:"1px solid rgba(34,197,94,0.30)"  } :
+                                h.estado === "VERIFICADO" || h.estado === "Verificado" ? { background:"rgba(34,197,94,0.15)",  color:"#22C55E", border:"1px solid rgba(34,197,94,0.30)"  } :
+                                { background:"rgba(100,116,139,0.15)", color:"#94A3B8", border:"1px solid rgba(100,116,139,0.30)" }
+                              }>
+                          {h.estado === "ABIERTO"    || h.estado === "Abierto"    ? "🔴" :
+                           h.estado === "EN_PLAN"    || h.estado === "En Plan"    ? "🟠" :
+                           h.estado === "CERRADO"    || h.estado === "Cerrado"    ? "🟢" :
+                           h.estado === "VERIFICADO" || h.estado === "Verificado" ? "🟢" : "⚪"} {h.estado}
+                        </span>
                       </div>
                       <h3 className="font-display font-bold text-white text-base">{h.titulo}</h3>
                       <p className="text-xs text-[#94A3B8] mt-1">{h.granjaNombre} · {h.auditorNombre} · {h.fechaVisita}</p>
