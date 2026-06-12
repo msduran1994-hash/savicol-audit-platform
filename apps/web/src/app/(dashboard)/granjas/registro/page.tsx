@@ -7,6 +7,27 @@ import {
   TIPO_GRANJA, TIPO_OPERATIVO, NIVEL_RIESGO, ESTADO_SANITARIO,
   REGIONES, VETERINARIOS_DEMO,
 } from "@/lib/granjas.constants";
+import {
+  TIPO_GRANJA_DB, TIPO_OPERATIVO_DB, NIVEL_RIESGO_DB,
+  ESTADO_SANITARIO_DB, ESTADO_GRANJA_DB,
+} from "@/lib/enum-labels";
+
+// Convierte valores UPPERCASE de DB → Display labels para los <select> del modal
+function fromDB(val: string | undefined, map: Record<string,string>): string {
+  if (!val) return "";
+  return map[val] ?? val; // si ya está en Display, lo retorna tal cual
+}
+
+function normalizeGranjaForForm(g: Granja): Partial<Granja> {
+  return {
+    ...g,
+    estado:          fromDB(g.estado,          ESTADO_GRANJA_DB),
+    tipoGranja:      fromDB(g.tipoGranja,      TIPO_GRANJA_DB),
+    tipoOperativo:   fromDB(g.tipoOperativo,   TIPO_OPERATIVO_DB),
+    nivelRiesgo:     fromDB(g.nivelRiesgo,     NIVEL_RIESGO_DB),
+    estadoSanitario: fromDB(g.estadoSanitario, ESTADO_SANITARIO_DB),
+  };
+}
 import type { Granja } from "@/lib/granjas.types";
 import {
   Plus, Search, MapPin, Phone, User, AlertTriangle, X,
@@ -244,7 +265,7 @@ function GranjaModal({ granja, onClose, onSave, saving = false, saveError = null
   saving?: boolean;
   saveError?: string | null;
 }) {
-  const [form, setForm] = useState<Partial<Granja>>(granja ?? {
+  const [form, setForm] = useState<Partial<Granja>>(granja ? normalizeGranjaForForm(granja) : {
     codigo: "", nombre: "", estado: "Activa", region: "Antioquia", vereda: "",
     administrador: "", responsable: "",
     tecnicoVeterinarioNombre: "", tecnicoVeterinarioEmail: "", tecnicoVeterinarioTelefono: "",
