@@ -8,11 +8,6 @@ import { AUDITORS } from "@/lib/constants";
 import type { Hallazgo } from "@/lib/granjas.types";
 import { AlertTriangle, Filter, Plus, Sparkles, Image, Paperclip, X, Edit2, Trash2 } from "lucide-react";
 
-// ── Clase CSS compartida para selects de filtro ─────────────────────────────
-const SELECT_CLS =
-  "px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white " +
-  "focus:outline-none focus:border-[#4A7AFF] hover:border-[#2A3F6A] transition-colors cursor-pointer";
-
 export default function HallazgosPage() {
   const hallazgos      = useGranjasStore(useShallow((s) => s.hallazgos));
   const granjas        = useGranjasStore(useShallow((s) => s.granjas));
@@ -20,42 +15,25 @@ export default function HallazgosPage() {
   const updateHallazgo = useGranjasStore((s) => s.updateHallazgo);
   const removeHallazgo = useGranjasStore((s) => s.removeHallazgo);
 
-  // ── Filtros existentes ───────────────────────────────────────────────────
-  const [filtroCat,    setFiltroCat]    = useState("");
-  const [filtroCrit,   setFiltroCrit]   = useState("");
-  const [filtroRiesgo, setFiltroRiesgo] = useState("");
-
-  // ── Filtros nuevos (Auditor · Estado · Granja · Tipo Operativo) ──────────
+  const [filtroCat, setFiltroCat] = useState("");
+  const [filtroCrit, setFiltroCrit] = useState("");
+  const [filtroRiesgo, setFiltroRiesgo] = useState("");// Filtros nuevos: Auditor · Estado · Granja · Tipo Operativo
   const [filtroAuditor,       setFiltroAuditor]       = useState("");
   const [filtroEstado,        setFiltroEstado]        = useState("");
   const [filtroGranja,        setFiltroGranja]        = useState("");
   const [filtroTipoOperativo, setFiltroTipoOperativo] = useState("");
-
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing,   setEditing]   = useState<Hallazgo | null>(null);
+  const [editing, setEditing] = useState<Hallazgo | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  // ── Lógica de filtrado ────────────────────────────────────────────────────
   const filtered = hallazgos.filter(h => {
-    if (filtroCat            && h.categoria         !== filtroCat)            return false;
-    if (filtroCrit           && h.criticidad        !== filtroCrit)           return false;
-    if (filtroRiesgo         && !h.tiposRiesgo.includes(filtroRiesgo as any)) return false;
-    if (filtroAuditor        && h.auditorId         !== filtroAuditor)        return false;
-    if (filtroEstado         && h.estado            !== filtroEstado)         return false;
-    if (filtroGranja         && h.granjaId          !== filtroGranja)         return false;
-    if (filtroTipoOperativo  && h.tipoOperativo     !== filtroTipoOperativo)  return false;
+    if (filtroCat   && h.categoria  !== filtroCat) return false;
+    if (filtroCrit  && h.criticidad !== filtroCrit) return false;
+    if (filtroRiesgo && !h.tiposRiesgo.includes(filtroRiesgo as any)) return false;if (filtroAuditor       && h.auditorId      !== filtroAuditor)       return false;
+    if (filtroEstado        && h.estado         !== filtroEstado)        return false;
+    if (filtroGranja        && h.granjaId       !== filtroGranja)        return false;
+    if (filtroTipoOperativo && h.tipoOperativo  !== filtroTipoOperativo) return false;
     return true;
   });
-
-  // ¿Hay algún filtro activo?
-  const hayFiltros = !!(filtroCat || filtroCrit || filtroRiesgo ||
-                        filtroAuditor || filtroEstado || filtroGranja || filtroTipoOperativo);
-
-  function limpiarFiltros() {
-    setFiltroCat(""); setFiltroCrit(""); setFiltroRiesgo("");
-    setFiltroAuditor(""); setFiltroEstado(""); setFiltroGranja(""); setFiltroTipoOperativo("");
-  }
-
   return (
     <div className="flex flex-col min-h-full">
       <Header
@@ -64,146 +42,48 @@ export default function HallazgosPage() {
       />
 
       <div className="flex-1 p-6 space-y-6">
-
-        {/* ── Panel de Filtros ─────────────────────────────────────────── */}
-        <div className="card-base p-4 space-y-3">
-
-          {/* Fila 1 — icono + fila principal */}
-          <div className="flex items-center gap-2">
-            <Filter className="w-3.5 h-3.5 text-[#94A3B8] shrink-0"/>
-            <span className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wider">
-              Filtros de búsqueda
-            </span>
-            {hayFiltros && (
-              <button
-                onClick={limpiarFiltros}
-                className="ml-auto flex items-center gap-1 text-[10px] text-[#64748B] hover:text-white
-                           px-2 py-0.5 rounded border border-[#1E2D4A] hover:border-[#4A7AFF] transition-colors"
-              >
-                <X className="w-3 h-3"/>Limpiar filtros
-              </button>
-            )}
-          </div>
-
-          {/* Fila 2 — filtros existentes: Categoría · Criticidad · Riesgo */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <select value={filtroCat} onChange={(e) => setFiltroCat(e.target.value)} className={SELECT_CLS}>
-              <option value="">Todas las categorías</option>
-              {CATEGORIA_HALLAZGO.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-
-            <select value={filtroCrit} onChange={(e) => setFiltroCrit(e.target.value)} className={SELECT_CLS}>
-              <option value="">Toda la criticidad</option>
-              {CRITICIDAD.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-
-            <select value={filtroRiesgo} onChange={(e) => setFiltroRiesgo(e.target.value)} className={SELECT_CLS}>
-              <option value="">Todos los riesgos</option>
-              {TIPO_RIESGO.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-
-          {/* Fila 3 — filtros nuevos: Auditor · Estado · Granja · Tipo Operativo */}
-          <div className="flex items-center gap-2 flex-wrap border-t border-[#1E2D4A] pt-3">
-
-            {/* ── FILTRO: AUDITOR ─────────────────────────────────────── */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[10px] text-[#64748B] font-medium px-1">Auditor</span>
-              <select
-                value={filtroAuditor}
-                onChange={(e) => setFiltroAuditor(e.target.value)}
-                className={SELECT_CLS}
-              >
-                <option value="">Todos los auditores</option>
-                {AUDITORS.map(a => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* ── FILTRO: ESTADO ──────────────────────────────────────── */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[10px] text-[#64748B] font-medium px-1">Estado</span>
-              <select
-                value={filtroEstado}
-                onChange={(e) => setFiltroEstado(e.target.value)}
-                className={SELECT_CLS}
-              >
-                <option value="">Todos los estados</option>
-                <option value="Abierto">Abierto</option>
-                <option value="En Plan">En Plan</option>
-                <option value="Cerrado">Cerrado</option>
-                <option value="Verificado">Verificado</option>
-              </select>
-            </div>
-
-            {/* ── FILTRO: GRANJA ──────────────────────────────────────── */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[10px] text-[#64748B] font-medium px-1">Granja</span>
-              <select
-                value={filtroGranja}
-                onChange={(e) => setFiltroGranja(e.target.value)}
-                className={SELECT_CLS}
-              >
-                <option value="">Todas las granjas</option>
-                {granjas.map((g: any) => (
-                  <option key={g.id} value={g.id}>{g.nombre}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* ── FILTRO: TIPO OPERATIVO ──────────────────────────────── */}
-            <div className="flex flex-col gap-0.5">
-              <span className="text-[10px] text-[#64748B] font-medium px-1">Tipo Operativo</span>
-              <select
-                value={filtroTipoOperativo}
-                onChange={(e) => setFiltroTipoOperativo(e.target.value)}
-                className={SELECT_CLS}
-              >
-                <option value="">Todos los tipos</option>
-                {TIPO_OPERATIVO.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </div>
-
-          </div>
-
-          {/* Contador de resultados + botón Nuevo */}
-          <div className="flex items-center justify-between border-t border-[#1E2D4A] pt-3">
-            <span className="text-xs text-[#64748B]">
-              {hayFiltros
-                ? <><span className="font-semibold text-white">{filtered.length}</span> de {hallazgos.length} hallazgos</>
-                : <><span className="font-semibold text-white">{hallazgos.length}</span> hallazgos totales</>
-              }
-            </span>
-            <button
-              onClick={() => { setEditing(null); setModalOpen(true); }}
-              className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-1.5"
-            >
-              <Plus className="w-3.5 h-3.5"/>Nuevo Hallazgo
-            </button>
-          </div>
+        <div className="card-base p-3 flex items-center gap-3 flex-wrap">
+          <Filter className="w-3.5 h-3.5 text-[#94A3B8]"/>
+          <select value={filtroCat} onChange={(e)=>setFiltroCat(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+            <option value="">Todas las categorías</option>
+            {CATEGORIA_HALLAZGO.map(c => <option key={c}>{c}</option>)}
+          </select>
+          <select value={filtroCrit} onChange={(e)=>setFiltroCrit(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+            <option value="">Toda la criticidad</option>
+            {CRITICIDAD.map(c => <option key={c}>{c}</option>)}
+          </select>
+          <select value={filtroRiesgo} onChange={(e)=>setFiltroRiesgo(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+            <option value="">Todos los riesgos</option>
+            {TIPO_RIESGO.map(t => <option key={t}>{t}</option>)}
+          </select><select value={filtroAuditor} onChange={(e)=>setFiltroAuditor(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+            <option value="">Todos los auditores</option>
+            {AUDITORS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <select value={filtroEstado} onChange={(e)=>setFiltroEstado(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+            <option value="">Todos los estados</option>
+            <option value="Abierto">Abierto</option>
+            <option value="En Plan">En Plan</option>
+            <option value="Cerrado">Cerrado</option>
+            <option value="Verificado">Verificado</option>
+          </select>
+          <select value={filtroGranja} onChange={(e)=>setFiltroGranja(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+            <option value="">Todas las granjas</option>
+            {granjas.map((g: any) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+          </select>
+          <select value={filtroTipoOperativo} onChange={(e)=>setFiltroTipoOperativo(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
+            <option value="">Todos los tipos</option>
+            {TIPO_OPERATIVO.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary text-xs ml-auto bg-amber-500 hover:bg-amber-600">
+            <Plus className="w-3.5 h-3.5"/>Nuevo Hallazgo
+          </button>
         </div>
 
-        {/* ── Lista de hallazgos ──────────────────────────────────────────── */}
         {filtered.length === 0 ? (
           <div className="card-base flex flex-col items-center justify-center py-16 text-center">
             <AlertTriangle className="w-10 h-10 text-[#1E2D4A] mb-4"/>
-            <p className="text-white font-semibold mb-2">
-              {hayFiltros ? "Sin resultados" : "Sin hallazgos"}
-            </p>
-            <p className="text-[#475569] text-sm">
-              {hayFiltros
-                ? "Ningún hallazgo coincide con los filtros seleccionados"
-                : "Click en \"Nuevo Hallazgo\" para crear el primero"}
-            </p>
-            {hayFiltros && (
-              <button onClick={limpiarFiltros}
-                className="mt-4 text-xs text-[#4A7AFF] hover:text-white underline underline-offset-2">
-                Limpiar todos los filtros
-              </button>
-            )}
+            <p className="text-white font-semibold mb-2">Sin hallazgos</p>
+            <p className="text-[#475569] text-sm">Click en "Nuevo Hallazgo" para crear el primero</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -212,13 +92,6 @@ export default function HallazgosPage() {
                 h.criticidad === "Crítica" ? "#EF4444" :
                 h.criticidad === "Alta"    ? "#F59E0B" :
                 h.criticidad === "Media"   ? "#3B82F6" : "#94A3B8";
-
-              const estadoColor =
-                h.estado === "Abierto"    ? { bg: "#EF444418", text: "#EF4444", border: "#EF444430" } :
-                h.estado === "En Plan"    ? { bg: "#F59E0B18", text: "#F59E0B", border: "#F59E0B30" } :
-                h.estado === "Cerrado"    ? { bg: "#10B98118", text: "#10B981", border: "#10B98130" } :
-                                            { bg: "#3B82F618", text: "#3B82F6", border: "#3B82F630" };
-
               return (
                 <div key={h.id} className="card-base card-hover">
                   <div className="flex items-start justify-between gap-4 mb-3">
@@ -229,12 +102,20 @@ export default function HallazgosPage() {
                           {h.criticidad}
                         </span>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1A2540] text-[#94A3B8] border border-[#2A3F6A]">{h.categoria}</span>
+                        {/* Badge estado — semaforización dinámica */}
                         <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
-                              style={{ background: estadoColor.bg, color: estadoColor.text, border: `1px solid ${estadoColor.border}` }}>
-                          {h.estado}
-                        </span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                          {h.tipoOperativo}
+                              style={
+                                h.estado === "ABIERTO"    || h.estado === "Abierto"    ? { background:"rgba(239,68,68,0.15)", color:"#EF4444", border:"1px solid rgba(239,68,68,0.30)" } :
+                                h.estado === "EN_PLAN"    || h.estado === "En Plan"    ? { background:"rgba(249,115,22,0.15)", color:"#F97316", border:"1px solid rgba(249,115,22,0.30)" } :
+                                h.estado === "CERRADO"    || h.estado === "Cerrado"    ? { background:"rgba(34,197,94,0.15)",  color:"#22C55E", border:"1px solid rgba(34,197,94,0.30)"  } :
+                                h.estado === "VERIFICADO" || h.estado === "Verificado" ? { background:"rgba(34,197,94,0.15)",  color:"#22C55E", border:"1px solid rgba(34,197,94,0.30)"  } :
+                                { background:"rgba(100,116,139,0.15)", color:"#94A3B8", border:"1px solid rgba(100,116,139,0.30)" }
+                              }>
+                          {h.estado === "ABIERTO"    || h.estado === "Abierto"    ? "🔴" :
+                           h.estado === "EN_PLAN"    || h.estado === "En Plan"    ? "🟠" :
+                           h.estado === "CERRADO"    || h.estado === "Cerrado"    ? "🟢" :
+                           h.estado === "VERIFICADO" || h.estado === "Verificado" ? "🟢" : "⚪"
+                          } {h.estado}
                         </span>
                       </div>
                       <h3 className="font-display font-bold text-white text-base">{h.titulo}</h3>
@@ -318,6 +199,7 @@ function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
   onSave: (h: Partial<Hallazgo>) => Promise<void> | void;
   error?: string | null;
 }) {
+  // Toma la granja del hallazgo si existe, sino la primera disponible
   const defaultGranja = hallazgo ? granjas.find(g => g.id === hallazgo.granjaId) ?? granjas[0] : granjas[0];
 
   const [form, setForm] = useState<Partial<Hallazgo>>(hallazgo ?? {
@@ -351,6 +233,7 @@ function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
     e.preventDefault();
     setValidationError(null);
 
+    // Validaciones explícitas con mensajes claros
     if (!form.titulo?.trim()) {
       setValidationError("El título del hallazgo es obligatorio");
       return;
@@ -371,6 +254,7 @@ function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
     const granja  = granjas.find(g => g.id === form.granjaId);
     const auditor = AUDITORS.find(a => a.id === form.auditorId);
 
+    // Sanitizar: trim strings + asegurar tipos correctos derivados de granja
     const payload: Partial<Hallazgo> = {
       ...form,
       titulo:        form.titulo.trim(),
@@ -378,6 +262,7 @@ function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
       recomendacionesIA: form.recomendacionesIA?.trim() || undefined,
       granjaNombre:  granja?.nombre ?? form.granjaNombre,
       auditorNombre: auditor?.name  ?? form.auditorNombre,
+      // El tipo de granja debe coincidir con la granja seleccionada (display name del store)
       tipoGranja:    granja?.tipoGranja    ?? form.tipoGranja,
       tipoOperativo: granja?.tipoOperativo ?? form.tipoOperativo,
     };
