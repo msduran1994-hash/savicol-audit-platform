@@ -232,7 +232,7 @@ const defaultFilters: RutasFilters = {
 export const useRutasStore = create<RutasState>()(
   persist(
     (set) => ({
-      acompanamientos: ACOMPANAMIENTOS_DEMO,
+      acompanamientos: [],           // FIX: sin datos demo — DataHydration carga desde API
       evidencias:      [],
       cumplimiento:    CUMPLIMIENTO_DEMO,
       filters:         defaultFilters,
@@ -268,7 +268,7 @@ export const useRutasStore = create<RutasState>()(
             ),
           };
         });
-        if (id.startsWith("tmp_") || id.startsWith("DEMO_AC_")) return;
+        if (id.startsWith("tmp_")) return; // FIX: DEMO_AC_ ya NO se skipean — se eliminan del backend
         try {
           await apiPatch<Acompanamiento>(`/rutas/acompanamientos/${id}`, acompToDB(patch));
         } catch (e) {
@@ -279,7 +279,7 @@ export const useRutasStore = create<RutasState>()(
       removeAcompanamiento: async (id) => {
         let snapshot: Acompanamiento[] = [];
         set((s) => { snapshot = s.acompanamientos; return { acompanamientos: s.acompanamientos.filter((a) => a.id !== id) }; });
-        if (id.startsWith("tmp_") || id.startsWith("DEMO_AC_")) return;
+        if (id.startsWith("tmp_")) return; // FIX: DEMO_AC_ ya NO se skipean — se eliminan del backend
         try {
           await apiDelete(`/rutas/acompanamientos/${id}`);
         } catch (e) {
@@ -292,7 +292,7 @@ export const useRutasStore = create<RutasState>()(
       resetFilters: () => set({ filters: defaultFilters }),
 
       resetDemo: () => set({
-        acompanamientos: ACOMPANAMIENTOS_DEMO,
+        acompanamientos: [],           // FIX: sin datos demo — DataHydration carga desde API
         cumplimiento:    CUMPLIMIENTO_DEMO,
       }),
       clearDemoData: () => set((s) => ({
