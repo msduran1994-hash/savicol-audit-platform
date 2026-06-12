@@ -123,7 +123,26 @@ export class GranjasService {
   }
 
   async createGranja(dto: CreateGranjaDto, createdBy: string) {
-    const granja = await this.prisma.granja.create({ data: dto });
+    // FIX(2026-06-11): destructurar DTO para filtrar campos extra (ej: municipio)
+    // que no existen en el schema Prisma y causan Internal Server Error 500
+    const {
+      codigo, nombre, estado, region, vereda, ubicacionGoogleMaps,
+      administrador, responsable,
+      tecnicoVeterinarioId, tecnicoVeterinarioNombre,
+      tecnicoVeterinarioEmail, tecnicoVeterinarioTelefono,
+      telefono, tipoGranja, tipoOperativo, nivelRiesgo,
+      capacidadAves, estadoSanitario, notas,
+    } = dto as any;
+    const granja = await this.prisma.granja.create({
+      data: {
+        codigo, nombre, estado, region, vereda, ubicacionGoogleMaps,
+        administrador, responsable,
+        tecnicoVeterinarioId, tecnicoVeterinarioNombre,
+        tecnicoVeterinarioEmail, tecnicoVeterinarioTelefono,
+        telefono, tipoGranja, tipoOperativo, nivelRiesgo,
+        capacidadAves, estadoSanitario, notas,
+      },
+    });
     await this.logActivity({ granjaId: granja.id, tipo: "Granja", accion: "Creado",
       recursoId: granja.id, recursoNombre: granja.nombre, usuarioId: createdBy, usuarioNombre: "" });
     return granja;
