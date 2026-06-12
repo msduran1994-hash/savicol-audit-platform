@@ -32,7 +32,7 @@ function auditoriaCediToDB(a: Partial<AuditoriaCedi>): any {
 }
 
 // ─── DATOS DEMO ──────────────────────────────────────────────────────────────
-const CEDIS_INIT: Cedi[] = CEDIS_DEMO.map(c => ({ ...c, activo: true, _demo: true }));
+const CEDIS_INIT: Cedi[] = []; // FIX: sin datos demo — DataHydration carga desde API
 
 const AUDITORIAS_DEMO: AuditoriaCedi[] = !DEMO_MODE ? [] : [
   {
@@ -126,7 +126,7 @@ const defaultFilters: CedisFilters = {
 export const useCedisStore = create<CedisState>()(
   persist(
     (set) => ({
-      cedis:      CEDIS_INIT,
+      cedis:      [],           // FIX: sin datos demo — DataHydration carga desde API
       auditorias: AUDITORIAS_DEMO,
       hallazgos:  HALLAZGOS_DEMO,
       evidencias: [],
