@@ -253,10 +253,23 @@ function GranjaModal({ granja, onClose, onSave, saving = false, saveError = null
     capacidadAves: 0, estadoSanitario: "Óptimo", notas: "",
   });
 
-  function submit(e: React.FormEvent) {
+  const [submitting, setSubmitting] = useState(false);
+  const [localError,  setLocalError]  = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.codigo || !form.nombre) return;
-    onSave(form);
+    if (!form.codigo?.trim()) { setLocalError("El código es obligatorio"); return; }
+    if (!form.nombre?.trim()) { setLocalError("El nombre es obligatorio"); return; }
+    setLocalError(null);
+    setSubmitting(true);
+    try {
+      await (onSave as any)(form);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? err?.message ?? "Error al guardar";
+      setLocalError(Array.isArray(msg) ? msg.join(" · ") : String(msg));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -356,17 +369,17 @@ function GranjaModal({ granja, onClose, onSave, saving = false, saveError = null
           </Field>
         </form>
 
-        {saveError && (
+        {(localError || saveError) && (
         <div className="mx-6 mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start gap-2">
-          <span className="shrink-0">⚠</span><span>{saveError}</span>
+          <span className="shrink-0">⚠</span><span>{localError ?? saveError}</span>
         </div>
       )}
       <footer className="flex items-center justify-end gap-2 px-6 py-3 border-t border-[#1E2D4A]">
           <button type="button" onClick={onClose} className="btn-ghost text-xs">Cancelar</button>
-          <button type="submit" onClick={submit} disabled={saving}
-            className={`btn-primary text-xs flex items-center gap-2 ${saving ? "opacity-70" : ""}`}>
-            {saving && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"/>}
-            {granja ? (saving ? "Guardando..." : "Guardar cambios") : (saving ? "Creando..." : "Crear granja")}
+          <button type="submit" onClick={submit} disabled={submitting}
+            className={`btn-primary text-xs flex items-center gap-2 ${submitting ? "opacity-70" : ""}`}>
+            {submitting && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"/>}
+            {granja ? (submitting ? "Guardando..." : "Guardar cambios") : (submitting ? "Creando..." : "Crear granja")}
           </button>
         </footer>
       </div>
