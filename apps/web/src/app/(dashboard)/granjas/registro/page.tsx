@@ -363,7 +363,11 @@ function GranjaModal({ granja, onClose, onSave, saving = false, saveError = null
       )}
       <footer className="flex items-center justify-end gap-2 px-6 py-3 border-t border-[#1E2D4A]">
           <button type="button" onClick={onClose} className="btn-ghost text-xs">Cancelar</button>
-          <button type="submit" onClick={submit} disabled={saving} className={`btn-primary text-xs flex items-center gap-2 ${saving?"opacity-70":""}`}>{saving && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"/>}{granja ? (saving?"Guardando...":"Guardar cambios") : (saving?"Creando...":"Crear granja"}</button>
+          <button type="submit" onClick={submit} disabled={saving}
+            className={`btn-primary text-xs flex items-center gap-2 ${saving ? "opacity-70" : ""}`}>
+            {saving && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"/>}
+            {granja ? (saving ? "Guardando..." : "Guardar cambios") : (saving ? "Creando..." : "Crear granja")}
+          </button>
         </footer>
       </div>
     </div>
