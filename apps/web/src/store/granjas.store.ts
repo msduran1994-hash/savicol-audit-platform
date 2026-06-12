@@ -16,14 +16,39 @@ import {
 
 // Normaliza Display → DB para enviar al API
 function granjaToDB(g: Partial<Granja>): any {
-  return {
-    ...g,
-    ...(g.tipoGranja      && { tipoGranja:      toDB(g.tipoGranja,      TIPO_GRANJA_TO_DB) }),
-    ...(g.tipoOperativo   && { tipoOperativo:   toDB(g.tipoOperativo,   TIPO_OPERATIVO_TO_DB) }),
-    ...(g.nivelRiesgo     && { nivelRiesgo:     toDB(g.nivelRiesgo,     NIVEL_RIESGO_TO_DB) }),
-    ...(g.estadoSanitario && { estadoSanitario: toDB(g.estadoSanitario, ESTADO_SANITARIO_TO_DB) }),
-    ...(g.estado          && { estado:          toDB(g.estado,          ESTADO_GRANJA_TO_DB) }),
-  };
+  // FIX: destructuring explícito — excluye _count, _demo, id, timestamps
+  // y otros campos no permitidos por el schema Prisma de Granja
+  const {
+    codigo, nombre, region, vereda, ubicacionGoogleMaps,
+    administrador, responsable,
+    tecnicoVeterinarioId, tecnicoVeterinarioNombre,
+    tecnicoVeterinarioEmail, tecnicoVeterinarioTelefono,
+    telefono, capacidadAves, notas,
+    tipoGranja, tipoOperativo, nivelRiesgo, estadoSanitario, estado,
+  } = g as any;
+
+  // Construir solo con campos definidos (omite undefined)
+  const payload: any = {};
+  if (codigo             !== undefined) payload.codigo              = codigo;
+  if (nombre             !== undefined) payload.nombre              = nombre;
+  if (region             !== undefined) payload.region              = region;
+  if (vereda             !== undefined) payload.vereda              = vereda;
+  if (ubicacionGoogleMaps!== undefined) payload.ubicacionGoogleMaps = ubicacionGoogleMaps;
+  if (administrador      !== undefined) payload.administrador       = administrador;
+  if (responsable        !== undefined) payload.responsable         = responsable;
+  if (tecnicoVeterinarioId      !== undefined) payload.tecnicoVeterinarioId       = tecnicoVeterinarioId;
+  if (tecnicoVeterinarioNombre  !== undefined) payload.tecnicoVeterinarioNombre   = tecnicoVeterinarioNombre;
+  if (tecnicoVeterinarioEmail   !== undefined) payload.tecnicoVeterinarioEmail    = tecnicoVeterinarioEmail;
+  if (tecnicoVeterinarioTelefono!== undefined) payload.tecnicoVeterinarioTelefono = tecnicoVeterinarioTelefono;
+  if (telefono           !== undefined) payload.telefono            = telefono;
+  if (capacidadAves      !== undefined) payload.capacidadAves       = capacidadAves;
+  if (notas              !== undefined) payload.notas               = notas;
+  if (tipoGranja)       payload.tipoGranja       = toDB(tipoGranja,       TIPO_GRANJA_TO_DB);
+  if (tipoOperativo)    payload.tipoOperativo     = toDB(tipoOperativo,    TIPO_OPERATIVO_TO_DB);
+  if (nivelRiesgo)      payload.nivelRiesgo       = toDB(nivelRiesgo,      NIVEL_RIESGO_TO_DB);
+  if (estadoSanitario)  payload.estadoSanitario   = toDB(estadoSanitario,  ESTADO_SANITARIO_TO_DB);
+  if (estado)           payload.estado            = toDB(estado,           ESTADO_GRANJA_TO_DB);
+  return payload;
 }
 
 // ─── DATOS DEMO (todos marcados con _demo: true) ─────────────────────────────
