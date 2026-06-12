@@ -23,8 +23,10 @@ export default function RegistroGranjasPage() {
   const updateGranja = useGranjasStore((s) => s.updateGranja);
   const removeGranja = useGranjasStore((s) => s.removeGranja);
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing]     = useState<Granja | null>(null);
+  const [modalOpen,  setModalOpen]  = useState(false);
+  const [editing,    setEditing]    = useState<Granja | null>(null);
+  const [saving,     setSaving]     = useState(false);
+  const [saveError,  setSaveError]  = useState<string | null>(null);
 
   function openNew()           { setEditing(null); setModalOpen(true); }
   function openEdit(g: Granja) { setEditing(g);    setModalOpen(true); }
@@ -76,7 +78,11 @@ export default function RegistroGranjasPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map(g => (
-              <GranjaCard key={g.id} g={g} onEdit={() => openEdit(g)} onDelete={() => { if (confirm(`¿Eliminar ${g.nombre}?`)) removeGranja(g.id); }} />
+              <GranjaCard key={g.id} g={g} onEdit={() => openEdit(g)} onDelete={async () => {
+                if (!confirm(`¿Eliminar "${g.nombre}"?\nEsta acción no se puede deshacer.`)) return;
+                try { await removeGranja(g.id); }
+                catch (e: any) { alert("Error al eliminar: " + (e?.response?.data?.message ?? e?.message ?? "desconocido")); }
+              }} />
             ))}
           </div>
         )}
@@ -85,12 +91,31 @@ export default function RegistroGranjasPage() {
       {modalOpen && (
         <GranjaModal
           granja={editing}
-          onClose={() => setModalOpen(false)}
-          onSave={(g) => {
-            if (editing) updateGranja(editing.id, g);
-            else         addGranja(g as any);
-            setModalOpen(false);
+          onClose={() => { setModalOpen(false); setSaveError(null); }}
+          onSave={async (g) => {
+            setSaveError(null);
+            setSaving(true);
+            try {
+              if (editing) await updateGranja(editing.id, g);
+              else         await addGranja(g as any);
+              setModalOpen(false);
+            } catch (e: any) {
+              const raw = e?.response?.data;
+              let msg = "Error al guardar la granja";
+              if (raw) {
+                if (typeof raw === "string") msg = raw;
+                else if (raw.message) msg = Array.isArray(raw.message) ? raw.message.join(" · ") : String(raw.message);
+              } else if (e?.message) {
+                msg = e.message;
+              }
+              setSaveError(msg);
+              console.error("[Granjas] error guardando:", e);
+            } finally {
+              setSaving(false);
+            }
           }}
+          saving={saving}
+          saveError={saveError}
         />
       )}
     </div>
@@ -212,10 +237,12 @@ function Tag({ children, color }: { children: React.ReactNode; color?: string })
 }
 
 // ─── MODAL CRUD ──────────────────────────────────────────────────────────────
-function GranjaModal({ granja, onClose, onSave }: {
+function GranjaModal({ granja, onClose, onSave, saving = false, saveError = null }: {
   granja: Granja | null;
   onClose: () => void;
   onSave: (g: Partial<Granja>) => void;
+  saving?: boolean;
+  saveError?: string | null;
 }) {
   const [form, setForm] = useState<Partial<Granja>>(granja ?? {
     codigo: "", nombre: "", estado: "Activa", region: "Antioquia", vereda: "",
@@ -329,9 +356,14 @@ function GranjaModal({ granja, onClose, onSave }: {
           </Field>
         </form>
 
-        <footer className="flex items-center justify-end gap-2 px-6 py-3 border-t border-[#1E2D4A]">
+        {saveError && (
+        <div className="mx-6 mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start gap-2">
+          <span className="shrink-0">⚠</span><span>{saveError}</span>
+        </div>
+      )}
+      <footer className="flex items-center justify-end gap-2 px-6 py-3 border-t border-[#1E2D4A]">
           <button type="button" onClick={onClose} className="btn-ghost text-xs">Cancelar</button>
-          <button type="submit" onClick={submit} className="btn-primary text-xs">{granja ? "Guardar cambios" : "Crear granja"}</button>
+          <button type="submit" onClick={submit} disabled={saving} className={`btn-primary text-xs flex items-center gap-2 ${saving?"opacity-70":""}`}>{saving && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"/>}{granja ? (saving?"Guardando...":"Guardar cambios") : (saving?"Creando...":"Crear granja"}</button>
         </footer>
       </div>
     </div>
