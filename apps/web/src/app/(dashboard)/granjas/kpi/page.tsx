@@ -284,7 +284,12 @@ export default function KPIPage() {
       <Header
         title="Cumplimiento KPI"
         subtitle={`${total} planes de acción · ${avgAvance}% avance promedio`}
-        actions={
+      />
+
+      <div className="flex-1 p-6 space-y-5">
+
+        {/* ── Barra de acciones ─────────────────────────────────────────── */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             {/* Chip Informe Auditoría */}
             <button
@@ -305,18 +310,15 @@ export default function KPIPage() {
                 </span>
               )}
             </button>
-            {/* Botón principal */}
-            <button
-              onClick={() => { setEditingKpi(null); setSaveError(null); setModalOpen(true); }}
-              className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-1.5"
-            >
-              <Plus className="w-3.5 h-3.5"/>Agregar Plan KPI
-            </button>
           </div>
-        }
-      />
-
-      <div className="flex-1 p-6 space-y-5">
+          {/* Botón principal visible */}
+          <button
+            onClick={() => { setEditingKpi(null); setSaveError(null); setModalOpen(true); }}
+            className="btn-primary text-sm bg-amber-500 hover:bg-amber-600 flex items-center gap-2 px-4 py-2 rounded-lg font-semibold shadow-lg shadow-amber-500/20"
+          >
+            <Plus className="w-4 h-4"/>Agregar Plan KPI
+          </button>
+        </div>
 
         {/* Indicadores */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
