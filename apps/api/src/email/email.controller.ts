@@ -128,17 +128,44 @@ export class EmailController {
   @HttpCode(HttpStatus.OK)
   async sendEmail(
     @Req() req: AuthRequest,
-    @Body() body: { to: string; subject: string; html: string },
+    @Body() body: {
+      to:           string;
+      subject:      string;
+      html:         string;
+      pdfBase64?:   string;   // PDF adjunto en base64
+      pdfFilename?: string;   // nombre del archivo PDF
+    },
   ) {
-    const { to, subject, html } = body;
+    const { to, subject, html, pdfBase64, pdfFilename } = body;
     if (!to?.trim())      throw new Error("Destinatario requerido");
     if (!subject?.trim()) throw new Error("Asunto requerido");
     if (!html?.trim())    throw new Error("Contenido HTML requerido");
 
-    const result = await this.email.send({ to: to.trim(), subject: subject.trim(), html });
+    // Remitente = auditor logueado en la plataforma
+    const auditorEmail = req.user.email;
+    const auditorName  = req.user.name;
+
+    // Construir adjuntos si viene PDF
+    const attachments = pdfBase64 ? [{
+      name:    pdfFilename ?? "Informe-Auditoria-Savicol.pdf",
+      content: pdfBase64,
+      type:    "application/pdf",
+    }] : undefined;
+
+    const result = await this.email.send({
+      to:          to.trim(),
+      subject:     subject.trim(),
+      html,
+      from:        auditorEmail,    // email remitente del auditor
+      fromName:    auditorName,     // nombre del auditor
+      replyTo:     auditorEmail,    // respuestas llegan al auditor
+      attachments,
+    });
+
     return {
       ok:        result.ok,
       to:        to.trim(),
+      from:      auditorEmail,
       mode:      result.mode,
       messageId: result.messageId ?? null,
       error:     result.error ?? null,
