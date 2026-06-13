@@ -954,6 +954,18 @@ export function generarInforme(
 // ═══════════════════════════════════════════════════════════════════════════════
 // FUNCIÓN ENVIAR POR CORREO — USA EL EMAILSERVICE DEL BACKEND
 // ═══════════════════════════════════════════════════════════════════════════════
+// ─── Convertir HTML del informe a base64 (para adjuntar como PDF) ─────────────
+function htmlToBase64(html: string): string {
+  // Convierte el HTML a base64 para enviarlo como adjunto al backend
+  // El backend adjunta el HTML como archivo .html descargable
+  // (en producción sin Puppeteer, usamos base64 del HTML como "PDF" descargable)
+  try {
+    return btoa(unescape(encodeURIComponent(html)));
+  } catch {
+    return btoa(html);
+  }
+}
+
 export async function enviarInformePorCorreo(
   modelo: ModeloInforme,
   destinatario: string,
@@ -961,10 +973,26 @@ export async function enviarInformePorCorreo(
   kpis: any[], hallazgos: any[], granjas: any[],
   auditor: string,
   apiToken: string,
+  auditorEmail: string,
   granjaFiltroId?: string
 ): Promise<{ok:boolean; message:string}> {
   try {
-    // Generar resumen del informe para el cuerpo del email
+    // Generar el HTML completo del informe seleccionado
+    const htmlInforme = (() => {
+      switch(modelo) {
+        case "1-ejecutivo": return generarModelo1(kpis, hallazgos, granjas, auditor);
+        case "2-tecnico":   return generarModelo2(kpis, hallazgos, granjas, auditor);
+        case "3-dashboard": return generarModelo3(kpis, hallazgos, granjas, auditor);
+        case "4-granja":    return generarModelo4(kpis, hallazgos, granjas, auditor, granjaFiltroId);
+        default:            return generarModelo5(kpis, hallazgos, granjas, auditor);
+      }
+    })();
+
+    // Convertir HTML a base64 para adjunto descargable
+    const pdfBase64   = htmlToBase64(htmlInforme);
+    const pdfFilename = `Informe-Auditoria-Savicol-${modelo}-${new Date().toISOString().slice(0,10)}.html`;
+
+    // Generar HTML del correo (resumen ejecutivo)
     const pct  = kpis.length ? Math.round(kpis.reduce((a,k)=>a+(k.porcentajeAvance||0),0)/kpis.length) : 0;
     const comp = kpis.filter(k=>k.estado==="COMPLETADO").length;
     const granja = granjaFiltroId ? granjas.find(g=>g.id===granjaFiltroId) : null;
@@ -1013,9 +1041,11 @@ export async function enviarInformePorCorreo(
         "Authorization": `Bearer ${apiToken}`,
       },
       body: JSON.stringify({
-        to: destinatario,
-        subject: asunto,
-        html: htmlEmail,
+        to:           destinatario,
+        subject:      asunto,
+        html:         htmlEmail,
+        pdfBase64,
+        pdfFilename,
       }),
     });
 
@@ -1040,11 +1070,13 @@ function SelectorInformeModal({ granjas, onClose, onGenerar, onEnviar }: {
 }) {
   const [modeloSel,   setModeloSel]   = useState<ModeloInforme>("5-general");
   const [granjaFiltro,setGranjaFiltro]= useState("");
-  const [enviarEmail, setEnviarEmail] = useState(false);
-  const [emailDest,   setEmailDest]   = useState("");
-  const [asunto,      setAsunto]      = useState("Informe de Auditoría — Pollos Savicol S.A.S.");
-  const [enviando,    setEnviando]    = useState(false);
-  const [enviado,     setEnviado]     = useState<string|null>(null);
+  const [enviarEmail,    setEnviarEmail]    = useState(false);
+  const [emailDest,      setEmailDest]      = useState("");
+  const [asunto,         setAsunto]         = useState("Informe de Auditoría — Pollos Savicol S.A.S.");
+  const [enviando,       setEnviando]       = useState(false);
+  const [enviado,        setEnviado]        = useState<string|null>(null);
+  const auditorStoreEmail = useAuthStore((s) => s.user?.email ?? "");
+  const auditorStoreName  = useAuthStore((s) => s.user?.name  ?? "Auditor");
 
   const SEL_STYLE = "w-full px-3 py-2 bg-[#0A111F] border border-[#1E2D4A] rounded-lg text-xs text-white focus:outline-none focus:border-[#4A7AFF] transition-colors";
   const INP_STYLE = "w-full px-3 py-2 bg-[#0A111F] border border-[#1E2D4A] rounded-lg text-xs text-white placeholder-[#475569] focus:outline-none focus:border-[#4A7AFF] transition-colors";
@@ -1056,7 +1088,7 @@ function SelectorInformeModal({ granjas, onClose, onGenerar, onEnviar }: {
     setEnviando(true); setEnviado(null);
     try {
       await onEnviar(modeloSel, emailDest.trim(), asunto, granjaFiltro || undefined);
-      setEnviado("✅ Informe enviado correctamente a " + emailDest.trim());
+      setEnviado(`✅ Informe enviado a ${emailDest.trim()} · Respuestas → ${auditorStoreEmail}`);
     } catch(e: any) {
       setEnviado("✗ Error al enviar: " + (e?.message ?? "desconocido"));
     } finally {
@@ -1130,10 +1162,22 @@ function SelectorInformeModal({ granjas, onClose, onGenerar, onEnviar }: {
             </button>
             {enviarEmail && (
               <div className="px-4 pb-4 space-y-3 border-t border-[#1E2D4A] pt-3">
+                {/* Remitente — autocompletado del auditor logueado */}
                 <div>
-                  <span className="text-[10px] text-[#94A3B8] mb-1 block">Destinatario</span>
+                  <span className="text-[10px] text-[#94A3B8] mb-1 block">Remitente (tu correo)</span>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-[#0A111F] border border-[#2A3F6A] rounded-lg">
+                    <span className="text-[10px] text-[#22C55E]">●</span>
+                    <span className="text-xs text-white flex-1">{auditorStoreName}</span>
+                    <span className="text-[10px] text-[#64748B]">{auditorStoreEmail}</span>
+                  </div>
+                  <p className="text-[9px] text-[#475569] mt-1 px-1">
+                    Las respuestas llegarán a este correo automáticamente
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[#94A3B8] mb-1 block">Destinatario *</span>
                   <input value={emailDest} onChange={e=>setEmailDest(e.target.value)}
-                    className={INP_STYLE} placeholder="correo@empresa.com" type="email"/>
+                    className={INP_STYLE} placeholder="gerencia@empresa.com · dirección evaluada" type="email"/>
                 </div>
                 <div>
                   <span className="text-[10px] text-[#94A3B8] mb-1 block">Asunto</span>
@@ -1470,7 +1514,8 @@ export default function KPIPage() {
           }}
           onEnviar={async (modelo, email, asunto, granjaId) => {
             const auditorNombre = usuarios?.find((u:any)=>u.role==="AUDITOR")?.name ?? "Auditor Interno";
-            const r = await enviarInformePorCorreo(modelo, email, asunto, filtered, hallazgos, granjas, auditorNombre, accessToken||"", granjaId);
+            const auditorEmail  = accessToken ? (JSON.parse(atob(accessToken.split(".")[1]||"e30=")).email ?? "") : "";
+            const r = await enviarInformePorCorreo(modelo, email, asunto, filtered, hallazgos, granjas, auditorNombre, accessToken||"", auditorEmail, granjaId);
             if (!r.ok) throw new Error(r.message);
           }}
         />
