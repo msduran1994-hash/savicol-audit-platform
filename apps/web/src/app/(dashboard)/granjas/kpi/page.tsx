@@ -1187,6 +1187,7 @@ export default function KPIPage() {
   const [editingKpi, setEditingKpi]   = useState<KPI | null>(null);
   const [saveError, setSaveError]     = useState<string | null>(null);
   const [alertsOpen, setAlertsOpen]   = useState(false);
+  const [informeOpen,  setInformeOpen]  = useState(false);
 
   // ── Filtros superiores ────────────────────────────────────────────────────
   const [fEstado,        setFEstado]        = useState("");
