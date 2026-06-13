@@ -974,7 +974,10 @@ export async function enviarInformePorCorreo(
   auditor: string,
   apiToken: string,
   auditorEmail: string,
-  granjaFiltroId?: string
+  granjaFiltroId?: string,
+  descripcion?: string,
+  pdfBase64Externo?: string,
+  pdfFilenameExterno?: string
 ): Promise<{ok:boolean; message:string}> {
   try {
     // Generar el HTML completo del informe seleccionado
@@ -1034,6 +1037,10 @@ export async function enviarInformePorCorreo(
   </div>
 </div>`;
 
+    // Usar el PDF real si fue generado externamente, sino el HTML base64
+    const finalPdfBase64   = pdfBase64Externo && pdfBase64Externo.length > 100 ? pdfBase64Externo : pdfBase64;
+    const finalPdfFilename = pdfFilenameExterno ?? pdfFilename;
+
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1/email/send`, {
       method: "POST",
       headers: {
@@ -1044,8 +1051,8 @@ export async function enviarInformePorCorreo(
         to:           destinatario,
         subject:      asunto,
         html:         htmlEmail,
-        pdfBase64,
-        pdfFilename,
+        pdfBase64:    finalPdfBase64,
+        pdfFilename:  finalPdfFilename,
       }),
     });
 
@@ -1066,7 +1073,7 @@ function SelectorInformeModal({ granjas, onClose, onGenerar, onEnviar }: {
   granjas:    any[];
   onClose:    () => void;
   onGenerar:  (modelo: ModeloInforme, granjaId?: string) => void;
-  onEnviar:   (modelo: ModeloInforme, email: string, asunto: string, granjaId?: string) => Promise<void>;
+  onEnviar:   (modelo: ModeloInforme, email: string, asunto: string, granjaId?: string, descripcion?: string) => Promise<void>;
 }) {
   const [modeloSel,   setModeloSel]   = useState<ModeloInforme>("5-general");
   const [granjaFiltro,setGranjaFiltro]= useState("");
@@ -1074,7 +1081,8 @@ function SelectorInformeModal({ granjas, onClose, onGenerar, onEnviar }: {
   const [emailDest,      setEmailDest]      = useState("");
   const [asunto,         setAsunto]         = useState("Informe de Auditoría — Pollos Savicol S.A.S.");
   const [enviando,       setEnviando]       = useState(false);
-  const [enviado,        setEnviado]        = useState<string|null>(null);
+  const [enviado,          setEnviado]          = useState<string|null>(null);
+  const [descripcionCorreo,setDescripcionCorreo] = useState("");
   const auditorStoreEmail = useAuthStore((s) => s.user?.email ?? "");
   const auditorStoreName  = useAuthStore((s) => s.user?.name  ?? "Auditor");
 
@@ -1087,7 +1095,7 @@ function SelectorInformeModal({ granjas, onClose, onGenerar, onEnviar }: {
     if (!emailDest.trim()) return;
     setEnviando(true); setEnviado(null);
     try {
-      await onEnviar(modeloSel, emailDest.trim(), asunto, granjaFiltro || undefined);
+      await onEnviar(modeloSel, emailDest.trim(), asunto, granjaFiltro || undefined, descripcionCorreo);
       setEnviado(`✅ Informe enviado a ${emailDest.trim()} · Respuestas → ${auditorStoreEmail}`);
     } catch(e: any) {
       setEnviado("✗ Error al enviar: " + (e?.message ?? "desconocido"));
@@ -1183,6 +1191,12 @@ function SelectorInformeModal({ granjas, onClose, onGenerar, onEnviar }: {
                   <span className="text-[10px] text-[#94A3B8] mb-1 block">Asunto</span>
                   <input value={asunto} onChange={e=>setAsunto(e.target.value)}
                     className={INP_STYLE} placeholder="Asunto del correo"/>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[#94A3B8] mb-1 block">Descripción del correo (opcional)</span>
+                  <textarea value={descripcionCorreo} onChange={e=>setDescripcionCorreo(e.target.value)}
+                    rows={3} className={INP_STYLE + " resize-none"}
+                    placeholder="Observaciones, instrucciones o comentarios que deseas incluir en el correo y el informe…"/>
                 </div>
                 {enviado && (
                   <div className={`text-xs px-3 py-2 rounded-lg ${enviado.startsWith("✅")?"bg-green-500/10 text-green-400 border border-green-500/20":"bg-red-500/10 text-red-400 border border-red-500/20"}`}>
@@ -1512,10 +1526,33 @@ export default function KPIPage() {
             const auditorNombre = usuarios?.find((u:any)=>u.role==="AUDITOR")?.name ?? "Auditor Interno";
             generarInforme(modelo, filtered, hallazgos, granjas, auditorNombre, granjaId);
           }}
-          onEnviar={async (modelo, email, asunto, granjaId) => {
+          onEnviar={async (modelo, email, asunto, granjaId, descripcion) => {
             const auditorNombre = usuarios?.find((u:any)=>u.role==="AUDITOR")?.name ?? "Auditor Interno";
             const auditorEmail  = accessToken ? (JSON.parse(atob(accessToken.split(".")[1]||"e30=")).email ?? "") : "";
-            const r = await enviarInformePorCorreo(modelo, email, asunto, filtered, hallazgos, granjas, auditorNombre, accessToken||"", auditorEmail, granjaId);
+
+            // 1. Generar PDF real vía API Route
+            let pdfBase64 = "";
+            let pdfFilename = `Informe-Auditoria-Savicol-${modelo}-${new Date().toISOString().slice(0,10)}.pdf`;
+            try {
+              const pdfResp = await fetch("/api/generar-pdf", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  modelo, kpis: filtered, hallazgos, granjas,
+                  auditor: auditorNombre,
+                  descripcion: descripcion ?? "",
+                  granjaFiltroId: granjaId,
+                }),
+              });
+              if (pdfResp.ok) {
+                const pdfData = await pdfResp.json();
+                pdfBase64  = pdfData.pdfBase64 ?? "";
+                pdfFilename = pdfData.filename ?? pdfFilename;
+              }
+            } catch { /* si falla el PDF, envía sin adjunto */ }
+
+            // 2. Enviar correo con PDF adjunto
+            const r = await enviarInformePorCorreo(modelo, email, asunto, filtered, hallazgos, granjas, auditorNombre, accessToken||"", auditorEmail, granjaId, descripcion, pdfBase64, pdfFilename);
             if (!r.ok) throw new Error(r.message);
           }}
         />
