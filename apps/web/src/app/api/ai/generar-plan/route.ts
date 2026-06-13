@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: "Servicio IA no configurado. Contacta al administrador." }, { status: 503 });
+      return NextResponse.json({ error: "ANTHROPIC_API_KEY no configurada en Vercel." }, { status: 503 });
     }
 
     const prompt = [
@@ -44,8 +44,13 @@ export async function POST(req: NextRequest) {
       }),
     });
 
+    // Retornar el error exacto de Anthropic para diagnóstico
     if (!response.ok) {
-      return NextResponse.json({ error: "Error al conectar con el servicio IA." }, { status: 502 });
+      const errorBody = await response.text();
+      return NextResponse.json(
+        { error: `Anthropic HTTP ${response.status}`, detail: errorBody },
+        { status: 502 }
+      );
     }
 
     const data = await response.json();
@@ -58,6 +63,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ plan }, { status: 200 });
 
   } catch (err: any) {
-    return NextResponse.json({ error: "Error interno del servidor IA." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Error interno", detail: err?.message ?? String(err) },
+      { status: 500 }
+    );
   }
 }
