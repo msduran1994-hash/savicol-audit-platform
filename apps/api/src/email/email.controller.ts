@@ -119,6 +119,32 @@ export class EmailController {
     return issues;
   }
 
+  /**
+   * POST /email/send
+   * Envía un informe de auditoría al correo indicado.
+   * Body: { to: string; subject: string; html: string }
+   */
+  @Post("send")
+  @HttpCode(HttpStatus.OK)
+  async sendEmail(
+    @Req() req: AuthRequest,
+    @Body() body: { to: string; subject: string; html: string },
+  ) {
+    const { to, subject, html } = body;
+    if (!to?.trim())      throw new Error("Destinatario requerido");
+    if (!subject?.trim()) throw new Error("Asunto requerido");
+    if (!html?.trim())    throw new Error("Contenido HTML requerido");
+
+    const result = await this.email.send({ to: to.trim(), subject: subject.trim(), html });
+    return {
+      ok:        result.ok,
+      to:        to.trim(),
+      mode:      result.mode,
+      messageId: result.messageId ?? null,
+      error:     result.error ?? null,
+    };
+  }
+
   private buildHint(mode: string, ok: boolean, error?: string): string {
     if (mode === "noop") {
       return "El servicio está en modo NO-OP. Configura BREVO_API_KEY en Railway → Variables y redeploya.";
