@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react";
 import { Header } from "@/components/layout/header";
 import { useGranjasStore } from "@/store/granjas.store";
+import { useAuthStore } from "@/store/auth.store";
 import { useShallow } from "zustand/react/shallow";
 import { ESTADO_KPI } from "@/lib/granjas.constants";
 import { AUDITORS } from "@/lib/constants";
@@ -1179,7 +1180,8 @@ export default function KPIPage() {
   const granjas   = useGranjasStore(useShallow((s) => s.granjas));
   const hallazgos = useGranjasStore(useShallow((s) => s.hallazgos));
   const addKPI    = useGranjasStore((s) => s.addKPI);
-  const usuarios  = useGranjasStore(useShallow((s: any) => s.users ?? []));
+  const usuarios    = useGranjasStore(useShallow((s: any) => s.users ?? []));
+  const accessToken = useAuthStore((s) => s.accessToken);
   const updateKPI = useGranjasStore((s) => s.updateKPI);
   const removeKPI = useGranjasStore((s) => s.removeKPI);
 
@@ -1468,8 +1470,7 @@ export default function KPIPage() {
           }}
           onEnviar={async (modelo, email, asunto, granjaId) => {
             const auditorNombre = usuarios?.find((u:any)=>u.role==="AUDITOR")?.name ?? "Auditor Interno";
-            const tkn = typeof window!=="undefined" ? (localStorage.getItem("savicol-auth-store") ? JSON.parse(localStorage.getItem("savicol-auth-store")||"{}").state?.accessToken : "") : "";
-            const r = await enviarInformePorCorreo(modelo, email, asunto, filtered, hallazgos, granjas, auditorNombre, tkn||"", granjaId);
+            const r = await enviarInformePorCorreo(modelo, email, asunto, filtered, hallazgos, granjas, auditorNombre, accessToken||"", granjaId);
             if (!r.ok) throw new Error(r.message);
           }}
         />
