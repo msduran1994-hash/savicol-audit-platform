@@ -18,13 +18,20 @@ import { Injectable, Logger } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
 
 export interface EmailEnvelope {
-  to:       string | string[];
-  subject:  string;
-  html:     string;
-  text?:    string;
-  replyTo?: string;
-  cc?:      string[];
-  bcc?:     string[]
+  to:          string | string[];
+  subject:     string;
+  html:        string;
+  text?:       string;
+  replyTo?:    string;
+  from?:       string;   // email remitente (auditor logueado)
+  fromName?:   string;   // nombre del remitente
+  cc?:         string[];
+  bcc?:        string[];
+  attachments?: Array<{
+    name:    string;   // nombre del archivo: "informe.pdf"
+    content: string;   // base64 del PDF
+    type:    string;   // "application/pdf"
+  }>;
 }
 
 export interface EmailDispatchResult {
@@ -120,15 +127,25 @@ export class EmailService {
     const toList = Array.isArray(envelope.to) ? envelope.to : [envelope.to];
     const [fromName, fromEmail] = this.parseFrom(this.from);
 
+    // Usar el from del auditor si viene en el envelope
+    const senderEmail = envelope.from || fromEmail;
+    const senderName  = envelope.fromName || fromName;
+
     const body = JSON.stringify({
-      sender:      { name: fromName, email: fromEmail },
+      sender:      { name: senderName, email: senderEmail },
       to:          toList.map(e => ({ email: e })),
       cc:          envelope.cc?.map(e => ({ email: e })),
       bcc:         envelope.bcc?.map(e => ({ email: e })),
-      replyTo:     envelope.replyTo ? { email: envelope.replyTo } : undefined,
+      replyTo:     envelope.replyTo ? { email: envelope.replyTo, name: senderName } : undefined,
       subject:     envelope.subject,
       htmlContent: envelope.html,
       textContent: envelope.text ?? this.stripHtml(envelope.html),
+      ...(envelope.attachments?.length ? {
+        attachment: envelope.attachments.map(a => ({
+          name:    a.name,
+          content: a.content,
+        })),
+      } : {}),
     });
 
     try {
