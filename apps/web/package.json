@@ -38,8 +38,7 @@
     "react-hook-form": "^7.54.2",
     "@hookform/resolvers": "^3.10.0",
     "zod": "^3.24.1",
-    "js-cookie": "^3.0.5",
-    "pdfkit": "^0.15.0"
+    "js-cookie": "^3.0.5"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",
