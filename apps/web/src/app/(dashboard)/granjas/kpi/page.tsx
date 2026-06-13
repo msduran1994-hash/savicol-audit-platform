@@ -53,20 +53,20 @@ async function generarPlanIA(
   accion: string, tipoRiesgo: string, estadoHallazgo: string,
   nombreGranja: string, descripcionHallazgo?: string
 ): Promise<string> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  // Usa la API Route de Next.js como proxy seguro (sin CORS, sin exponer API key)
+  const response = await fetch("/api/ai/generar-plan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1000,
-      messages: [{
-        role: "user",
-        content: `Eres auditor de bioseguridad avícola. Genera un plan de acción correctivo en máximo 80 palabras, profesional, específico y accionable para este hallazgo:\n\nGranja: ${nombreGranja}\nHallazgo: ${accion}\n${descripcionHallazgo ? `Descripción: ${descripcionHallazgo}\n` : ""}Riesgo: ${tipoRiesgo}\nEstado: ${estadoHallazgo}\n\nEl plan debe indicar acciones concretas, responsables sugeridos y plazos. Sin introducciones ni listas — solo prosa fluida profesional.`
-      }],
+      accion, tipoRiesgo, estadoHallazgo, nombreGranja, descripcionHallazgo,
     }),
   });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err?.error ?? `Error ${response.status} al generar el plan IA`);
+  }
   const data = await response.json();
-  return data.content?.[0]?.text ?? "No se pudo generar el plan.";
+  return data.plan ?? "No se pudo generar el plan.";
 }
 
 // ─── Exportar Informe Auditoría PDF ──────────────────────────────────────────
