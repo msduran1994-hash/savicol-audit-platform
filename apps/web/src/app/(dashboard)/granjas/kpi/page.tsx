@@ -1,133 +1,321 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Header } from "@/components/layout/header";
 import { useGranjasStore } from "@/store/granjas.store";
 import { useShallow } from "zustand/react/shallow";
-import { ESTADO_KPI } from "@/lib/granjas.constants";
-import type { KPI } from "@/lib/granjas.types";
+import { ESTADO_KPI, TIPO_RIESGO, TIPO_OPERATIVO, TIPO_GRANJA } from "@/lib/granjas.constants";
+import { AUDITORS } from "@/lib/constants";
+import type { KPI, Hallazgo } from "@/lib/granjas.types";
 import {
-  Target, Plus, Bell, Mail, Filter, TrendingUp, X, Trash2,
-  Edit2, AlertCircle, Loader2, Clock, AlertTriangle, CheckCircle2,
+  Target, Plus, Filter, X, Trash2, Edit2, AlertCircle,
+  Loader2, CheckCircle2, Clock, AlertTriangle, Sparkles,
+  FileText, ChevronDown, TrendingUp, Bell,
 } from "lucide-react";
-import {
-  useKpiAlerts, useSendKpiReminders,
-  type KpiAlert, type KpiAlertSeverity,
-} from "@/hooks/useKpiAlerts";
+import { useKpiAlerts, useSendKpiReminders } from "@/hooks/useKpiAlerts";
 
-// ─── HELPER · format error ──
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatErr(e: any, fallback: string): string {
   const raw = e?.response?.data;
   let msg = fallback;
   if (raw) {
     if (typeof raw === "string") msg = raw;
     else if (raw.message) msg = Array.isArray(raw.message) ? raw.message.join(" · ") : String(raw.message);
-    else if (raw.error)   msg = String(raw.error);
   } else if (e?.message) msg = e.message;
   if (e?.response?.status) msg = `HTTP ${e.response.status} · ${msg}`;
   return msg;
 }
 
+// ─── Semaforización de estado ────────────────────────────────────────────────
+function estadoColor(estado: string) {
+  if (estado === "Completado" || estado === "COMPLETADO")
+    return { bg: "rgba(34,197,94,0.15)", text: "#22C55E", border: "rgba(34,197,94,0.30)" };
+  if (estado === "En Curso" || estado === "EN_CURSO")
+    return { bg: "rgba(249,115,22,0.15)", text: "#F97316", border: "rgba(249,115,22,0.30)" };
+  if (estado === "En Espera" || estado === "EN_ESPERA")
+    return { bg: "rgba(249,115,22,0.12)", text: "#FBBF24", border: "rgba(249,115,22,0.25)" };
+  if (estado === "No Iniciado" || estado === "NO_INICIADO")
+    return { bg: "rgba(239,68,68,0.15)", text: "#EF4444", border: "rgba(239,68,68,0.30)" };
+  return { bg: "rgba(100,116,139,0.15)", text: "#94A3B8", border: "rgba(100,116,139,0.25)" };
+}
+
+function estadoEmoji(estado: string) {
+  if (estado === "Completado" || estado === "COMPLETADO") return "🟢";
+  if (estado === "En Curso" || estado === "EN_CURSO")    return "🟠";
+  if (estado === "En Espera" || estado === "EN_ESPERA")  return "🟠";
+  return "🔴";
+}
+
+function displayEstado(e: string) {
+  const map: Record<string, string> = {
+    COMPLETADO: "Completado", EN_CURSO: "En Curso",
+    EN_ESPERA: "En Espera",  NO_INICIADO: "No Iniciado",
+  };
+  return map[e] ?? e;
+}
+
+// ─── Generar Plan IA via Anthropic API ───────────────────────────────────────
+async function generarPlanIA(accion: string, tipoRiesgo: string, estadoHallazgo: string, nombreGranja: string): Promise<string> {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1000,
+      messages: [{
+        role: "user",
+        content: `Genera un plan de acción profesional y específico en máximo un párrafo (máximo 120 palabras) para corregir el siguiente hallazgo de auditoría en una empresa avícola colombiana:\n\nHallazgo: ${accion}\nTipo de riesgo: ${tipoRiesgo}\nEstado: ${estadoHallazgo}\nGranja: ${nombreGranja}\n\nEl plan debe ser concreto, humano, en español, con acciones específicas y medibles. No uses listas, solo prosa fluida.`
+      }],
+    }),
+  });
+  const data = await response.json();
+  return data.content?.[0]?.text ?? "No se pudo generar el plan.";
+}
+
+// ─── Exportar PDF básico (HTML → print) ─────────────────────────────────────
+function exportarPDF(kpis: KPI[], granjas: any[], hallazgos: any[]) {
+  const fecha = new Date().toLocaleDateString("es-CO", { year:"numeric", month:"long", day:"numeric" });
+  const html = `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8">
+<title>Informe KPI Savicol</title>
+<style>
+body{font-family:Arial,sans-serif;margin:0;padding:0;color:#1a202c}
+.cover{background:#0D1526;color:white;padding:60px 50px;min-height:200px}
+.cover h1{font-size:28px;margin:0 0 8px;color:#4A7AFF}
+.cover p{color:#94A3B8;margin:4px 0;font-size:14px}
+.section{padding:30px 50px;border-bottom:1px solid #e2e8f0}
+.section h2{font-size:18px;color:#0D1526;margin:0 0 16px;border-left:4px solid #4A7AFF;padding-left:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:#0D1526;color:white;padding:8px 12px;text-align:left}
+td{padding:8px 12px;border-bottom:1px solid #e2e8f0}
+tr:nth-child(even){background:#f7fafc}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
+.verde{background:#dcfce7;color:#166534}
+.naranja{background:#ffedd5;color:#9a3412}
+.rojo{background:#fee2e2;color:#991b1b}
+.kpi-card{border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:12px}
+.progress{background:#e2e8f0;height:8px;border-radius:4px;overflow:hidden;margin-top:8px}
+.progress-bar{height:100%;background:#4A7AFF;border-radius:4px}
+.footer{text-align:center;padding:20px;color:#94A3B8;font-size:11px;border-top:1px solid #e2e8f0}
+</style>
+</head><body>
+<div class="cover">
+  <div style="font-size:22px;font-weight:900;margin-bottom:4px">
+    <span style="color:#4A7AFF">AUDIT</span> <span style="color:#C41230">PLATFORM</span>
+  </div>
+  <div style="font-size:11px;color:#64748B;letter-spacing:0.15em;margin-bottom:24px">SOFTWARE · SAVICOL S.A.S.</div>
+  <h1>Informe de Cumplimiento KPI</h1>
+  <p>Fecha de generación: ${fecha}</p>
+  <p>Control Interno y Auditoría · Savicol S.A.S.</p>
+</div>
+
+<div class="section">
+  <h2>Resumen Ejecutivo</h2>
+  <table>
+    <tr><th>Indicador</th><th>Valor</th></tr>
+    <tr><td>Total KPIs</td><td>${kpis.length}</td></tr>
+    <tr><td>Completados</td><td>${kpis.filter(k => k.estado==="Completado"||k.estado==="COMPLETADO").length}</td></tr>
+    <tr><td>En Curso</td><td>${kpis.filter(k => k.estado==="En Curso"||k.estado==="EN_CURSO").length}</td></tr>
+    <tr><td>En Espera</td><td>${kpis.filter(k => k.estado==="En Espera"||k.estado==="EN_ESPERA").length}</td></tr>
+    <tr><td>No Iniciados</td><td>${kpis.filter(k => k.estado==="No Iniciado"||k.estado==="NO_INICIADO").length}</td></tr>
+    <tr><td>Avance promedio</td><td>${kpis.length > 0 ? Math.round(kpis.reduce((a,k)=>a+(k.porcentajeAvance||0),0)/kpis.length) : 0}%</td></tr>
+  </table>
+</div>
+
+<div class="section">
+  <h2>Detalle de Planes de Acción KPI</h2>
+  ${kpis.map(k => {
+    const granja = granjas.find(g => g.id === k.granjaId);
+    const ec = estadoColor(k.estado);
+    const cls = (k.estado==="Completado"||k.estado==="COMPLETADO") ? "verde" :
+                (k.estado==="No Iniciado"||k.estado==="NO_INICIADO") ? "rojo" : "naranja";
+    return `<div class="kpi-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px">${k.accion}</div>
+          <div style="font-size:12px;color:#64748B">Granja: ${granja?.nombre ?? k.granjaId} · Responsable: ${k.responsable}</div>
+        </div>
+        <span class="badge ${cls}">${displayEstado(k.estado)}</span>
+      </div>
+      <div style="font-size:12px;margin-top:8px;color:#475569">${k.planAccionVeterinario && k.planAccionVeterinario !== "—" ? k.planAccionVeterinario : "(Sin plan de acción)"}</div>
+      <div style="font-size:11px;color:#94A3B8;margin-top:6px">
+        Compromiso: ${k.fechaCompromiso ? new Date(k.fechaCompromiso).toLocaleDateString("es-CO") : "—"} · 
+        Avance: ${k.porcentajeAvance ?? 0}%
+      </div>
+      <div class="progress"><div class="progress-bar" style="width:${k.porcentajeAvance ?? 0}%"></div></div>
+    </div>`;
+  }).join("")}
+</div>
+
+<div class="footer">
+  Generado por Audit Platform Software · Savicol S.A.S. · ${fecha}
+</div>
+</body></html>`;
+
+  const win = window.open("", "_blank");
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 500);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PÁGINA PRINCIPAL
+// ═══════════════════════════════════════════════════════════════════════════════
 export default function KPIPage() {
   const kpis      = useGranjasStore(useShallow((s) => s.kpis));
   const granjas   = useGranjasStore(useShallow((s) => s.granjas));
+  const hallazgos = useGranjasStore(useShallow((s) => s.hallazgos));
   const addKPI    = useGranjasStore((s) => s.addKPI);
   const updateKPI = useGranjasStore((s) => s.updateKPI);
   const removeKPI = useGranjasStore((s) => s.removeKPI);
-  const [modalOpen, setModalOpen]   = useState(false);
-  const [editingKpi, setEditingKpi] = useState<KPI | null>(null);
-  const [saveError, setSaveError]   = useState<string | null>(null);
-  const [filterEstado, setFilterEstado] = useState("");
-  const [alertsModalOpen, setAlertsModalOpen] = useState(false);
-  const [reminderResult, setReminderResult]   = useState<null | { sent: number; failed: number; total: number }>(null);
 
-  const alertsQ = useKpiAlerts();
+  const [modalOpen, setModalOpen]     = useState(false);
+  const [editingKpi, setEditingKpi]   = useState<KPI | null>(null);
+  const [saveError, setSaveError]     = useState<string | null>(null);
+
+  // Filtros superiores
+  const [fEstado,   setFEstado]   = useState("");
+  const [fGranja,   setFGranja]   = useState("");
+  const [fRiesgo,   setFRiesgo]   = useState("");
+  const [fFecha,    setFFecha]    = useState("");
+
+  const alertsQ       = useKpiAlerts();
   const sendReminders = useSendKpiReminders();
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const totalAlerts = alertsQ.data?.length ?? 0;
 
-  const filtered = filterEstado
-    ? kpis.filter(k => k.estado === filterEstado)
-    : kpis;
+  // Filtrado dinámico
+  const filtered = useMemo(() => {
+    let list = kpis;
+    if (fEstado) list = list.filter(k => {
+      const d = displayEstado(k.estado);
+      return d === fEstado || k.estado === fEstado;
+    });
+    if (fGranja) list = list.filter(k => k.granjaId === fGranja);
+    if (fFecha) list = list.filter(k => k.fechaCompromiso?.startsWith(fFecha));
+    return list;
+  }, [kpis, fEstado, fGranja, fFecha]);
 
+  const hayFiltros = !!(fEstado || fGranja || fRiesgo || fFecha);
+
+  // KPIs
   const total       = kpis.length;
-  const completados = kpis.filter(k => k.estado === "Completado").length;
-  const enCurso     = kpis.filter(k => k.estado === "En Curso").length;
-  const enEspera    = kpis.filter(k => k.estado === "En Espera").length;
-  const noIniciado  = kpis.filter(k => k.estado === "No Iniciado").length;
-  const cumplimiento = total > 0 ? Math.round((completados / total) * 100) : 0;
+  const completados = kpis.filter(k => k.estado==="Completado"||k.estado==="COMPLETADO").length;
+  const enCurso     = kpis.filter(k => k.estado==="En Curso"||k.estado==="EN_CURSO").length;
+  const enEspera    = kpis.filter(k => k.estado==="En Espera"||k.estado==="EN_ESPERA").length;
+  const noIniciado  = kpis.filter(k => k.estado==="No Iniciado"||k.estado==="NO_INICIADO").length;
+  const avgAvance   = total > 0 ? Math.round(kpis.reduce((a,k)=>a+(k.porcentajeAvance||0),0)/total) : 0;
+
+  const SEL = "px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white focus:outline-none hover:border-[#2A3F6A] transition-colors cursor-pointer";
 
   return (
     <div className="flex flex-col min-h-full">
       <Header
         title="Cumplimiento KPI"
-        subtitle={`${total} KPIs · ${cumplimiento}% cumplimiento general`}
+        subtitle={`${total} planes de acción · ${avgAvance}% avance promedio`}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => exportarPDF(filtered, granjas, hallazgos)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1A2540] border border-[#2A3F6A] text-xs text-[#94A3B8] hover:text-white hover:border-[#4A7AFF] transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5"/>Informe PDF
+            </button>
+            <button
+              onClick={() => setAlertsOpen(true)}
+              className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1A2540] border border-[#2A3F6A] text-xs text-[#94A3B8] hover:text-white hover:border-amber-500 transition-colors"
+            >
+              <Bell className="w-3.5 h-3.5"/>Alertas
+              {totalAlerts > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                  {totalAlerts}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => { setEditingKpi(null); setSaveError(null); setModalOpen(true); }}
+              className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5"/>Nuevo KPI
+            </button>
+          </div>
+        }
       />
 
-      <div className="flex-1 p-6 space-y-6">
-        {/* Toolbar */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs text-[#94A3B8] flex items-center gap-1.5"><Filter className="w-3.5 h-3.5"/>Filtros:</span>
-          <select value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)}
-            className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
-            <option value="">Todos los estados</option>
-            {ESTADO_KPI.map(e => <option key={e} value={e}>{e}</option>)}
-          </select>
-          <button
-            onClick={async () => {
-              if (totalAlerts === 0) {
-                alert("No hay KPIs en estado de alerta. Nada para recordar.");
-                return;
-              }
-              if (!confirm(`¿Enviar recordatorios a los responsables de ${totalAlerts} KPIs en alerta?\n\nSe creará notificación in-app y se enviará correo (si SMTP está configurado).`)) return;
-              try {
-                const r = await sendReminders.mutateAsync({});
-                setReminderResult({ sent: r.remindersSent, failed: r.emailsFailed, total: r.emailsAttempted });
-              } catch (e: any) {
-                alert("Error: " + (e?.response?.data?.message ?? e?.message ?? "desconocido"));
-              }
-            }}
-            disabled={sendReminders.isPending}
-            className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
-          >
-            {sendReminders.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Mail className="w-3.5 h-3.5"/>}
-            {sendReminders.isPending ? "Enviando..." : "Enviar recordatorios"}
-          </button>
-          <button
-            onClick={() => setAlertsModalOpen(true)}
-            className="btn-secondary text-xs flex items-center gap-1.5 relative"
-          >
-            <Bell className="w-3.5 h-3.5"/>Alertas activas
-            {totalAlerts > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold">
-                {totalAlerts > 99 ? "99+" : totalAlerts}
-              </span>
-            )}
-          </button>
-          <button onClick={() => { setSaveError(null); setEditingKpi(null); setModalOpen(true); }}
-            className="btn-primary text-xs ml-auto bg-amber-500 hover:bg-amber-600">
-            <Plus className="w-3.5 h-3.5"/>Nuevo KPI
-          </button>
-        </div>
+      <div className="flex-1 p-6 space-y-5">
 
-        {/* Indicadores principales */}
+        {/* KPIs resumen */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <Kpi label="Planes Totales" value={total}       color="#3B82F6" />
-          <Kpi label="Completados"    value={completados} color="#10B981" />
-          <Kpi label="En Curso"       value={enCurso}     color="#F59E0B" />
-          <Kpi label="En Espera"      value={enEspera}    color="#06B6D4" />
-          <Kpi label="No Iniciados"   value={noIniciado}  color="#94A3B8" />
+          {[
+            { label:"Total", value:total, color:"#4A7AFF" },
+            { label:"Completados", value:completados, color:"#22C55E" },
+            { label:"En Curso", value:enCurso, color:"#F97316" },
+            { label:"En Espera", value:enEspera, color:"#FBBF24" },
+            { label:"No Iniciados", value:noIniciado, color:"#EF4444" },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="card-base p-4 text-center">
+              <div className="text-2xl font-bold" style={{ color }}>{value}</div>
+              <div className="text-xs text-[#64748B] mt-1">{label}</div>
+            </div>
+          ))}
         </div>
 
-        {/* Barra cumplimiento */}
-        <div className="card-base">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-display font-semibold text-white flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-amber-400"/> Progreso General
-            </h3>
-            <span className="text-2xl font-bold font-display text-amber-400">{cumplimiento}%</span>
+        {/* Barra de avance global */}
+        <div className="card-base p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-[#94A3B8] font-semibold uppercase tracking-wider flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5"/>Avance Global
+            </span>
+            <span className="text-sm font-bold text-white">{avgAvance}%</span>
           </div>
-          <div className="h-3 bg-[#1A2540] rounded-full overflow-hidden">
-            <div className="h-full rounded-full transition-all duration-700"
-                 style={{ width: `${cumplimiento}%`, background: "linear-gradient(90deg, #10B981, #34D399, #FBBF24)" }} />
+          <div className="h-2 bg-[#1E2D4A] rounded-full overflow-hidden">
+            <div className="h-full rounded-full bg-gradient-to-r from-[#4A7AFF] to-[#22C55E] transition-all duration-500"
+                 style={{ width:`${avgAvance}%` }}/>
+          </div>
+        </div>
+
+        {/* Filtros superiores */}
+        <div className="card-base p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Filter className="w-3.5 h-3.5 text-[#94A3B8]"/>
+            <span className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wider">Filtros</span>
+            {hayFiltros && (
+              <button
+                onClick={() => { setFEstado(""); setFGranja(""); setFRiesgo(""); setFFecha(""); }}
+                className="ml-auto flex items-center gap-1 text-[10px] text-[#64748B] hover:text-white px-2 py-0.5 rounded border border-[#1E2D4A] hover:border-[#4A7AFF] transition-colors"
+              >
+                <X className="w-3 h-3"/>Limpiar
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-[#64748B] px-1">Estado</span>
+              <select value={fEstado} onChange={e=>setFEstado(e.target.value)} className={SEL}>
+                <option value="">Todos los estados</option>
+                {ESTADO_KPI.map(e=><option key={e}>{e}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-[#64748B] px-1">Granja</span>
+              <select value={fGranja} onChange={e=>setFGranja(e.target.value)} className={SEL}>
+                <option value="">Todas las granjas</option>
+                {granjas.map(g=><option key={g.id} value={g.id}>{g.nombre}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-[#64748B] px-1">Fecha compromiso</span>
+              <input type="month" value={fFecha} onChange={e=>setFFecha(e.target.value)}
+                className={SEL + " w-36"} style={{colorScheme:"dark"}}/>
+            </div>
+            <div className="flex flex-col gap-0.5 ml-auto justify-end">
+              <span className="text-[10px] text-[#64748B] px-1">Resultados</span>
+              <div className="px-3 py-1.5 text-xs text-[#94A3B8]">
+                <span className="font-semibold text-white">{filtered.length}</span> de {total}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -136,156 +324,125 @@ export default function KPIPage() {
           <div className="card-base flex flex-col items-center justify-center py-16 text-center">
             <Target className="w-10 h-10 text-[#1E2D4A] mb-4"/>
             <p className="text-white font-semibold mb-2">
-              {kpis.length === 0 ? "Sin KPIs registrados" : "Sin resultados con el filtro actual"}
+              {hayFiltros ? "Sin resultados" : "Sin planes KPI"}
             </p>
             <p className="text-[#475569] text-sm">
-              {kpis.length === 0 ? 'Click en "Nuevo KPI" para crear el primero' : "Cambia el filtro o quítalo para ver todos"}
+              {hayFiltros ? "Ajusta los filtros para ver resultados" : 'Clic en "Nuevo KPI" para crear el primero'}
             </p>
           </div>
         ) : (
           <div className="space-y-3">
             {filtered.map(k => {
-              const estColor =
-                k.estado === "Completado"  ? "#10B981" :
-                k.estado === "En Curso"    ? "#F59E0B" :
-                k.estado === "En Espera"   ? "#06B6D4" : "#94A3B8";
               const granja = granjas.find(g => g.id === k.granjaId);
+              const hallazgo = k.hallazgoId ? hallazgos.find(h => h.id === k.hallazgoId) : null;
+              const ec = estadoColor(k.estado);
+              const dp = displayEstado(k.estado);
+
               return (
-                <div key={k.id} className="card-base">
-                  <div className="flex items-start justify-between mb-3 gap-2">
+                <div key={k.id} className="card-base card-hover">
+                  <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-white">{k.accion}</h3>
-                      <p className="text-xs text-[#94A3B8] mt-1">{k.seguimiento}</p>
-                      {granja && (
-                        <p className="text-[10px] text-[#475569] mt-1">📍 {granja.nombre} · {granja.codigo}</p>
-                      )}
+                      <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                        {/* Badge estado semaforización */}
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                              style={{ background:ec.bg, color:ec.text, border:`1px solid ${ec.border}` }}>
+                          {estadoEmoji(k.estado)} {dp}
+                        </span>
+                        {/* Badge granja */}
+                        {granja && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1A2540] text-[#94A3B8] border border-[#2A3F6A]">
+                            {granja.nombre}
+                          </span>
+                        )}
+                        {/* Badge hallazgo */}
+                        {hallazgo && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            {hallazgo.titulo?.slice(0,30)}...
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="font-display font-bold text-white text-sm">{k.accion}</h3>
+                      <p className="text-xs text-[#64748B] mt-0.5">
+                        Responsable: {k.responsable}
+                        {k.fechaCompromiso && ` · Compromiso: ${new Date(k.fechaCompromiso).toLocaleDateString("es-CO")}`}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
-                            style={{ background: `${estColor}18`, color: estColor, border: `1px solid ${estColor}30` }}>
-                        {k.estado}
-                      </span>
-                      <select
-                        value={k.estado}
-                        onChange={async (e) => {
-                          try { await updateKPI(k.id, { estado: e.target.value as any }); }
-                          catch (err: any) { alert("Error al cambiar estado: " + formatErr(err, "desconocido")); }
-                        }}
-                        className="text-[10px] px-2 py-0.5 rounded bg-[#1A2540] border border-[#2A3F6A] text-white"
-                        title="Cambiar estado"
-                      >
-                        {ESTADO_KPI.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                      <button
-                        onClick={() => { setSaveError(null); setEditingKpi(k); setModalOpen(true); }}
-                        className="p-1 rounded hover:bg-blue-500/10 text-[#94A3B8] hover:text-blue-400"
-                        title="Editar KPI"
-                      >
+                    <div className="flex gap-1 shrink-0">
+                      <button onClick={() => { setEditingKpi(k); setSaveError(null); setModalOpen(true); }}
+                              className="p-1.5 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white">
                         <Edit2 className="w-3.5 h-3.5"/>
                       </button>
-                      <button
-                        onClick={async () => {
-                          if (!confirm(`¿Eliminar KPI "${k.accion}"?\nEsta acción no se puede deshacer.`)) return;
-                          try { await removeKPI(k.id); }
-                          catch (e: any) { alert("Error al eliminar: " + formatErr(e, "desconocido")); }
-                        }}
-                        className="p-1 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400"
-                        title="Eliminar KPI"
-                      >
+                      <button onClick={async () => {
+                        if (!confirm(`¿Eliminar KPI "${k.accion}"?`)) return;
+                        try { await removeKPI(k.id); }
+                        catch (e: any) { alert("Error: " + formatErr(e,"desconocido")); }
+                      }} className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400">
                         <Trash2 className="w-3.5 h-3.5"/>
                       </button>
                     </div>
                   </div>
 
-                  {/* Barra de avance */}
+                  {/* Barra de progreso */}
                   <div className="mb-3">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-[#94A3B8]">Avance</span>
-                      <span className="text-white font-bold">{k.porcentajeAvance}%</span>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-[#64748B]">Avance</span>
+                      <span className="text-[10px] font-semibold text-white">{k.porcentajeAvance ?? 0}%</span>
                     </div>
-                    <div className="h-2 bg-[#1A2540] rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-700"
-                           style={{ width: `${k.porcentajeAvance}%`, background: estColor }} />
+                    <div className="h-1.5 bg-[#1E2D4A] rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500"
+                           style={{ width:`${k.porcentajeAvance ?? 0}%`, background: ec.text }}/>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                    <Field label="Responsable" value={k.responsable} />
-                    <Field label="Fecha Compromiso" value={k.fechaCompromiso} />
-                    <Field label="Próxima Visita"   value={k.fechaProximaVisita ?? "—"} />
-                    <Field label="Plan Veterinario" value={k.planAccionVeterinario} truncate />
-                  </div>
+                  {/* Campos de seguimiento */}
+                  {k.seguimiento && k.seguimiento !== "—" && (
+                    <p className="text-xs text-[#94A3B8] mb-2 leading-relaxed">{k.seguimiento}</p>
+                  )}
+                  {k.planAccionVeterinario && k.planAccionVeterinario !== "—" && (
+                    <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                      <p className="text-xs text-amber-400 font-semibold flex items-center gap-1.5 mb-1">
+                        <Sparkles className="w-3 h-3"/>Plan de Acción IA
+                      </p>
+                      <p className="text-xs text-[#94A3B8] leading-relaxed">{k.planAccionVeterinario}</p>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
-
-        {/* Notificaciones */}
-        <div className="card-base bg-blue-500/5 border-blue-500/20">
-          <h3 className="font-display font-semibold text-blue-400 flex items-center gap-2 mb-2">
-            <Bell className="w-4 h-4"/> Automatizaciones Configuradas
-          </h3>
-          <ul className="text-xs text-[#94A3B8] space-y-1 list-disc list-inside">
-            <li>Envío de correo automático a responsables al actualizar KPI</li>
-            <li>Alerta 3 días antes del cumplimiento de fecha compromiso</li>
-            <li>Recordatorio semanal a técnico veterinario sobre KPIs en curso</li>
-            <li>Trazabilidad completa: cada cambio queda registrado en Actividad</li>
-          </ul>
-        </div>
       </div>
 
-      {/* Banner resultado envío recordatorios */}
-      {reminderResult && (
-        <div className="fixed top-20 right-6 z-50 bg-[#0D1526] border border-emerald-500/40 rounded-xl shadow-2xl max-w-sm overflow-hidden animate-slide-up">
-          <div className="bg-emerald-500/10 px-4 py-3 border-b border-emerald-500/20 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400"/>
-              <p className="text-sm font-semibold text-white">Recordatorios enviados</p>
-            </div>
-            <button onClick={() => setReminderResult(null)} className="text-[#94A3B8] hover:text-white"><X className="w-4 h-4"/></button>
-          </div>
-          <div className="px-4 py-3 text-xs text-[#94A3B8] space-y-1">
-            <p><strong className="text-emerald-300">{reminderResult.sent}</strong> notificaciones in-app creadas</p>
-            {reminderResult.total > 0 && (
-              <p><strong className="text-cyan-300">{reminderResult.total - reminderResult.failed}/{reminderResult.total}</strong> correos enviados con éxito</p>
-            )}
-            {reminderResult.failed > 0 && (
-              <p className="text-amber-300">⚠ {reminderResult.failed} correos fallaron (revisa SMTP config)</p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Modal Alertas Activas */}
-      {alertsModalOpen && (
-        <AlertsModal
-          alerts={alertsQ.data ?? []}
-          isLoading={alertsQ.isLoading}
-          onClose={() => setAlertsModalOpen(false)}
-        />
-      )}
-
+      {/* Modal nuevo/editar KPI */}
       {modalOpen && (
         <KPIModal
           granjas={granjas}
+          hallazgos={hallazgos}
           editing={editingKpi}
           error={saveError}
-          onClose={() => { setModalOpen(false); setEditingKpi(null); setSaveError(null); }}
-          onSave={async (k) => {
+          onClose={() => { setModalOpen(false); setSaveError(null); }}
+          onSave={async (payload) => {
             setSaveError(null);
             try {
-              if (editingKpi) {
-                await updateKPI(editingKpi.id, k);
-              } else {
-                await addKPI(k as any);
-              }
+              if (editingKpi) await updateKPI(editingKpi.id, payload);
+              else            await addKPI(payload as any);
               setModalOpen(false);
-              setEditingKpi(null);
             } catch (e: any) {
-              setSaveError(formatErr(e, editingKpi ? "Error al actualizar el KPI" : "Error al guardar el KPI"));
-              console.error("[KPI] error:", e);
+              setSaveError(formatErr(e, "Error al guardar el KPI"));
             }
+          }}
+        />
+      )}
+
+      {/* Modal alertas */}
+      {alertsOpen && (
+        <AlertsModal
+          alerts={alertsQ.data ?? []}
+          isLoading={alertsQ.isLoading}
+          onClose={() => setAlertsOpen(false)}
+          onSendReminders={async () => {
+            const res = await sendReminders.mutateAsync();
+            alert(`Recordatorios enviados: ${res.sent}/${res.total}`);
           }}
         />
       )}
@@ -293,51 +450,100 @@ export default function KPIPage() {
   );
 }
 
-// ─── MODAL ───────────────────────────────────────────────────────────────────
-function KPIModal({ granjas, editing, error, onClose, onSave }: {
+// ═══════════════════════════════════════════════════════════════════════════════
+// KPIModal — formulario inteligente
+// ═══════════════════════════════════════════════════════════════════════════════
+function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave }: {
   granjas: any[];
+  hallazgos: any[];
   editing?: KPI | null;
   error: string | null;
   onClose: () => void;
-  onSave: (k: Partial<KPI>) => Promise<void> | void;
+  onSave: (k: Partial<KPI>) => Promise<void>;
 }) {
   const [form, setForm] = useState<Partial<KPI>>(editing ? {
     granjaId:              editing.granjaId,
+    hallazgoId:            editing.hallazgoId,
     accion:                editing.accion,
     seguimiento:           editing.seguimiento,
-    fechaCompromiso:       editing.fechaCompromiso?.slice(0, 10) ?? "",
-    fechaProximaVisita:    editing.fechaProximaVisita?.slice(0, 10),
-    fechaCumplimiento:     editing.fechaCumplimiento?.slice(0, 10),
+    fechaCompromiso:       editing.fechaCompromiso?.slice(0,10) ?? "",
+    fechaProximaVisita:    editing.fechaProximaVisita?.slice(0,10),
+    fechaCumplimiento:     editing.fechaCumplimiento?.slice(0,10),
     planAccionVeterinario: editing.planAccionVeterinario,
-    estado:                editing.estado,
+    estado:                (() => { const m:Record<string,string>={COMPLETADO:"Completado",EN_CURSO:"En Curso",EN_ESPERA:"En Espera",NO_INICIADO:"No Iniciado"}; return m[editing.estado]??editing.estado; })(),
     responsable:           editing.responsable,
     porcentajeAvance:      editing.porcentajeAvance,
-    hallazgoId:            editing.hallazgoId,
   } : {
     granjaId:              granjas[0]?.id ?? "",
     accion:                "",
     seguimiento:           "",
-    fechaCompromiso:       new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+    fechaCompromiso:       new Date(Date.now()+30*86400000).toISOString().slice(0,10),
     planAccionVeterinario: "",
     estado:                "No Iniciado",
     responsable:           "",
     porcentajeAvance:      0,
   });
-  const [submitting, setSubmitting] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
+
+  const [submitting, setSubmitting]   = useState(false);
+  const [generando, setGenerando]     = useState(false);
+  const [localError, setLocalError]   = useState<string | null>(null);
+
+  // Hallazgos filtrados por la granja seleccionada
+  const hallazgosGranja = useMemo(() =>
+    hallazgos.filter(h => h.granjaId === form.granjaId),
+    [hallazgos, form.granjaId]
+  );
+
+  // Granja y hallazgo seleccionados
+  const granjaSelected  = granjas.find(g => g.id === form.granjaId);
+  const hallazgoSelected = hallazgosGranja.find(h => h.id === form.hallazgoId);
+
+  // Al cambiar granja: limpiar hallazgo y autocompletar auditor
+  function onGranjaChange(id: string) {
+    const g = granjas.find(g => g.id === id);
+    setForm(f => ({ ...f, granjaId: id, hallazgoId: undefined }));
+  }
+
+  // Al seleccionar hallazgo: autocompletar acción y tipo riesgo
+  function onHallazgoChange(id: string) {
+    const h = hallazgos.find(hh => hh.id === id);
+    if (h) {
+      setForm(f => ({
+        ...f,
+        hallazgoId: id,
+        accion: f.accion || h.titulo || "",
+      }));
+    } else {
+      setForm(f => ({ ...f, hallazgoId: undefined }));
+    }
+  }
+
+  // Generar plan IA
+  async function handleGenerarPlanIA() {
+    if (!form.accion?.trim()) { setLocalError("Escribe primero la acción del hallazgo"); return; }
+    setGenerando(true);
+    setLocalError(null);
+    try {
+      const tipoRiesgo = hallazgoSelected?.tiposRiesgo?.[0] ?? "Operativo";
+      const estadoH    = hallazgoSelected?.estado ?? "Abierto";
+      const nombreG    = granjaSelected?.nombre ?? "Granja";
+      const plan = await generarPlanIA(form.accion, tipoRiesgo, estadoH, nombreG);
+      setForm(f => ({ ...f, planAccionVeterinario: plan }));
+    } catch (e: any) {
+      setLocalError("Error al generar plan IA: " + (e?.message ?? "desconocido"));
+    } finally {
+      setGenerando(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setValidationError(null);
-
-    if (granjas.length === 0) {
-      setValidationError("No hay granjas registradas. Crea una en /granjas/registro primero.");
-      return;
-    }
-    if (!form.granjaId)            { setValidationError("Selecciona una granja"); return; }
-    if (!form.accion?.trim())      { setValidationError("La acción es obligatoria"); return; }
-    if (!form.responsable?.trim()) { setValidationError("Asigna un responsable"); return; }
-    if (!form.fechaCompromiso)     { setValidationError("Fecha compromiso es obligatoria"); return; }
+    setLocalError(null);
+    if (granjas.length === 0) { setLocalError("No hay granjas registradas"); return; }
+    if (!form.granjaId)            { setLocalError("Selecciona una granja"); return; }
+    if (!form.accion?.trim())      { setLocalError("La acción es obligatoria"); return; }
+    if (!form.responsable?.trim()) { setLocalError("Asigna un responsable"); return; }
+    if (!form.fechaCompromiso)     { setLocalError("Fecha compromiso es obligatoria"); return; }
 
     const payload: Partial<KPI> = {
       ...form,
@@ -350,97 +556,192 @@ function KPIModal({ granjas, editing, error, onClose, onSave }: {
 
     setSubmitting(true);
     try { await onSave(payload); }
-    catch { /* error visible en banner padre */ }
+    catch { /* error en banner padre */ }
     finally { setSubmitting(false); }
   }
 
+  const INP = "input-base";
+  const SEL_MODAL = "input-base";
+
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6">
-      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-xl overflow-hidden flex flex-col shadow-card">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-hidden flex flex-col shadow-card">
         <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
           <div>
             <h2 className="font-display font-bold text-white text-lg">
               {editing ? "Editar KPI" : "Nuevo KPI"}
             </h2>
             <p className="text-xs text-[#94A3B8] mt-0.5">
-              {editing ? "Modifica los campos y guarda los cambios" : "Plan de acción veterinario con seguimiento"}
+              {editing ? "Modifica el plan de acción" : "Formulario inteligente · relacional · con IA"}
             </p>
           </div>
           <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
         </header>
-        <form onSubmit={submit} className="px-6 py-4 space-y-3">
-          <FormField label="Acción *">
-            <input value={form.accion ?? ""} onChange={(e) => setForm({ ...form, accion: e.target.value })}
-              required className="input-base" placeholder="Ej. Implementar plan de bioseguridad"/>
-          </FormField>
-          <FormField label="Seguimiento">
-            <input value={form.seguimiento ?? ""} onChange={(e) => setForm({ ...form, seguimiento: e.target.value })}
-              className="input-base" placeholder="Periodicidad / metodología de seguimiento"/>
-          </FormField>
+
+        <form onSubmit={submit} className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+
+          {/* ── INFORMACIÓN BASE ── */}
+          <div className="text-[10px] font-semibold text-[#64748B] uppercase tracking-wider border-b border-[#1E2D4A] pb-2">
+            Información Base
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
-            <FormField label="Granja *">
-              <select value={form.granjaId} onChange={(e) => setForm({ ...form, granjaId: e.target.value })} className="input-base">
+            <FF label="Granja *">
+              <select value={form.granjaId} onChange={e=>onGranjaChange(e.target.value)} className={SEL_MODAL}>
                 {granjas.length === 0
-                  ? <option value="">(sin granjas registradas)</option>
-                  : granjas.map((g: any) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+                  ? <option value="">(sin granjas)</option>
+                  : granjas.map(g=><option key={g.id} value={g.id}>{g.nombre}</option>)
+                }
               </select>
-            </FormField>
-            <FormField label="Estado">
-              <select value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value as any })} className="input-base">
-                {ESTADO_KPI.map(e => <option key={e}>{e}</option>)}
+            </FF>
+            <FF label="Tipo de Producción">
+              <input
+                value={granjaSelected?.tipoOperativo ?? "—"}
+                readOnly className={INP + " opacity-60 cursor-default"}
+              />
+            </FF>
+            <FF label="Tipo de Granja">
+              <input
+                value={granjaSelected?.tipoGranja ?? "—"}
+                readOnly className={INP + " opacity-60 cursor-default"}
+              />
+            </FF>
+            <FF label="Responsable *">
+              <input value={form.responsable ?? ""} onChange={e=>setForm({...form,responsable:e.target.value})}
+                className={INP} placeholder="Nombre del responsable" required/>
+            </FF>
+          </div>
+
+          {/* ── INFORMACIÓN DEL HALLAZGO ── */}
+          <div className="text-[10px] font-semibold text-[#64748B] uppercase tracking-wider border-b border-[#1E2D4A] pb-2 mt-2">
+            Información del Hallazgo (opcional)
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <FF label="Hallazgo asociado">
+              <select value={form.hallazgoId ?? ""} onChange={e=>onHallazgoChange(e.target.value)} className={SEL_MODAL}>
+                <option value="">(sin hallazgo)</option>
+                {hallazgosGranja.map(h=>(
+                  <option key={h.id} value={h.id}>{h.titulo?.slice(0,40)}</option>
+                ))}
               </select>
-            </FormField>
-            <FormField label="Responsable *">
-              <input value={form.responsable ?? ""} onChange={(e) => setForm({ ...form, responsable: e.target.value })}
-                required className="input-base" placeholder="Nombre del responsable"/>
-            </FormField>
-            <FormField label="% Avance">
-              <input type="number" min={0} max={100} value={form.porcentajeAvance ?? 0}
-                onChange={(e) => setForm({ ...form, porcentajeAvance: parseInt(e.target.value, 10) || 0 })}
-                className="input-base"/>
-            </FormField>
-            <FormField label="Fecha Compromiso *">
+            </FF>
+            <FF label="Estado del Hallazgo">
+              <input
+                value={hallazgoSelected?.estado ?? "—"}
+                readOnly className={INP + " opacity-60 cursor-default"}
+              />
+            </FF>
+            <FF label="Tipo de Riesgo">
+              <input
+                value={hallazgoSelected?.tiposRiesgo?.join(", ") ?? "—"}
+                readOnly className={INP + " opacity-60 cursor-default"}
+              />
+            </FF>
+            <FF label="Fecha del Hallazgo">
+              <input
+                value={hallazgoSelected?.fechaVisita?.slice(0,10) ?? "—"}
+                readOnly className={INP + " opacity-60 cursor-default"}
+              />
+            </FF>
+          </div>
+
+          {/* ── PLAN DE ACCIÓN ── */}
+          <div className="text-[10px] font-semibold text-[#64748B] uppercase tracking-wider border-b border-[#1E2D4A] pb-2 mt-2">
+            Plan de Acción
+          </div>
+
+          <FF label="Acción / Hallazgo *">
+            <input value={form.accion ?? ""} onChange={e=>setForm({...form,accion:e.target.value})}
+              className={INP} placeholder="Describe la acción o hallazgo a corregir" required/>
+          </FF>
+
+          <FF label="Plan de Acción Auditor (IA)">
+            <div className="relative">
+              <textarea
+                value={form.planAccionVeterinario ?? ""}
+                onChange={e=>setForm({...form,planAccionVeterinario:e.target.value})}
+                rows={3} className={INP + " resize-none pr-32"}
+                placeholder="Escribe el plan o genera uno con IA…"
+              />
+              <button
+                type="button"
+                onClick={handleGenerarPlanIA}
+                disabled={generando}
+                className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-semibold hover:bg-amber-500/25 transition-colors disabled:opacity-50"
+              >
+                {generando
+                  ? <><Loader2 className="w-3 h-3 animate-spin"/>Generando…</>
+                  : <><Sparkles className="w-3 h-3"/>Generar Plan IA</>
+                }
+              </button>
+            </div>
+          </FF>
+
+          <FF label="Seguimiento Responsable">
+            <textarea value={form.seguimiento ?? ""} onChange={e=>setForm({...form,seguimiento:e.target.value})}
+              rows={2} className={INP + " resize-none"} placeholder="Periodicidad / metodología de seguimiento"/>
+          </FF>
+
+          <div className="grid grid-cols-2 gap-3">
+            <FF label="Estado">
+              <select value={form.estado} onChange={e=>setForm({...form,estado:e.target.value as any})} className={SEL_MODAL}>
+                {ESTADO_KPI.map(e=><option key={e}>{e}</option>)}
+              </select>
+            </FF>
+            <FF label="% Avance">
+              <div className="space-y-1">
+                <input type="range" min={0} max={100} value={form.porcentajeAvance ?? 0}
+                  onChange={e=>setForm({...form,porcentajeAvance:parseInt(e.target.value)||0})}
+                  className="w-full accent-amber-500"/>
+                <div className="flex justify-between text-[10px] text-[#64748B]">
+                  <span>0%</span>
+                  <span className="font-bold text-white">{form.porcentajeAvance ?? 0}%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+            </FF>
+            <FF label="Fecha Compromiso *">
               <input type="date" value={form.fechaCompromiso ?? ""} required
-                onChange={(e) => setForm({ ...form, fechaCompromiso: e.target.value })} className="input-base"/>
-            </FormField>
-            <FormField label="Fecha Próxima Visita">
+                onChange={e=>setForm({...form,fechaCompromiso:e.target.value})} className={INP} style={{colorScheme:"dark"}}/>
+            </FF>
+            <FF label="Fecha Próxima Visita">
               <input type="date" value={form.fechaProximaVisita ?? ""}
-                onChange={(e) => setForm({ ...form, fechaProximaVisita: e.target.value })} className="input-base"/>
-            </FormField>
+                onChange={e=>setForm({...form,fechaProximaVisita:e.target.value})} className={INP} style={{colorScheme:"dark"}}/>
+            </FF>
             {editing && (
-              <FormField label="Fecha Cumplimiento">
+              <FF label="Fecha Cumplimiento">
                 <input type="date" value={form.fechaCumplimiento ?? ""}
-                  onChange={(e) => setForm({ ...form, fechaCumplimiento: e.target.value })} className="input-base"/>
-              </FormField>
+                  onChange={e=>setForm({...form,fechaCumplimiento:e.target.value})} className={INP} style={{colorScheme:"dark"}}/>
+              </FF>
             )}
           </div>
-          <FormField label="Plan de Acción Veterinario">
-            <textarea value={form.planAccionVeterinario ?? ""} onChange={(e) => setForm({ ...form, planAccionVeterinario: e.target.value })}
-              rows={2} className="input-base resize-none" placeholder="Detalle del plan correctivo"/>
-          </FormField>
 
-          {(validationError || error) && (
-            <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start gap-2">
-              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>
-              <span>{validationError ?? error}</span>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="btn-ghost text-xs" disabled={submitting}>Cancelar</button>
-            <button type="submit" disabled={submitting}
-              className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-2 disabled:opacity-50">
-              {submitting && <Loader2 className="w-3 h-3 animate-spin"/>}
-              {submitting ? "Guardando..." : editing ? "Actualizar" : "Crear KPI"}
-            </button>
-          </div>
         </form>
+
+        {/* Error banner */}
+        {(localError || error) && (
+          <div className="mx-6 mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start gap-2">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>
+            <span>{localError ?? error}</span>
+          </div>
+        )}
+
+        <footer className="flex items-center justify-end gap-2 px-6 py-3 border-t border-[#1E2D4A]">
+          <button type="button" onClick={onClose} className="btn-ghost text-xs" disabled={submitting}>Cancelar</button>
+          <button type="submit" onClick={submit} disabled={submitting}
+            className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-2 disabled:opacity-50">
+            {submitting && <Loader2 className="w-3 h-3 animate-spin"/>}
+            {submitting ? "Guardando..." : editing ? "Actualizar KPI" : "Crear KPI"}
+          </button>
+        </footer>
       </div>
     </div>
   );
 }
 
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+// ─── FormField helper ─────────────────────────────────────────────────────────
+function FF({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
       <span className="text-xs text-[#94A3B8] font-medium mb-1.5 block">{label}</span>
@@ -449,158 +750,44 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-function Kpi({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div className="card-base text-center">
-      <p className="font-display text-2xl font-bold" style={{ color }}>{value}</p>
-      <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider mt-1">{label}</p>
-    </div>
-  );
-}
-
-function Field({ label, value, truncate }: { label: string; value: string; truncate?: boolean }) {
-  return (
-    <div>
-      <p className="text-[10px] text-[#475569] uppercase tracking-wider mb-0.5">{label}</p>
-      <p className={`text-white ${truncate ? "truncate" : ""}`}>{value}</p>
-    </div>
-  );
-}
-
-// ─── ALERTS MODAL ──────────────────────────────────────────────────────────
-const SEV_COLOR: Record<KpiAlertSeverity, string> = {
-  RIESGO_CRITICO: "#EF4444",
-  VENCIDO:        "#F59E0B",
-  PROXIMO:        "#3B82F6",
-};
-const SEV_LABEL: Record<KpiAlertSeverity, string> = {
-  RIESGO_CRITICO: "Riesgo crítico",
-  VENCIDO:        "Vencido",
-  PROXIMO:        "Próximo a vencer",
-};
-const SEV_ICON: Record<KpiAlertSeverity, any> = {
-  RIESGO_CRITICO: AlertCircle,
-  VENCIDO:        AlertTriangle,
-  PROXIMO:        Clock,
-};
-
-function AlertsModal({ alerts, isLoading, onClose }: {
-  alerts: KpiAlert[];
-  isLoading: boolean;
-  onClose: () => void;
+// ─── AlertsModal ─────────────────────────────────────────────────────────────
+function AlertsModal({ alerts, isLoading, onClose, onSendReminders }: {
+  alerts: any[]; isLoading: boolean;
+  onClose: () => void; onSendReminders: () => Promise<void>;
 }) {
-  const [filter, setFilter] = useState<KpiAlertSeverity | "">("");
-
-  const filtered = filter ? alerts.filter(a => a.severity === filter) : alerts;
-  const counts = {
-    RIESGO_CRITICO: alerts.filter(a => a.severity === "RIESGO_CRITICO").length,
-    VENCIDO:        alerts.filter(a => a.severity === "VENCIDO").length,
-    PROXIMO:        alerts.filter(a => a.severity === "PROXIMO").length,
-  };
-
+  const [sending, setSending] = useState(false);
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#0D1526] border border-amber-500/40 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
-        <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A] bg-gradient-to-r from-amber-500/10 to-transparent">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
-              <Bell className="w-5 h-5 text-amber-400"/>
-            </div>
-            <div>
-              <h2 className="font-display font-bold text-white text-lg">Alertas Activas KPI</h2>
-              <p className="text-xs text-[#94A3B8] mt-0.5">{alerts.length} KPIs requieren atención</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-6">
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-lg flex flex-col shadow-card max-h-[80vh]">
+        <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
+          <h2 className="font-bold text-white">Alertas KPI</h2>
+          <button onClick={onClose}><X className="w-5 h-5 text-[#94A3B8]"/></button>
         </header>
-
-        {/* KPI cards por severidad */}
-        <div className="grid grid-cols-3 gap-3 px-6 py-4 border-b border-[#1E2D4A]">
-          {(["RIESGO_CRITICO", "VENCIDO", "PROXIMO"] as KpiAlertSeverity[]).map(sev => {
-            const Icon = SEV_ICON[sev];
-            const active = filter === sev;
-            return (
-              <button key={sev} onClick={() => setFilter(active ? "" : sev)}
-                className={`p-3 rounded-lg border transition-all text-left ${active ? "border-amber-500/40 bg-amber-500/5" : "border-[#2A3F6A] bg-[#1A2540] hover:border-[#3A4F8A]"}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <Icon className="w-4 h-4" style={{ color: SEV_COLOR[sev] }}/>
-                  <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">{SEV_LABEL[sev]}</p>
-                </div>
-                <p className="font-display text-2xl font-bold" style={{ color: SEV_COLOR[sev] }}>{counts[sev]}</p>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Tabla de alertas */}
-        <div className="flex-1 overflow-y-auto">
-          {isLoading ? (
-            <div className="py-12 text-center text-[#475569]">
-              <Loader2 className="w-6 h-6 animate-spin mx-auto"/>
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+          {isLoading && <p className="text-center text-[#94A3B8] text-sm">Cargando alertas…</p>}
+          {!isLoading && alerts.length === 0 && (
+            <div className="text-center py-8">
+              <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2"/>
+              <p className="text-sm text-[#94A3B8]">Sin alertas activas</p>
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="py-12 text-center">
-              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3"/>
-              <p className="text-white font-semibold mb-1">¡Sin alertas activas!</p>
-              <p className="text-xs text-[#94A3B8]">
-                {filter ? `No hay KPIs en estado ${SEV_LABEL[filter]}.` : "Todos los KPIs están al día."}
-              </p>
-            </div>
-          ) : (
-            <table className="w-full text-xs">
-              <thead className="bg-[#1A2540] sticky top-0">
-                <tr>
-                  <th className="text-left px-4 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Severidad</th>
-                  <th className="text-left px-4 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Acción / Granja</th>
-                  <th className="text-left px-4 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Responsable</th>
-                  <th className="text-center px-4 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Avance</th>
-                  <th className="text-center px-4 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Compromiso</th>
-                  <th className="text-center px-4 py-2 text-[10px] text-[#94A3B8] uppercase tracking-wider">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(a => {
-                  const Icon = SEV_ICON[a.severity];
-                  return (
-                    <tr key={a.id} className="border-t border-[#1E2D4A]/40 hover:bg-[#1A2540]/50">
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                          style={{ background: `${SEV_COLOR[a.severity]}18`, color: SEV_COLOR[a.severity], border: `1px solid ${SEV_COLOR[a.severity]}30` }}>
-                          <Icon className="w-3 h-3"/>{SEV_LABEL[a.severity]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-white font-semibold">{a.accion}</p>
-                        <p className="text-[10px] text-[#94A3B8] mt-0.5">{a.granjaCodigo} · {a.granjaNombre}</p>
-                      </td>
-                      <td className="px-4 py-3 text-[#94A3B8]">{a.responsable}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="font-bold" style={{ color: a.porcentajeAvance < 50 ? SEV_COLOR.VENCIDO : "#10B981" }}>
-                          {a.porcentajeAvance}%
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center text-[#94A3B8] font-mono">
-                        <div>{new Date(a.fechaCompromiso).toLocaleDateString("es-CO")}</div>
-                        <div className="text-[9px] mt-0.5" style={{ color: a.diasDeAtraso > 0 ? SEV_COLOR.VENCIDO : "#94A3B8" }}>
-                          {a.diasDeAtraso > 0 ? `+${a.diasDeAtraso}d atraso` : a.diasDeAtraso === 0 ? "vence hoy" : `${-a.diasDeAtraso}d restantes`}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center text-[#94A3B8]">{a.estado}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           )}
+          {alerts.map((a: any) => (
+            <div key={a.kpiId} className="p-3 rounded-lg bg-[#0A111F] border border-[#1E2D4A]">
+              <p className="text-xs font-semibold text-white">{a.accion?.slice(0,50)}</p>
+              <p className="text-[10px] text-[#64748B] mt-0.5">{a.granjaNombre} · {a.responsable}</p>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/25">
+                {a.severity}
+              </span>
+            </div>
+          ))}
         </div>
-
-        <footer className="px-6 py-3 border-t border-[#1E2D4A] bg-[#0A111F] flex items-center justify-between">
-          <p className="text-[10px] text-[#475569]">
-            Vencidos: <strong className="text-amber-400">{counts.VENCIDO}</strong> ·
-            Próximos a vencer: <strong className="text-blue-400">{counts.PROXIMO}</strong> ·
-            Riesgo crítico: <strong className="text-red-400">{counts.RIESGO_CRITICO}</strong>
-          </p>
+        <footer className="flex justify-end gap-2 px-6 py-3 border-t border-[#1E2D4A]">
           <button onClick={onClose} className="btn-ghost text-xs">Cerrar</button>
+          <button disabled={sending} onClick={async()=>{setSending(true);try{await onSendReminders();}finally{setSending(false);}}}
+            className="btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center gap-1.5 disabled:opacity-50">
+            {sending ? <Loader2 className="w-3 h-3 animate-spin"/> : <Bell className="w-3 h-3"/>}
+            Enviar Recordatorios
+          </button>
         </footer>
       </div>
     </div>
