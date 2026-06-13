@@ -107,10 +107,6 @@ function fmtFechaCorta(d?: string) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("es-CO");
 }
-function displayEstado(e: string) {
-  return ({COMPLETADO:"Completado",EN_CURSO:"En Curso",EN_ESPERA:"En Espera",
-           NO_INICIADO:"No Iniciado",ABIERTO:"Abierto",EN_PLAN:"En Plan",CERRADO:"Cerrado",VERIFICADO:"Verificado"})[e] ?? e;
-}
 function clsBadge(e: string) {
   const u = e?.toUpperCase().replace(/ /g,"_");
   if (u==="COMPLETADO"||u==="CERRADO"||u==="VERIFICADO") return "verde";
