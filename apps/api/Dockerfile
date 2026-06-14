@@ -19,7 +19,7 @@ WORKDIR /app
 COPY . .
 
 # Instalar deps (no-frozen-lockfile para soportar nuevas dependencias del frontend)
-RUN pnpm install --no-frozen-lockfile
+RUN pnpm install --no-frozen-lockfile --filter "@savicol/api..." --ignore-scripts
 
 # Adaptar schema Prisma de SQLite → Postgres
 RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/' apps/api/prisma/schema.prisma
