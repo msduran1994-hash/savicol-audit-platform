@@ -11,7 +11,7 @@ FROM node:20-alpine
 RUN apk add --no-cache openssl libc6-compat python3 make g++
 
 # Habilitar pnpm via corepack
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN npm install -g pnpm@9.15.4
 
 WORKDIR /app
 
