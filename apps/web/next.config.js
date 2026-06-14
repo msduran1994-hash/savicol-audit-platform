@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Configurar chromium/puppeteer para funciones serverless
+  serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
+  experimental: {
+    serverComponentsExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
+  },
   transpilePackages: ["@savicol/shared-types"],
   images: {
     remotePatterns: [{ protocol: "https", hostname: "**" }],
