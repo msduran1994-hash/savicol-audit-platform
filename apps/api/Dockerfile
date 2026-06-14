@@ -18,8 +18,8 @@ WORKDIR /app
 # Copiar todo el monorepo
 COPY . .
 
-# Instalar deps (frozen-lockfile garantiza determinismo)
-RUN pnpm install --frozen-lockfile
+# Instalar deps (no-frozen-lockfile para soportar nuevas dependencias del frontend)
+RUN pnpm install --no-frozen-lockfile
 
 # Adaptar schema Prisma de SQLite → Postgres
 RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/' apps/api/prisma/schema.prisma
