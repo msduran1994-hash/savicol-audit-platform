@@ -19,7 +19,9 @@ WORKDIR /app
 COPY . .
 
 # Instalar deps (no-frozen-lockfile para soportar nuevas dependencias del frontend)
-RUN pnpm install --no-frozen-lockfile --filter "@savicol/api..." --ignore-scripts
+# Instalar todo el monorepo pero sin ejecutar postinstall scripts
+# (--ignore-scripts evita la descarga del binario de @sparticuz/chromium ~90MB)
+RUN pnpm install --no-frozen-lockfile --ignore-scripts
 
 # Adaptar schema Prisma de SQLite → Postgres
 RUN sed -i 's/provider = "sqlite"/provider = "postgresql"/' apps/api/prisma/schema.prisma
@@ -29,6 +31,10 @@ RUN rm -rf apps/api/prisma/migrations
 
 # Generar Prisma Client para Postgres
 RUN cd apps/api && pnpm prisma generate
+
+# Compilar el API NestJS
+# Compilar shared-types primero (el API lo importa)
+RUN pnpm --filter @savicol/shared-types build || true
 
 # Compilar el API NestJS
 RUN pnpm --filter @savicol/api build
