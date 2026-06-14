@@ -954,16 +954,92 @@ export function generarInforme(
 // ═══════════════════════════════════════════════════════════════════════════════
 // FUNCIÓN ENVIAR POR CORREO — USA EL EMAILSERVICE DEL BACKEND
 // ═══════════════════════════════════════════════════════════════════════════════
-// ─── Convertir HTML del informe a base64 (para adjuntar como PDF) ─────────────
-function htmlToBase64(html: string): string {
-  // Convierte el HTML a base64 para enviarlo como adjunto al backend
-  // El backend adjunta el HTML como archivo .html descargable
-  // (en producción sin Puppeteer, usamos base64 del HTML como "PDF" descargable)
+// ─── Convertir HTML del informe a PDF real usando html2canvas + jsPDF ───────────
+// Renderiza el HTML en el browser → captura con html2canvas → genera PDF con jsPDF
+// El PDF resultante es IDÉNTICO al informe visible en la plataforma
+async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: string }> {
+  const fecha    = new Date().toISOString().slice(0, 10);
+  const filename = `Informe-Auditoria-Savicol-${fecha}.pdf`;
+
   try {
-    return btoa(unescape(encodeURIComponent(html)));
-  } catch {
-    return btoa(html);
+    // Importar librerías dinamicamente (solo se cargan cuando se necesitan)
+    const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+      import("jspdf"),
+      import("html2canvas"),
+    ]);
+
+    // Crear un iframe invisible para renderizar el HTML correctamente
+    // (usar iframe evita que los estilos del modal interfieran)
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:794px;height:1123px;border:none;opacity:0;pointer-events:none;";
+    document.body.appendChild(iframe);
+
+    await new Promise<void>((resolve) => {
+      iframe.onload = () => resolve();
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(html);
+        doc.close();
+      } else {
+        resolve();
+      }
+    });
+
+    // Esperar a que los estilos y fuentes carguen
+    await new Promise(r => setTimeout(r, 800));
+
+    const iframeDoc   = iframe.contentDocument || iframe.contentWindow?.document;
+    const targetEl    = iframeDoc?.body || document.body;
+
+    // Capturar el HTML renderizado como imagen de alta resolución
+    const canvas = await html2canvas(targetEl, {
+      scale:            2,           // 2x para alta resolución
+      useCORS:          true,
+      allowTaint:       true,
+      backgroundColor:  "#ffffff",
+      logging:          false,
+      width:            794,         // ancho A4 en px a 96dpi
+      windowWidth:      794,
+    });
+
+    document.body.removeChild(iframe);
+
+    // Crear el PDF A4
+    const pdf      = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageW    = pdf.internal.pageSize.getWidth();   // 210mm
+    const pageH    = pdf.internal.pageSize.getHeight();  // 297mm
+
+    const imgData  = canvas.toDataURL("image/jpeg", 0.92);
+    const imgH     = (canvas.height * pageW) / canvas.width; // altura proporcional
+
+    // Si el contenido es más largo que una página, dividir en múltiples páginas
+    let yPos = 0;
+    while (yPos < imgH) {
+      if (yPos > 0) pdf.addPage();
+      pdf.addImage(
+        imgData, "JPEG",
+        0, -yPos,       // desplazar hacia arriba para mostrar la sección correcta
+        pageW, imgH,
+        undefined, "FAST"
+      );
+      yPos += pageH;
+    }
+
+    const b64 = pdf.output("datauristring").split(",")[1];
+    return { b64, filename };
+
+  } catch (err) {
+    console.error("[htmlToPDFBase64]", err);
+    // Fallback: retornar el HTML como base64 si falla jsPDF
+    const b64 = btoa(unescape(encodeURIComponent(html)));
+    return { b64, filename: filename.replace(".pdf", ".html") };
   }
+}
+
+// Wrapper sync para compatibilidad con código antiguo
+function htmlToBase64(html: string): string {
+  return btoa(unescape(encodeURIComponent(html)));
 }
 
 export async function enviarInformePorCorreo(
@@ -1531,22 +1607,18 @@ export default function KPIPage() {
             const auditorEmail  = accessToken ? (JSON.parse(atob(accessToken.split(".")[1]||"e30=")).email ?? "") : "";
 
             // 1. Generar el HTML exacto del modelo seleccionado
-            //    El mismo HTML que se usa en la descarga directa desde la plataforma
+            //    El mismo HTML que se ve en la plataforma al descargar
             const htmlInforme = (() => {
-              const auditorN = auditorNombre;
-              const granjaFiltrada = granjaId
-                ? granjas.find((g: any) => g.id === granjaId)
-                : null;
               switch (modelo) {
-                case "1-ejecutivo": return generarModelo1(filtered, hallazgos, granjas, auditorN);
-                case "2-tecnico":   return generarModelo2(filtered, hallazgos, granjas, auditorN);
-                case "3-dashboard": return generarModelo3(filtered, hallazgos, granjas, auditorN);
-                case "4-granja":    return generarModelo4(filtered, hallazgos, granjas, auditorN, granjaId);
-                default:            return generarModelo5(filtered, hallazgos, granjas, auditorN);
+                case "1-ejecutivo": return generarModelo1(filtered, hallazgos, granjas, auditorNombre);
+                case "2-tecnico":   return generarModelo2(filtered, hallazgos, granjas, auditorNombre);
+                case "3-dashboard": return generarModelo3(filtered, hallazgos, granjas, auditorNombre);
+                case "4-granja":    return generarModelo4(filtered, hallazgos, granjas, auditorNombre, granjaId);
+                default:            return generarModelo5(filtered, hallazgos, granjas, auditorNombre);
               }
             })();
 
-            // 2. Agregar descripción del auditor al HTML del informe
+            // 2. Agregar descripción del auditor al HTML si viene
             const htmlConDesc = descripcion?.trim()
               ? htmlInforme.replace(
                   "</body>",
@@ -1558,24 +1630,20 @@ export default function KPIPage() {
                 )
               : htmlInforme;
 
-            // 3. Convertir HTML a PDF vía API Route (Puppeteer serverless)
+            // 3. Convertir HTML a PDF REAL en el browser (html2canvas + jsPDF)
+            //    El PDF generado es idéntico al informe visible en la plataforma
             let pdfBase64 = "";
             let pdfFilename = `Informe-Auditoria-Savicol-${modelo}-${new Date().toISOString().slice(0,10)}.pdf`;
             try {
-              const pdfResp = await fetch("/api/generar-pdf", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  htmlContent: htmlConDesc,
-                  filename:    pdfFilename,
-                }),
-              });
-              if (pdfResp.ok) {
-                const pdfData = await pdfResp.json();
-                pdfBase64   = pdfData.pdfBase64 ?? "";
-                pdfFilename  = pdfData.filename  ?? pdfFilename;
-              }
-            } catch { /* si falla, envía sin adjunto PDF */ }
+              const { b64, filename: fn } = await htmlToPDFBase64(htmlConDesc);
+              pdfBase64  = b64;
+              pdfFilename = fn;
+            } catch (pdfErr) {
+              console.error("[PDF]", pdfErr);
+              // Fallback: adjuntar como HTML si jsPDF falla
+              pdfBase64   = htmlToBase64(htmlConDesc);
+              pdfFilename  = pdfFilename.replace(".pdf", ".html");
+            }
 
             // 2. Enviar correo con PDF adjunto
             const r = await enviarInformePorCorreo(modelo, email, asunto, filtered, hallazgos, granjas, auditorNombre, accessToken||"", auditorEmail, granjaId, descripcion, pdfBase64, pdfFilename);
