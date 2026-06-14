@@ -1,97 +1,107 @@
 // apps/web/src/app/api/generar-pdf/route.ts
-// Convierte el HTML del modelo de informe a PDF real usando Puppeteer + Chromium serverless
-// El PDF generado es IDÉNTICO al informe HTML descargado desde la plataforma
+// HTML → PDF con @sparticuz/chromium + puppeteer-core (Vercel serverless)
+// Produce PDF idéntico al informe HTML descargado desde la plataforma
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from "next/server";
 
-export const runtime   = "nodejs";
-export const maxDuration = 60; // segundos máximos (Vercel Pro permite hasta 60s)
+export const runtime     = "nodejs";
+export const maxDuration = 60;
 
-// ─── POST Handler ─────────────────────────────────────────────────────────────
+// Función auxiliar para intentar importar chromium
+async function getPuppeteer() {
+  const chromium  = (await import("@sparticuz/chromium")).default;
+  const puppeteer = (await import("puppeteer-core")).default;
+  return { chromium, puppeteer };
+}
+
 export async function POST(req: NextRequest) {
+  let body: any;
   try {
-    const body = await req.json();
-    const {
-      htmlContent,   // HTML completo del modelo seleccionado
-      filename,      // nombre del archivo PDF
-    } = body;
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Body JSON inválido" }, { status: 400 });
+  }
 
-    if (!htmlContent || typeof htmlContent !== "string" || htmlContent.length < 100) {
-      return NextResponse.json({ error: "htmlContent requerido" }, { status: 400 });
-    }
+  const { htmlContent, filename } = body ?? {};
 
-    // ── Usar Puppeteer + @sparticuz/chromium para HTML→PDF ───────────────────
-    let pdfBuffer: Buffer;
+  if (!htmlContent || typeof htmlContent !== "string" || htmlContent.length < 50) {
+    return NextResponse.json({ error: "htmlContent requerido" }, { status: 400 });
+  }
+
+  const fname = filename
+    ?? `Informe-Auditoria-Savicol-${new Date().toISOString().slice(0, 10)}.pdf`;
+
+  // ── Intentar con Puppeteer + Chromium ────────────────────────────────────
+  try {
+    const { chromium, puppeteer } = await getPuppeteer();
+
+    const executablePath = await chromium.executablePath();
+
+    const browser = await puppeteer.launch({
+      args:            [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"],
+      defaultViewport: { width: 1240, height: 1754, deviceScaleFactor: 1 },
+      executablePath,
+      headless:        true,
+    });
 
     try {
-      // Importación dinámica para evitar errores en edge/build
-      const chromium    = (await import("@sparticuz/chromium")).default;
-      const puppeteer   = (await import("puppeteer-core")).default;
-
-      // Configuración para entorno serverless
-      const executablePath = await chromium.executablePath();
-
-      const browser = await puppeteer.launch({
-        args:            chromium.args,
-        defaultViewport: chromium.defaultViewport,
-        executablePath,
-        headless:        true,
-      });
-
       const page = await browser.newPage();
 
-      // Cargar el HTML del informe completo
+      // Emular A4 para que el CSS @media print funcione
+      await page.emulateMediaType("print");
+
+      // Cargar HTML completo del modelo seleccionado
       await page.setContent(htmlContent, {
-        waitUntil: "networkidle0",
+        waitUntil: "domcontentloaded",
+        timeout:   30000,
       });
 
-      // Generar PDF con formato A4 — idéntico a window.print()
-      pdfBuffer = Buffer.from(await page.pdf({
-        format:           "A4",
-        printBackground:  true,    // incluir colores de fondo CSS
+      // Esperar a que los estilos CSS terminen de aplicarse
+      await page.evaluate(() => document.fonts.ready);
+
+      // Generar PDF A4 con todos los estilos y colores de fondo
+      const pdfUint8 = await page.pdf({
+        format:              "A4",
+        printBackground:     true,   // ← incluye gradientes, colores, imágenes CSS
+        preferCSSPageSize:   false,
         margin: {
-          top:    "0mm",
-          right:  "0mm",
-          bottom: "0mm",
-          left:   "0mm",
+          top:    "0",
+          right:  "0",
+          bottom: "0",
+          left:   "0",
         },
         displayHeaderFooter: false,
-      }));
+        timeout:             30000,
+      });
 
-      await browser.close();
+      const pdfBuffer = Buffer.from(pdfUint8);
+      const pdfB64    = pdfBuffer.toString("base64");
 
-    } catch (puppeteerError: any) {
-      // Fallback: si Puppeteer falla, retornar el HTML como base64 con extensión .html
-      // El destinatario puede abrirlo en el navegador y verá el informe completo
-      console.error("[generar-pdf] Puppeteer error:", puppeteerError?.message);
-
-      // Intentar con html-to-pdf alternativo basado en fetch a servicio externo
-      // Fallback final: retornar HTML como adjunto
-      const htmlB64 = Buffer.from(htmlContent, "utf-8").toString("base64");
       return NextResponse.json({
-        pdfBase64: htmlB64,
-        filename:  (filename ?? "informe").replace(".pdf", ".html"),
-        format:    "html",
-        warning:   "PDF generado como HTML descargable (misma visualización en navegador)",
-      }, { status: 200 });
+        pdfBase64: pdfB64,
+        filename:  fname,
+        format:    "pdf",
+        size:      pdfBuffer.length,
+      });
+
+    } finally {
+      await browser.close();
     }
 
-    const pdfB64 = pdfBuffer.toString("base64");
-    const fname  = filename ?? `Informe-Auditoria-Savicol-${new Date().toISOString().slice(0,10)}.pdf`;
+  } catch (puppeteerErr: any) {
+    // ── Fallback: retornar el HTML comprimido en base64 ─────────────────────
+    // El destinatario puede abrir el .html y verá el informe idéntico
+    console.error("[generar-pdf] Puppeteer error:", puppeteerErr?.message);
+
+    const htmlB64    = Buffer.from(htmlContent, "utf-8").toString("base64");
+    const htmlFname  = fname.replace(/\.pdf$/i, ".html");
 
     return NextResponse.json({
-      pdfBase64: pdfB64,
-      filename:  fname,
-      format:    "pdf",
-      size:      pdfBuffer.length,
-    }, { status: 200 });
-
-  } catch (err: any) {
-    console.error("[generar-pdf v5]", err?.message ?? err);
-    return NextResponse.json(
-      { error: "Error al generar el PDF: " + (err?.message ?? "desconocido") },
-      { status: 500 }
-    );
+      pdfBase64: htmlB64,
+      filename:  htmlFname,
+      format:    "html",
+      warning:   "PDF generado como HTML — abrirlo en navegador para vista idéntica",
+    });
   }
 }
