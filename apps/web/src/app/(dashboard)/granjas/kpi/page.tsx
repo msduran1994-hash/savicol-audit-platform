@@ -10,6 +10,7 @@ import type { KPI } from "@/lib/granjas.types";
 import {
   Target, Plus, Filter, X, Trash2, Edit2, AlertCircle,
   Loader2, CheckCircle2, Sparkles, FileText, TrendingUp, Bell, ChevronDown,
+  ImagePlus, Image as ImageIcon,
 } from "lucide-react";
 import { useKpiAlerts, useSendKpiReminders } from "@/hooks/useKpiAlerts";
 
@@ -48,6 +49,52 @@ function displayEstado(e: string) {
 
 // Estado calificación auditor (etiquetas visuales)
 const CALIFICACION_AUDITOR = ["Completado","En Curso","Pendiente","En Espera","Atrasado"] as const;
+
+// ─── Compresión inteligente de imágenes (browser) ────────────────────────────
+// Redimensiona y comprime a JPEG/WEBP antes de subir. Mantiene calidad visual,
+// reduce peso, evita consumo innecesario de almacenamiento.
+async function comprimirImagen(
+  file: File,
+  opts: { maxDim?: number; quality?: number; preferWebp?: boolean } = {}
+): Promise<{ dataUrl: string; tipoMime: string; sizeBytes: number }> {
+  const { maxDim = 1600, quality = 0.72, preferWebp = true } = opts;
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        // Redimensionar manteniendo proporción
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width >= height) { height = Math.round(height * maxDim / width); width = maxDim; }
+          else                 { width  = Math.round(width  * maxDim / height); height = maxDim; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("Canvas no disponible")); return; }
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        // Preferir WEBP si el navegador lo soporta, fallback a JPEG
+        const tipoMime = preferWebp ? "image/webp" : "image/jpeg";
+        let dataUrl = canvas.toDataURL(tipoMime, quality);
+        // Si el navegador no soportó webp, toDataURL devuelve png — fallback a jpeg
+        const mimeReal = dataUrl.substring(5, dataUrl.indexOf(";"));
+        if (preferWebp && mimeReal !== "image/webp") {
+          dataUrl = canvas.toDataURL("image/jpeg", quality);
+        }
+        const finalMime = dataUrl.substring(5, dataUrl.indexOf(";"));
+        const sizeBytes = Math.round((dataUrl.length - dataUrl.indexOf(",") - 1) * 3 / 4);
+        resolve({ dataUrl, tipoMime: finalMime, sizeBytes });
+      };
+      img.onerror = () => reject(new Error("No se pudo leer la imagen"));
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    reader.readAsDataURL(file);
+  });
+}
 
 // ─── Generar Plan IA ─────────────────────────────────────────────────────────
 async function generarPlanIA(
@@ -1678,6 +1725,7 @@ export default function KPIPage() {
           hallazgos={hallazgos}
           editing={editingKpi}
           error={saveError}
+          accessToken={accessToken}
           onClose={() => { setModalOpen(false); setSaveError(null); }}
           onSave={async (payload) => {
             setSaveError(null);
@@ -1709,12 +1757,142 @@ export default function KPIPage() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// EvidenciasFotograficas — carga, compresión, preview y persistencia
+// Reutiliza el módulo backend existente: /api/v1/evidencias/hallazgo
+// ═══════════════════════════════════════════════════════════════════════════════
+function EvidenciasFotograficas({ hallazgoId, accessToken }: {
+  hallazgoId?: string;
+  accessToken: string | null;
+}) {
+  const API = process.env.NEXT_PUBLIC_API_URL || "";
+  const [evidencias, setEvidencias] = useState<any[]>([]);
+  const [cargando,   setCargando]   = useState(false);
+  const [subiendo,   setSubiendo]   = useState(false);
+  const [errEv,      setErrEv]      = useState<string | null>(null);
+
+  // Cargar evidencias existentes del hallazgo (al abrir / cambiar hallazgo)
+  useMemo(() => {
+    if (!hallazgoId || !accessToken) { setEvidencias([]); return; }
+    setCargando(true);
+    fetch(`${API}/api/v1/evidencias/hallazgo?hallazgoId=${hallazgoId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then(r => r.ok ? r.json() : [])
+      .then((data: any[]) => setEvidencias(Array.isArray(data) ? data.filter(e => e.tipo === "Foto") : []))
+      .catch(() => setEvidencias([]))
+      .finally(() => setCargando(false));
+  }, [hallazgoId, accessToken, API]);
+
+  async function onFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ""; // permitir re-seleccionar el mismo archivo
+    if (!files.length) return;
+    if (!hallazgoId) { setErrEv("Selecciona primero un hallazgo para asociar las fotos"); return; }
+    if (!accessToken) { setErrEv("Sesión no válida"); return; }
+
+    setSubiendo(true); setErrEv(null);
+    try {
+      for (const file of files) {
+        if (!file.type.startsWith("image/")) continue;
+        // Compresión inteligente antes de almacenar
+        const { dataUrl, sizeBytes } = await comprimirImagen(file, {
+          maxDim: 1600, quality: 0.72, preferWebp: true,
+        });
+        const resp = await fetch(`${API}/api/v1/evidencias/hallazgo`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({
+            hallazgoId,
+            tipo:   "Foto",
+            nombre: file.name.replace(/\.[^.]+$/, "") + (dataUrl.startsWith("data:image/webp") ? ".webp" : ".jpg"),
+            url:    dataUrl,
+            size:   sizeBytes,
+          }),
+        });
+        if (resp.ok) {
+          const nueva = await resp.json();
+          setEvidencias(prev => [nueva, ...prev]);
+        } else {
+          const err = await resp.json().catch(() => ({}));
+          setErrEv(err?.message ?? "Error al subir una imagen");
+        }
+      }
+    } catch (ex: any) {
+      setErrEv(ex?.message ?? "Error al procesar las imágenes");
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  async function eliminar(id: string) {
+    if (!accessToken) return;
+    const prev = evidencias;
+    setEvidencias(e => e.filter(x => x.id !== id)); // optimista
+    try {
+      const resp = await fetch(`${API}/api/v1/evidencias/hallazgo/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!resp.ok) setEvidencias(prev); // revertir si falla
+    } catch {
+      setEvidencias(prev);
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide flex items-center gap-1.5">
+          <ImageIcon className="w-3.5 h-3.5"/> Evidencias Fotográficas Hallazgo
+        </label>
+        <label className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors cursor-pointer
+          ${hallazgoId ? "bg-[#4A7AFF]/15 text-[#4A7AFF] border-[#4A7AFF]/30 hover:bg-[#4A7AFF]/25" : "bg-[#1E2D4A]/40 text-[#475569] border-[#1E2D4A] cursor-not-allowed"}`}>
+          {subiendo ? <Loader2 className="w-3 h-3 animate-spin"/> : <ImagePlus className="w-3 h-3"/>}
+          {subiendo ? "Subiendo…" : "Adjuntar fotos"}
+          <input type="file" accept="image/*" multiple disabled={!hallazgoId || subiendo}
+            onChange={onFilesSelected} className="hidden"/>
+        </label>
+      </div>
+
+      {!hallazgoId && (
+        <p className="text-[10px] text-[#475569] mb-2">Selecciona un hallazgo arriba para adjuntar evidencias fotográficas.</p>
+      )}
+      {errEv && <p className="text-[10px] text-red-400 mb-2">{errEv}</p>}
+      {cargando && <p className="text-[10px] text-[#94A3B8] mb-2">Cargando evidencias…</p>}
+
+      {evidencias.length > 0 && (
+        <div className="grid grid-cols-4 gap-2">
+          {evidencias.map(ev => (
+            <div key={ev.id} className="relative group rounded-lg overflow-hidden border border-[#1E2D4A] bg-[#0A111F] aspect-square">
+              <img src={ev.url} alt={ev.nombre}
+                className="w-full h-full object-cover"/>
+              <button type="button" onClick={() => eliminar(ev.id)}
+                className="absolute top-1 right-1 p-1 rounded-md bg-black/70 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/90"
+                title="Eliminar imagen">
+                <Trash2 className="w-3 h-3"/>
+              </button>
+              <div className="absolute bottom-0 inset-x-0 bg-black/60 px-1.5 py-0.5">
+                <p className="text-[8px] text-white/80 truncate">{(ev.size/1024).toFixed(0)} KB</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {!cargando && hallazgoId && evidencias.length === 0 && (
+        <p className="text-[10px] text-[#475569]">Sin evidencias fotográficas aún.</p>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // KPIModal — formulario optimizado
 // ═══════════════════════════════════════════════════════════════════════════════
-function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave }: {
+function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessToken }: {
   granjas: any[]; hallazgos: any[];
   editing?: KPI | null; error: string | null;
   onClose: () => void; onSave: (k: Partial<KPI>) => Promise<void>;
+  accessToken: string | null;
 }) {
   // Normalizar estado al editar
   const normalState = (e: string) =>
@@ -1769,10 +1947,25 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave }: {
   }
   function onHallazgoChange(id: string) {
     const h = hallazgos.find(hh => hh.id === id);
+    // Autocompletar "Hallazgo / Acción" con la descripción COMPLETA del hallazgo.
+    // El título se mantiene como referencia visual (campo Hallazgo arriba).
+    // La IA recibirá esta descripción real como contexto principal.
+    let textoAccion = "";
+    if (h) {
+      const partes: string[] = [];
+      if (h.titulo)      partes.push(h.titulo.trim());
+      if (h.descripcion && h.descripcion.trim() && h.descripcion.trim() !== h.titulo?.trim())
+        partes.push(h.descripcion.trim());
+      // Observaciones / recomendaciones registradas en el hallazgo original
+      if (h.recomendacionesIA && h.recomendacionesIA.trim())
+        partes.push(`Observaciones: ${h.recomendacionesIA.trim()}`);
+      textoAccion = partes.join(" — ");
+    }
     setForm(f => ({
       ...f,
       hallazgoId: id || undefined,
-      accion: f.accion || h?.titulo || "",
+      // Rellenar con la descripción completa del hallazgo (sobrescribe título previo)
+      accion: textoAccion || f.accion || h?.titulo || "",
     }));
   }
 
@@ -1782,9 +1975,15 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave }: {
     try {
       const tipoRiesgo = hallazgoSel?.tiposRiesgo?.[0] ?? "Operativo";
       const estadoH    = hallazgoSel?.estado ?? "Abierto";
+      // Contexto enriquecido: descripción real + criticidad + categoría del hallazgo
+      const descripcionContexto = [
+        hallazgoSel?.descripcion?.trim() || form.accion,
+        hallazgoSel?.criticidad ? `Criticidad: ${hallazgoSel.criticidad}` : "",
+        hallazgoSel?.categoria  ? `Categoría: ${hallazgoSel.categoria}`   : "",
+      ].filter(Boolean).join(". ");
       const plan = await generarPlanIA(
         form.accion, tipoRiesgo, estadoH,
-        granjaSel?.nombre ?? "Granja", hallazgoSel?.descripcion
+        granjaSel?.nombre ?? "Granja", descripcionContexto
       );
       setForm(f => ({ ...f, planAccionVeterinario: plan }));
     } catch (e: any) {
@@ -1891,11 +2090,15 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave }: {
             </FF>
           </div>
 
+          {/* ── EVIDENCIAS FOTOGRÁFICAS ── */}
+          <EvidenciasFotograficas hallazgoId={form.hallazgoId} accessToken={accessToken}/>
+
           {/* ── PLAN DE ACCIÓN ── */}
           <Section label="Plan de Acción"/>
           <FF label="Hallazgo / Acción *">
-            <input value={form.accion ?? ""} onChange={e=>setForm({...form,accion:e.target.value})}
-              className={INP} placeholder="Describe la acción o hallazgo a corregir" required/>
+            <textarea value={form.accion ?? ""} onChange={e=>setForm({...form,accion:e.target.value})}
+              rows={3} className={INP+" resize-y"}
+              placeholder="Descripción completa del hallazgo a corregir (se autocompleta al seleccionar un hallazgo)" required/>
           </FF>
 
           <FF label="Plan de Acción IA">
