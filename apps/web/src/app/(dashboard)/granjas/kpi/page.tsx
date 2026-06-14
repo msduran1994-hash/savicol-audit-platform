@@ -1530,7 +1530,35 @@ export default function KPIPage() {
             const auditorNombre = usuarios?.find((u:any)=>u.role==="AUDITOR")?.name ?? "Auditor Interno";
             const auditorEmail  = accessToken ? (JSON.parse(atob(accessToken.split(".")[1]||"e30=")).email ?? "") : "";
 
-            // 1. Generar PDF real vía API Route
+            // 1. Generar el HTML exacto del modelo seleccionado
+            //    El mismo HTML que se usa en la descarga directa desde la plataforma
+            const htmlInforme = (() => {
+              const auditorN = auditorNombre;
+              const granjaFiltrada = granjaId
+                ? granjas.find((g: any) => g.id === granjaId)
+                : null;
+              switch (modelo) {
+                case "1-ejecutivo": return generarModelo1(filtered, hallazgos, granjas, auditorN);
+                case "2-tecnico":   return generarModelo2(filtered, hallazgos, granjas, auditorN);
+                case "3-dashboard": return generarModelo3(filtered, hallazgos, granjas, auditorN);
+                case "4-granja":    return generarModelo4(filtered, hallazgos, granjas, auditorN, granjaId);
+                default:            return generarModelo5(filtered, hallazgos, granjas, auditorN);
+              }
+            })();
+
+            // 2. Agregar descripción del auditor al HTML del informe
+            const htmlConDesc = descripcion?.trim()
+              ? htmlInforme.replace(
+                  "</body>",
+                  `<div style="padding:20px 50px;background:#fff;border-top:1px solid #e2e8f0">
+                    <p style="font-size:11px;color:#64748b;font-family:Arial,sans-serif;line-height:1.6">
+                      <strong>Observaciones del Auditor:</strong><br>${descripcion.trim()}
+                    </p>
+                  </div></body>`
+                )
+              : htmlInforme;
+
+            // 3. Convertir HTML a PDF vía API Route (Puppeteer serverless)
             let pdfBase64 = "";
             let pdfFilename = `Informe-Auditoria-Savicol-${modelo}-${new Date().toISOString().slice(0,10)}.pdf`;
             try {
@@ -1538,18 +1566,16 @@ export default function KPIPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  modelo, kpis: filtered, hallazgos, granjas,
-                  auditor: auditorNombre,
-                  descripcion: descripcion ?? "",
-                  granjaFiltroId: granjaId,
+                  htmlContent: htmlConDesc,
+                  filename:    pdfFilename,
                 }),
               });
               if (pdfResp.ok) {
                 const pdfData = await pdfResp.json();
-                pdfBase64  = pdfData.pdfBase64 ?? "";
-                pdfFilename = pdfData.filename ?? pdfFilename;
+                pdfBase64   = pdfData.pdfBase64 ?? "";
+                pdfFilename  = pdfData.filename  ?? pdfFilename;
               }
-            } catch { /* si falla el PDF, envía sin adjunto */ }
+            } catch { /* si falla, envía sin adjunto PDF */ }
 
             // 2. Enviar correo con PDF adjunto
             const r = await enviarInformePorCorreo(modelo, email, asunto, filtered, hallazgos, granjas, auditorNombre, accessToken||"", auditorEmail, granjaId, descripcion, pdfBase64, pdfFilename);
