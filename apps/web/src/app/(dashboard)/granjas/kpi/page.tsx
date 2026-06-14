@@ -994,7 +994,7 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
 
     // Capturar el HTML renderizado como imagen de alta resolución
     const canvas = await html2canvas(targetEl, {
-      scale:            2,           // 2x para alta resolución
+      scale:            1.5,         // balance calidad/tamaño (1.5x = ~60% más pequeño que 2x)
       useCORS:          true,
       allowTaint:       true,
       backgroundColor:  "#ffffff",
@@ -1010,7 +1010,7 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
     const pageW    = pdf.internal.pageSize.getWidth();   // 210mm
     const pageH    = pdf.internal.pageSize.getHeight();  // 297mm
 
-    const imgData  = canvas.toDataURL("image/jpeg", 0.92);
+    const imgData  = canvas.toDataURL("image/jpeg", 0.78); // 0.78 = calidad/tamaño óptimo
     const imgH     = (canvas.height * pageW) / canvas.width; // altura proporcional
 
     // Si el contenido es más largo que una página, dividir en múltiples páginas
@@ -1027,6 +1027,25 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
     }
 
     const b64 = pdf.output("datauristring").split(",")[1];
+    // Verificar tamaño: si supera 4MB base64 (≈3MB binario), recomprimir
+    if (b64.length > 4 * 1024 * 1024) {
+      const canvasSmall = await html2canvas(targetEl, {
+        scale: 1, useCORS: true, allowTaint: true,
+        backgroundColor: "#ffffff", logging: false,
+        width: 794, windowWidth: 794,
+      });
+      const pdf2    = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const imgD2   = canvasSmall.toDataURL("image/jpeg", 0.65);
+      const imgH2   = (canvasSmall.height * pageW) / canvasSmall.width;
+      let yP2 = 0;
+      while (yP2 < imgH2) {
+        if (yP2 > 0) pdf2.addPage();
+        pdf2.addImage(imgD2, "JPEG", 0, -yP2, pageW, imgH2, undefined, "FAST");
+        yP2 += pageH;
+      }
+      const b64small = pdf2.output("datauristring").split(",")[1];
+      return { b64: b64small, filename };
+    }
     return { b64, filename };
 
   } catch (err) {
