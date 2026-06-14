@@ -38,7 +38,9 @@
     "react-hook-form": "^7.54.2",
     "@hookform/resolvers": "^3.10.0",
     "zod": "^3.24.1",
-    "js-cookie": "^3.0.5"
+    "js-cookie": "^3.0.5",
+    "@sparticuz/chromium": "^133.0.0",
+    "puppeteer-core": "^24.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",
