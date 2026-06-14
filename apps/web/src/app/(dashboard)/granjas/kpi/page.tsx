@@ -994,7 +994,7 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
 
     // Capturar el HTML renderizado como imagen de alta resolución
     const canvas = await html2canvas(targetEl, {
-      scale:            1.5,         // balance calidad/tamaño (1.5x = ~60% más pequeño que 2x)
+      scale:            1.2,         // escala optimizada para límite de backend (~400KB resultado)
       useCORS:          true,
       allowTaint:       true,
       backgroundColor:  "#ffffff",
@@ -1010,7 +1010,7 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
     const pageW    = pdf.internal.pageSize.getWidth();   // 210mm
     const pageH    = pdf.internal.pageSize.getHeight();  // 297mm
 
-    const imgData  = canvas.toDataURL("image/jpeg", 0.78); // 0.78 = calidad/tamaño óptimo
+    const imgData  = canvas.toDataURL("image/jpeg", 0.65); // 0.65 = calidad/tamaño óptimo para envío
     const imgH     = (canvas.height * pageW) / canvas.width; // altura proporcional
 
     // Si el contenido es más largo que una página, dividir en múltiples páginas
@@ -1028,7 +1028,7 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
 
     const b64 = pdf.output("datauristring").split(",")[1];
     // Verificar tamaño: si supera 4MB base64 (≈3MB binario), recomprimir
-    if (b64.length > 4 * 1024 * 1024) {
+    if (b64.length > 600 * 1024) { // recomprimir si > 600KB base64
       const canvasSmall = await html2canvas(targetEl, {
         scale: 1, useCORS: true, allowTaint: true,
         backgroundColor: "#ffffff", logging: false,
