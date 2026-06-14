@@ -5,7 +5,15 @@ import cookieParser from "cookie-parser";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { logger: ["log", "error", "warn"] });
+  const app = await NestFactory.create(AppModule, {
+    logger:     ["log", "error", "warn"],
+    bodyParser: false,              // desactivar el parser por defecto
+  });
+
+  // Aumentar límite a 20MB para soportar PDFs adjuntos como base64
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.use(require("express").json({ limit: "20mb" }));
+  expressApp.use(require("express").urlencoded({ limit: "20mb", extended: true }));
 
   // Security
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
