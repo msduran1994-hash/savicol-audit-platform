@@ -99,7 +99,11 @@ async function comprimirImagen(
 // ─── Generar Plan IA ─────────────────────────────────────────────────────────
 async function generarPlanIA(
   accion: string, tipoRiesgo: string, estadoHallazgo: string,
-  nombreGranja: string, descripcionHallazgo?: string
+  nombreGranja: string, descripcionHallazgo?: string,
+  extra?: {
+    auditor?: string; categoria?: string; criticidad?: string;
+    evidencias?: { mediaType: string; data: string }[];
+  }
 ): Promise<string> {
   // Usa la API Route de Next.js como proxy seguro (sin CORS, sin exponer API key)
   const response = await fetch("/api/ai/generar-plan", {
@@ -107,6 +111,10 @@ async function generarPlanIA(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       accion, tipoRiesgo, estadoHallazgo, nombreGranja, descripcionHallazgo,
+      auditor:    extra?.auditor,
+      categoria:  extra?.categoria,
+      criticidad: extra?.criticidad,
+      evidencias: extra?.evidencias,
     }),
   });
   if (!response.ok) {
@@ -1760,9 +1768,10 @@ export default function KPIPage() {
 // EvidenciasFotograficas — carga, compresión, preview y persistencia
 // Reutiliza el módulo backend existente: /api/v1/evidencias/hallazgo
 // ═══════════════════════════════════════════════════════════════════════════════
-function EvidenciasFotograficas({ hallazgoId, accessToken }: {
+function EvidenciasFotograficas({ hallazgoId, accessToken, onEvidenciasChange }: {
   hallazgoId?: string;
   accessToken: string | null;
+  onEvidenciasChange?: (evs: any[]) => void;
 }) {
   const API = process.env.NEXT_PUBLIC_API_URL || "";
   const [evidencias, setEvidencias] = useState<any[]>([]);
@@ -1770,16 +1779,26 @@ function EvidenciasFotograficas({ hallazgoId, accessToken }: {
   const [subiendo,   setSubiendo]   = useState(false);
   const [errEv,      setErrEv]      = useState<string | null>(null);
 
+  // Notificar al padre cada vez que cambian las evidencias (para el Plan IA)
+  function syncEvidencias(nuevas: any[]) {
+    setEvidencias(nuevas);
+    onEvidenciasChange?.(nuevas);
+  }
+
   // Cargar evidencias existentes del hallazgo (al abrir / cambiar hallazgo)
   useMemo(() => {
-    if (!hallazgoId || !accessToken) { setEvidencias([]); return; }
+    if (!hallazgoId || !accessToken) { setEvidencias([]); onEvidenciasChange?.([]); return; }
     setCargando(true);
     fetch(`${API}/api/v1/evidencias/hallazgo?hallazgoId=${hallazgoId}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
       .then(r => r.ok ? r.json() : [])
-      .then((data: any[]) => setEvidencias(Array.isArray(data) ? data.filter(e => e.tipo === "Foto") : []))
-      .catch(() => setEvidencias([]))
+      .then((data: any[]) => {
+        const fotos = Array.isArray(data) ? data.filter(e => e.tipo === "Foto") : [];
+        setEvidencias(fotos);
+        onEvidenciasChange?.(fotos);
+      })
+      .catch(() => { setEvidencias([]); onEvidenciasChange?.([]); })
       .finally(() => setCargando(false));
   }, [hallazgoId, accessToken, API]);
 
@@ -1811,7 +1830,7 @@ function EvidenciasFotograficas({ hallazgoId, accessToken }: {
         });
         if (resp.ok) {
           const nueva = await resp.json();
-          setEvidencias(prev => [nueva, ...prev]);
+          setEvidencias(prev => { const next = [nueva, ...prev]; onEvidenciasChange?.(next); return next; });
         } else {
           const err = await resp.json().catch(() => ({}));
           setErrEv(err?.message ?? "Error al subir una imagen");
@@ -1827,15 +1846,16 @@ function EvidenciasFotograficas({ hallazgoId, accessToken }: {
   async function eliminar(id: string) {
     if (!accessToken) return;
     const prev = evidencias;
-    setEvidencias(e => e.filter(x => x.id !== id)); // optimista
+    const optimista = evidencias.filter(x => x.id !== id);
+    setEvidencias(optimista); onEvidenciasChange?.(optimista); // optimista
     try {
       const resp = await fetch(`${API}/api/v1/evidencias/hallazgo/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!resp.ok) setEvidencias(prev); // revertir si falla
+      if (!resp.ok) { setEvidencias(prev); onEvidenciasChange?.(prev); } // revertir si falla
     } catch {
-      setEvidencias(prev);
+      setEvidencias(prev); onEvidenciasChange?.(prev);
     }
   }
 
@@ -1933,6 +1953,8 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
   const [generando,  setGenerando]  = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  // Evidencias fotográficas actuales del hallazgo (para enviar a la IA)
+  const [evidenciasActuales, setEvidenciasActuales] = useState<any[]>([]);
 
   // Hallazgos de la granja seleccionada
   const hallazgosGranja = hallazgos.filter(h => h.granjaId === form.granjaId);
@@ -1975,15 +1997,29 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
     try {
       const tipoRiesgo = hallazgoSel?.tiposRiesgo?.[0] ?? "Operativo";
       const estadoH    = hallazgoSel?.estado ?? "Abierto";
-      // Contexto enriquecido: descripción real + criticidad + categoría del hallazgo
-      const descripcionContexto = [
-        hallazgoSel?.descripcion?.trim() || form.accion,
-        hallazgoSel?.criticidad ? `Criticidad: ${hallazgoSel.criticidad}` : "",
-        hallazgoSel?.categoria  ? `Categoría: ${hallazgoSel.categoria}`   : "",
-      ].filter(Boolean).join(". ");
+
+      // Convertir evidencias (data URI) al formato multimodal de Anthropic.
+      // Máx 4 imágenes para controlar tokens. Solo formatos soportados.
+      const evidenciasIA = (evidenciasActuales || [])
+        .slice(0, 4)
+        .map((ev: any) => {
+          const url: string = ev?.url ?? "";
+          const m = url.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+          if (!m) return null;
+          return { mediaType: m[1], data: m[2] };
+        })
+        .filter(Boolean) as { mediaType: string; data: string }[];
+
       const plan = await generarPlanIA(
         form.accion, tipoRiesgo, estadoH,
-        granjaSel?.nombre ?? "Granja", descripcionContexto
+        granjaSel?.nombre ?? "Granja",
+        hallazgoSel?.descripcion,
+        {
+          auditor:    hallazgoSel?.auditorNombre,
+          categoria:  hallazgoSel?.categoria,
+          criticidad: hallazgoSel?.criticidad,
+          evidencias: evidenciasIA,
+        }
       );
       setForm(f => ({ ...f, planAccionVeterinario: plan }));
     } catch (e: any) {
@@ -2091,7 +2127,8 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
           </div>
 
           {/* ── EVIDENCIAS FOTOGRÁFICAS ── */}
-          <EvidenciasFotograficas hallazgoId={form.hallazgoId} accessToken={accessToken}/>
+          <EvidenciasFotograficas hallazgoId={form.hallazgoId} accessToken={accessToken}
+            onEvidenciasChange={setEvidenciasActuales}/>
 
           {/* ── PLAN DE ACCIÓN ── */}
           <Section label="Plan de Acción"/>
@@ -2111,10 +2148,15 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
                 className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-semibold hover:bg-amber-500/25 transition-colors disabled:opacity-50">
                 {generando
                   ? <><Loader2 className="w-3 h-3 animate-spin"/>Generando…</>
-                  : <><Sparkles className="w-3 h-3"/>Generar Plan IA</>
+                  : <><Sparkles className="w-3 h-3"/>Generar Plan IA{evidenciasActuales.length > 0 ? ` (${Math.min(evidenciasActuales.length,4)} fotos)` : ""}</>
                 }
               </button>
             </div>
+            {evidenciasActuales.length > 0 && (
+              <p className="text-[10px] text-[#4A7AFF] mt-1">
+                La IA analizará {Math.min(evidenciasActuales.length, 4)} evidencia(s) fotográfica(s) del hallazgo.
+              </p>
+            )}
           </FF>
 
           {/* ── SEGUIMIENTO ── */}
