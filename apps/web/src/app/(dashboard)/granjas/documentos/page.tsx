@@ -17,13 +17,46 @@ import {
 import { cn } from "@/lib/utils";
 import { AUDITORS } from "@/lib/constants";
 
-// Extrae una fecha de visita del texto OCR si está presente (formato dd/mm/yyyy)
-function extraerFechaVisita(ocr?: string): string | null {
-  if (!ocr) return null;
-  const m = ocr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (!m) return null;
-  const [, d, mo, y] = m;
-  return `${y}-${mo.padStart(2,"0")}-${d.padStart(2,"0")}`;
+// ── Metadata de auditoría embebida en ocrTexto ───────────────────────────────
+// Como el modelo Documento no tiene columnas para auditor/fechas, se guardan
+// dentro de ocrTexto con un bloque estructurado [META]...[/META] que los
+// filtros leen. El texto OCR real del usuario se conserva debajo del bloque.
+interface DocMeta { auditor: string; fechaVisita: string; fechaInforme: string; }
+
+function leerMeta(ocr?: string): DocMeta {
+  const vacio = { auditor:"", fechaVisita:"", fechaInforme:"" };
+  if (!ocr) return vacio;
+  const m = ocr.match(/\[META\]([\s\S]*?)\[\/META\]/);
+  if (!m) {
+    // Compatibilidad: intentar extraer fecha de visita de texto libre (dd/mm/yyyy)
+    const f = ocr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    const fechaVisita = f ? `${f[3]}-${f[2].padStart(2,"0")}-${f[1].padStart(2,"0")}` : "";
+    return { ...vacio, fechaVisita };
+  }
+  const meta = { ...vacio };
+  m[1].split(";").forEach(par => {
+    const [k, v] = par.split("=");
+    const key = (k||"").trim(); const val = (v||"").trim();
+    if (key === "auditor")      meta.auditor = val;
+    if (key === "fechaVisita")  meta.fechaVisita = val;
+    if (key === "fechaInforme") meta.fechaInforme = val;
+  });
+  return meta;
+}
+
+// Devuelve el texto OCR "limpio" (sin el bloque [META])
+function ocrLimpio(ocr?: string): string {
+  if (!ocr) return "";
+  return ocr.replace(/\[META\][\s\S]*?\[\/META\]\n?/, "").trim();
+}
+
+// Combina metadata + texto OCR limpio en el string que se guarda
+function escribirOcr(meta: DocMeta, textoLibre: string): string {
+  const tieneMetadata = meta.auditor || meta.fechaVisita || meta.fechaInforme;
+  const bloque = tieneMetadata
+    ? `[META]auditor=${meta.auditor};fechaVisita=${meta.fechaVisita};fechaInforme=${meta.fechaInforme}[/META]`
+    : "";
+  return [bloque, textoLibre.trim()].filter(Boolean).join("\n");
 }
 
 const TIPOS = ["PDF", "Excel", "CSV", "Word", "PowerPoint", "Imagen", "Otro"];
@@ -63,17 +96,20 @@ export default function DocumentosPage() {
   // Filtros adicionales aplicados en frontend (el modelo no tiene estos campos
   // estructurados): Auditor (uploadedBy), Fecha visita (de OCR), Fecha informe (uploadedAt).
   const docs = docsRaw.filter(d => {
+    const meta = leerMeta(d.ocrTexto);
     if (filterAuditor) {
       const aud = AUDITORS.find(a => a.id === filterAuditor);
-      const coincide = d.uploadedBy === filterAuditor || (aud && d.uploadedBy === aud.name);
+      const nombre = aud?.name ?? filterAuditor;
+      // Coincide por la metadata embebida o por quién lo cargó
+      const coincide = meta.auditor === nombre || d.uploadedBy === filterAuditor || d.uploadedBy === nombre;
       if (!coincide) return false;
     }
     if (filterFechaVisita) {
-      const fv = extraerFechaVisita(d.ocrTexto);
-      if (!fv || !fv.startsWith(filterFechaVisita)) return false;
+      if (!meta.fechaVisita || !meta.fechaVisita.startsWith(filterFechaVisita)) return false;
     }
     if (filterFechaInforme) {
-      const fi = (d.uploadedAt ?? "").slice(0, 10);
+      // Usa la fecha de informe de la metadata; si no hay, cae a uploadedAt
+      const fi = meta.fechaInforme || (d.uploadedAt ?? "").slice(0, 10);
       if (!fi.startsWith(filterFechaInforme)) return false;
     }
     return true;
@@ -191,8 +227,10 @@ export default function DocumentosPage() {
                     <th className="text-left p-2">Granja</th>
                     <th className="text-left p-2">Tipo</th>
                     <th className="text-left p-2">Categoría</th>
+                    <th className="text-left p-2">Auditor</th>
+                    <th className="text-left p-2">Fecha Visita</th>
                     <th className="text-right p-2">Tamaño</th>
-                    <th className="text-left p-2">Cargado</th>
+                    <th className="text-left p-2">Informe</th>
                     <th className="text-center p-2 w-28">Acciones</th>
                   </tr>
                 </thead>
@@ -200,6 +238,9 @@ export default function DocumentosPage() {
                   {docs.map(d => {
                     const Icon = ICONO_TIPO[d.tipo] ?? Files;
                     const color = COLOR_TIPO[d.tipo] ?? "#94A3B8";
+                    const meta = leerMeta(d.ocrTexto);
+                    const fmtFv = meta.fechaVisita ? new Date(meta.fechaVisita+"T00:00:00").toLocaleDateString("es-CO") : "—";
+                    const fmtFi = meta.fechaInforme ? new Date(meta.fechaInforme+"T00:00:00").toLocaleDateString("es-CO") : new Date(d.uploadedAt).toLocaleDateString("es-CO");
                     return (
                       <tr key={d.id} className="border-b border-[#1E2D4A]/30 hover:bg-[#0D1526]/50">
                         <td className="p-2 pl-4">
@@ -216,8 +257,10 @@ export default function DocumentosPage() {
                           </span>
                         </td>
                         <td className="p-2 text-[#94A3B8] text-xs">{d.categoria}</td>
+                        <td className="p-2 text-[#94A3B8] text-xs">{meta.auditor || d.uploadedBy || "—"}</td>
+                        <td className="p-2 text-[#94A3B8] text-xs">{fmtFv}</td>
                         <td className="p-2 text-right text-[#94A3B8] font-mono text-xs">{formatSize(d.size)}</td>
-                        <td className="p-2 text-[#94A3B8] text-xs">{new Date(d.uploadedAt).toLocaleDateString("es-CO")}</td>
+                        <td className="p-2 text-[#94A3B8] text-xs">{fmtFi}</td>
                         <td className="p-2 text-center">
                           <div className="flex items-center justify-center gap-1">
                             <a href={d.url} target="_blank" rel="noopener noreferrer"
@@ -286,6 +329,7 @@ function DocumentoModal({ item, granjas, error, onClose, onSave }: {
   onClose: () => void;
   onSave: (dto: DocumentoPayload) => Promise<void>;
 }) {
+  const metaInicial = leerMeta(item?.ocrTexto);
   const [form, setForm] = useState<DocumentoPayload>({
     granjaId:  item?.granjaId ?? granjas[0]?.id ?? "",
     nombre:    item?.nombre ?? "",
@@ -293,8 +337,12 @@ function DocumentoModal({ item, granjas, error, onClose, onSave }: {
     categoria: item?.categoria ?? "Cumplimiento",
     size:      item?.size ?? 0,
     url:       item?.url ?? "",
-    ocrTexto:  item?.ocrTexto ?? "",
+    ocrTexto:  ocrLimpio(item?.ocrTexto),  // solo el texto libre, sin el bloque [META]
   });
+  // Campos de auditoría (se guardan embebidos en ocrTexto)
+  const [auditor, setAuditor]           = useState(metaInicial.auditor);
+  const [fechaVisita, setFechaVisita]   = useState(metaInicial.fechaVisita);
+  const [fechaInforme, setFechaInforme] = useState(metaInicial.fechaInforme);
   const [submitting, setSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -305,11 +353,14 @@ function DocumentoModal({ item, granjas, error, onClose, onSave }: {
     if (!form.nombre?.trim()) { setValidationError("Nombre del documento es obligatorio"); return; }
     if (!form.url?.trim())    { setValidationError("URL del documento es obligatoria (Drive, OneDrive, SharePoint, etc)"); return; }
 
+    // Combinar metadata de auditoría + texto OCR libre en el campo ocrTexto
+    const ocrFinal = escribirOcr({ auditor, fechaVisita, fechaInforme }, form.ocrTexto ?? "");
+
     const payload: DocumentoPayload = {
       ...form,
       nombre:   form.nombre.trim(),
       url:      form.url.trim(),
-      ocrTexto: form.ocrTexto?.trim() || undefined,
+      ocrTexto: ocrFinal || undefined,
       size:     Math.max(0, form.size ?? 0),
     };
 
@@ -359,6 +410,26 @@ function DocumentoModal({ item, granjas, error, onClose, onSave }: {
               <input type="number" value={form.size} onChange={e => setForm({ ...form, size: parseInt(e.target.value, 10) || 0 })} placeholder="0" className="input-base"/>
             </F>
           </div>
+
+          {/* Datos de auditoría — alimentan los filtros del listado */}
+          <div className="rounded-lg border border-[#4A7AFF]/25 bg-[#4A7AFF]/5 p-3 space-y-3">
+            <p className="text-[10px] font-semibold text-[#4A7AFF] uppercase tracking-wider">Datos de Auditoría</p>
+            <F label="Auditor">
+              <select value={auditor} onChange={e => setAuditor(e.target.value)} className="input-base">
+                <option value="">— Selecciona auditor —</option>
+                {AUDITORS.map((a: any) => <option key={a.id} value={a.name}>{a.name}</option>)}
+              </select>
+            </F>
+            <div className="grid grid-cols-2 gap-3">
+              <F label="Fecha de visita a granja">
+                <input type="date" value={fechaVisita} onChange={e => setFechaVisita(e.target.value)} className="input-base"/>
+              </F>
+              <F label="Fecha de generación de informe">
+                <input type="date" value={fechaInforme} onChange={e => setFechaInforme(e.target.value)} className="input-base"/>
+              </F>
+            </div>
+          </div>
+
           <F label="Texto OCR (opcional)">
             <textarea value={form.ocrTexto ?? ""} onChange={e => setForm({ ...form, ocrTexto: e.target.value })} rows={2} placeholder="Pega aquí texto extraído del documento (búsqueda full-text)" className="input-base resize-none"/>
           </F>
