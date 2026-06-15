@@ -18,8 +18,11 @@ import {
    ════════════════════════════════════════════════════════════════════════ */
 
 // ── Normalización de valores backend → legible ──────────────────────────────
+// Maneja AMBOS formatos: crudo de DB ("CRITICA") y ya-mapeado del store ("Crítica").
+// Se normalizan acentos para que "CRÍTICA".startsWith("CRIT") funcione.
+const sinAcentos = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 const normCriticidad = (c: string): "Crítica"|"Alta"|"Media"|"Baja"|"—" => {
-  const v = (c ?? "").toString().toUpperCase();
+  const v = sinAcentos((c ?? "").toString().toUpperCase());
   if (v.startsWith("CRIT")) return "Crítica";
   if (v.startsWith("ALT"))  return "Alta";
   if (v.startsWith("MED"))  return "Media";
@@ -198,6 +201,26 @@ export default function RankingPage() {
     cumplimientoProm: rkCumplimiento.length>0 ? Math.round(rkCumplimiento.reduce((a,r)=>a+r.cumplimiento,0)/rkCumplimiento.length) : 0,
   }), [ranking, hallazgosF, kpisF, rkCumplimiento]);
 
+  // ── Discriminación de tipos de riesgo (sobre hallazgos filtrados) ─────────
+  // Un hallazgo puede tener varios tipos; se cuenta en cada uno que aplique.
+  const riesgosPorTipo = useMemo(() => {
+    const conteo: Record<string, number> = { "Operativo":0, "Reputacional":0, "Financiero":0, "Legal":0, "Contagio":0 };
+    hallazgosF.forEach(h => {
+      const tipos = normTipoRiesgo(h.tiposRiesgo); // MAYÚSCULAS
+      tipos.forEach(t => {
+        if (t === "OPERATIVO")    conteo["Operativo"]++;
+        if (t === "REPUTACIONAL") conteo["Reputacional"]++;
+        if (t === "FINANCIERO")   conteo["Financiero"]++;
+        if (t === "LEGAL")        conteo["Legal"]++;
+        if (t === "CONTAGIO")     conteo["Contagio"]++;
+      });
+    });
+    return conteo;
+  }, [hallazgosF]);
+  const RIESGO_COLOR: Record<string,string> = {
+    "Operativo":"#4A7AFF", "Reputacional":"#8B5CF6", "Financiero":"#F59E0B", "Legal":"#EF4444", "Contagio":"#EC4899",
+  };
+
   return (
     <div className="flex flex-col min-h-full">
       <Header
@@ -279,6 +302,35 @@ export default function RankingPage() {
           <KpiCard icon={<ShieldAlert className="w-4 h-4"/>}  label="Críticos" value={tot.criticos} color="#EF4444"/>
           <KpiCard icon={<BarChart3 className="w-4 h-4"/>}    label="KPIs" value={tot.kpis} color="#8B5CF6"/>
           <KpiCard icon={<CheckCircle2 className="w-4 h-4"/>} label="Cumpl. Prom." value={`${tot.cumplimientoProm}%`} color="#10B981"/>
+        </div>
+
+        {/* ── DISCRIMINACIÓN POR TIPO DE RIESGO ──────────────────────────── */}
+        <div className="card-base">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingDown className="w-4 h-4 text-[#8B5CF6]"/>
+            <span className="text-xs font-semibold text-white uppercase tracking-wider">Total Hallazgos por Tipo de Riesgo</span>
+            <span className="ml-auto text-[10px] text-[#94A3B8]">Un hallazgo puede tener varios tipos</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {(["Operativo","Reputacional","Financiero","Legal","Contagio"] as const).map(tipo => {
+              const val = riesgosPorTipo[tipo];
+              const totalRiesgos = Object.values(riesgosPorTipo).reduce((a,b)=>a+b,0) || 1;
+              const pct = Math.round(val/totalRiesgos*100);
+              const color = RIESGO_COLOR[tipo];
+              return (
+                <div key={tipo} className="rounded-xl border border-[#1E2D4A] bg-[#0D1526] p-3" style={{ borderTop: `3px solid ${color}` }}>
+                  <div className="flex items-baseline justify-between">
+                    <span className="font-display font-bold text-2xl text-white tabular-nums">{val}</span>
+                    <span className="text-[10px] font-semibold tabular-nums" style={{ color }}>{pct}%</span>
+                  </div>
+                  <p className="text-[11px] font-medium text-[#94A3B8] mt-1">{tipo}</p>
+                  <div className="mt-2 h-1.5 rounded-full bg-[#1E2D4A] overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width:`${pct}%`, background: color }}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* ── PODIO TOP 3 CUMPLIMIENTO ───────────────────────────────────── */}
