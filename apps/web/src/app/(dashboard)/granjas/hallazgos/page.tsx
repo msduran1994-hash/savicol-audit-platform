@@ -28,7 +28,15 @@ export default function HallazgosPage() {
   const filtered = hallazgos.filter(h => {
     if (filtroCat   && h.categoria  !== filtroCat) return false;
     if (filtroCrit  && h.criticidad !== filtroCrit) return false;
-    if (filtroRiesgo && !h.tiposRiesgo.includes(filtroRiesgo as any)) return false;if (filtroAuditor       && h.auditorId      !== filtroAuditor)       return false;
+    if (filtroRiesgo && !h.tiposRiesgo.includes(filtroRiesgo as any)) return false;
+    if (filtroAuditor) {
+      // Comparar por ID o por nombre: algunos hallazgos importados tienen
+      // auditorId genérico (ej. "import-bulk") pero conservan el auditorNombre correcto.
+      const audSel = AUDITORS.find(a => a.id === filtroAuditor);
+      const coincideId     = h.auditorId === filtroAuditor;
+      const coincideNombre = audSel && h.auditorNombre === audSel.name;
+      if (!coincideId && !coincideNombre) return false;
+    }
     if (filtroEstado        && h.estado         !== filtroEstado)        return false;
     if (filtroGranja        && h.granjaId       !== filtroGranja)        return false;
     if (filtroTipoOperativo && h.tipoOperativo  !== filtroTipoOperativo) return false;
