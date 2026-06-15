@@ -1359,98 +1359,92 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
   const fecha    = new Date().toISOString().slice(0, 10);
   const filename = `Informe-Auditoria-Savicol-${fecha}.pdf`;
 
+  // Contenedor temporal en el documento principal (más fiable que iframe para html2canvas)
+  let container: HTMLDivElement | null = null;
+
   try {
-    // Importar librerías dinamicamente (solo se cargan cuando se necesitan)
     const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
       import("jspdf"),
       import("html2canvas"),
     ]);
 
-    // Crear un iframe invisible para renderizar el HTML correctamente
-    // (usar iframe evita que los estilos del modal interfieran)
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:794px;height:1123px;border:none;opacity:0;pointer-events:none;";
-    document.body.appendChild(iframe);
+    // Extraer solo el contenido del <body> y los estilos del <style>
+    const bodyMatch  = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+    const bodyContent = bodyMatch ? bodyMatch[1] : html;
+    const styleContent = styleMatch ? styleMatch[1] : "";
 
-    await new Promise<void>((resolve) => {
-      iframe.onload = () => resolve();
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (doc) {
-        doc.open();
-        doc.write(html);
-        doc.close();
-      } else {
-        resolve();
-      }
-    });
+    // Crear contenedor visible (fuera de pantalla) en el documento real
+    container = document.createElement("div");
+    container.style.cssText = "position:absolute;top:0;left:-10000px;width:794px;background:#ffffff;z-index:-1;";
+    const styleEl = document.createElement("style");
+    styleEl.textContent = styleContent;
+    container.appendChild(styleEl);
+    const contentEl = document.createElement("div");
+    contentEl.innerHTML = bodyContent;
+    container.appendChild(contentEl);
+    document.body.appendChild(container);
 
-    // Esperar a que los estilos y fuentes carguen
-    await new Promise(r => setTimeout(r, 800));
+    // Esperar a que el navegador renderice y las imágenes (data URI) carguen
+    await new Promise(r => setTimeout(r, 600));
+    const imgs = Array.from(container.querySelectorAll("img"));
+    await Promise.all(imgs.map(img => {
+      if (img.complete) return Promise.resolve();
+      return new Promise<void>(res => { img.onload = () => res(); img.onerror = () => res(); setTimeout(res, 1500); });
+    }));
 
-    const iframeDoc   = iframe.contentDocument || iframe.contentWindow?.document;
-    const targetEl    = iframeDoc?.body || document.body;
-
-    // Capturar el HTML renderizado como imagen de alta resolución
-    const canvas = await html2canvas(targetEl, {
-      scale:            1.2,         // escala optimizada para límite de backend (~400KB resultado)
+    // Capturar el contenido completo como imagen de alta resolución
+    const canvas = await html2canvas(contentEl, {
+      scale:            2,
       useCORS:          true,
       allowTaint:       true,
       backgroundColor:  "#ffffff",
       logging:          false,
-      width:            794,         // ancho A4 en px a 96dpi
       windowWidth:      794,
     });
 
-    document.body.removeChild(iframe);
+    document.body.removeChild(container);
+    container = null;
 
-    // Crear el PDF A4
-    const pdf      = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-    const pageW    = pdf.internal.pageSize.getWidth();   // 210mm
-    const pageH    = pdf.internal.pageSize.getHeight();  // 297mm
+    // Crear PDF A4 multipágina con el canvas
+    const pdf      = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+    const pageW    = pdf.internal.pageSize.getWidth();
+    const pageH    = pdf.internal.pageSize.getHeight();
 
-    const imgData  = canvas.toDataURL("image/jpeg", 0.65); // 0.65 = calidad/tamaño óptimo para envío
-    const imgH     = (canvas.height * pageW) / canvas.width; // altura proporcional
-
-    // Si el contenido es más largo que una página, dividir en múltiples páginas
-    let yPos = 0;
-    while (yPos < imgH) {
-      if (yPos > 0) pdf.addPage();
-      pdf.addImage(
-        imgData, "JPEG",
-        0, -yPos,       // desplazar hacia arriba para mostrar la sección correcta
-        pageW, imgH,
-        undefined, "FAST"
-      );
-      yPos += pageH;
+    // Paginación correcta: recortar el canvas por páginas (evita repetición)
+    const pxPerMm  = canvas.width / pageW;
+    const pageHpx  = Math.floor(pageH * pxPerMm);
+    let renderedH  = 0;
+    let pageIdx    = 0;
+    while (renderedH < canvas.height) {
+      if (pageIdx > 0) pdf.addPage();
+      const sliceH = Math.min(pageHpx, canvas.height - renderedH);
+      const pageCanvas = document.createElement("canvas");
+      pageCanvas.width  = canvas.width;
+      pageCanvas.height = sliceH;
+      const ctx = pageCanvas.getContext("2d");
+      if (ctx) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+        ctx.drawImage(canvas, 0, renderedH, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+      }
+      const sliceData = pageCanvas.toDataURL("image/jpeg", 0.82);
+      const sliceHmm  = (sliceH * pageW) / canvas.width;
+      pdf.addImage(sliceData, "JPEG", 0, 0, pageW, sliceHmm, undefined, "FAST");
+      renderedH += sliceH;
+      pageIdx++;
     }
 
     const b64 = pdf.output("datauristring").split(",")[1];
-    // Verificar tamaño: si supera 4MB base64 (≈3MB binario), recomprimir
-    if (b64.length > 600 * 1024) { // recomprimir si > 600KB base64
-      const canvasSmall = await html2canvas(targetEl, {
-        scale: 1, useCORS: true, allowTaint: true,
-        backgroundColor: "#ffffff", logging: false,
-        width: 794, windowWidth: 794,
-      });
-      const pdf2    = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const imgD2   = canvasSmall.toDataURL("image/jpeg", 0.65);
-      const imgH2   = (canvasSmall.height * pageW) / canvasSmall.width;
-      let yP2 = 0;
-      while (yP2 < imgH2) {
-        if (yP2 > 0) pdf2.addPage();
-        pdf2.addImage(imgD2, "JPEG", 0, -yP2, pageW, imgH2, undefined, "FAST");
-        yP2 += pageH;
-      }
-      const b64small = pdf2.output("datauristring").split(",")[1];
-      return { b64: b64small, filename };
-    }
     return { b64, filename };
 
   } catch (err) {
     console.error("[htmlToPDFBase64]", err);
-    // Fallback: retornar el HTML como base64 si falla jsPDF
-    const b64 = btoa(unescape(encodeURIComponent(html)));
-    return { b64, filename: filename.replace(".pdf", ".html") };
+    if (container && container.parentNode) {
+      try { document.body.removeChild(container); } catch { /* noop */ }
+    }
+    // Re-lanzar el error para que el llamador NO envíe un HTML como si fuera PDF
+    throw new Error("No se pudo generar el PDF del informe: " + ((err as any)?.message ?? "error de renderizado"));
   }
 }
 
@@ -2148,16 +2142,11 @@ export default function KPIPage() {
             //    El PDF generado es idéntico al informe visible en la plataforma
             let pdfBase64 = "";
             let pdfFilename = `Informe-Auditoria-Savicol-${modelo}-${new Date().toISOString().slice(0,10)}.pdf`;
-            try {
-              const { b64, filename: fn } = await htmlToPDFBase64(htmlConDesc);
-              pdfBase64  = b64;
-              pdfFilename = fn;
-            } catch (pdfErr) {
-              console.error("[PDF]", pdfErr);
-              // Fallback: adjuntar como HTML si jsPDF falla
-              pdfBase64   = htmlToBase64(htmlConDesc);
-              pdfFilename  = pdfFilename.replace(".pdf", ".html");
-            }
+            // Si falla la generación del PDF, htmlToPDFBase64 lanza error y NO se envía
+            // un HTML como si fuera PDF. El error se propaga al usuario.
+            const { b64, filename: fn } = await htmlToPDFBase64(htmlConDesc);
+            pdfBase64  = b64;
+            pdfFilename = fn;
 
             // 2. Enviar correo con PDF adjunto
             const r = await enviarInformePorCorreo(modelo, email, asunto, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, accessToken||"", auditorEmail, granjaId, descripcion, pdfBase64, pdfFilename);
