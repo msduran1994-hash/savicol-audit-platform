@@ -15,6 +15,16 @@ import {
   Plus, Filter, Edit2, Trash2, X, AlertCircle, Loader2, ExternalLink, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AUDITORS } from "@/lib/constants";
+
+// Extrae una fecha de visita del texto OCR si está presente (formato dd/mm/yyyy)
+function extraerFechaVisita(ocr?: string): string | null {
+  if (!ocr) return null;
+  const m = ocr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!m) return null;
+  const [, d, mo, y] = m;
+  return `${y}-${mo.padStart(2,"0")}-${d.padStart(2,"0")}`;
+}
 
 const TIPOS = ["PDF", "Excel", "CSV", "Word", "PowerPoint", "Imagen", "Otro"];
 const CATEGORIAS = ["Cumplimiento", "Sanidad", "Operativo", "Bioseguridad", "Inventario", "Veterinario", "Otro"];
@@ -36,6 +46,10 @@ export default function DocumentosPage() {
   const [filterTipo, setFilterTipo]     = useState("");
   const [filterCat, setFilterCat]       = useState("");
   const [search, setSearch]             = useState("");
+  // Nuevos filtros: Auditor, Fecha de visita a granja, Fecha de generación de informe
+  const [filterAuditor, setFilterAuditor]       = useState("");
+  const [filterFechaVisita, setFilterFechaVisita] = useState("");
+  const [filterFechaInforme, setFilterFechaInforme] = useState("");
 
   const docsQ  = useDocumentos({ granjaId: filterGranja, tipo: filterTipo, categoria: filterCat, search });
   const statsQ = useDocumentosStats(filterGranja || undefined);
@@ -44,7 +58,28 @@ export default function DocumentosPage() {
   const updateDoc = useUpdateDocumento();
   const removeDoc = useDeleteDocumento();
 
-  const docs = docsQ.data ?? [];
+  const docsRaw = docsQ.data ?? [];
+
+  // Filtros adicionales aplicados en frontend (el modelo no tiene estos campos
+  // estructurados): Auditor (uploadedBy), Fecha visita (de OCR), Fecha informe (uploadedAt).
+  const docs = docsRaw.filter(d => {
+    if (filterAuditor) {
+      const aud = AUDITORS.find(a => a.id === filterAuditor);
+      const coincide = d.uploadedBy === filterAuditor || (aud && d.uploadedBy === aud.name);
+      if (!coincide) return false;
+    }
+    if (filterFechaVisita) {
+      const fv = extraerFechaVisita(d.ocrTexto);
+      if (!fv || !fv.startsWith(filterFechaVisita)) return false;
+    }
+    if (filterFechaInforme) {
+      const fi = (d.uploadedAt ?? "").slice(0, 10);
+      if (!fi.startsWith(filterFechaInforme)) return false;
+    }
+    return true;
+  });
+
+  const hayFiltrosExtra = !!(filterAuditor || filterFechaVisita || filterFechaInforme);
 
   const [modalOpen, setModalOpen]   = useState(false);
   const [editing, setEditing]       = useState<DocumentoItem | null>(null);
@@ -60,7 +95,7 @@ export default function DocumentosPage() {
     <div className="flex flex-col min-h-full">
       <Header
         title="Documentos · Gestión documental"
-        subtitle={`${docs.length} documentos · ${statsQ.data ? formatSize(statsQ.data.sizeTotalBytes) : "0 B"} totales`}
+        subtitle={`${docs.length} documentos · ${statsQ.data ? formatSize(statsQ.data.sizeTotalBytes) : "0 B"} totales · Acceso abierto a todo el equipo`}
       />
 
       <div className="flex-1 p-6 space-y-6">
@@ -84,6 +119,24 @@ export default function DocumentosPage() {
             <option value="">Todas las categorías</option>
             {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
           </select>
+          <select value={filterAuditor} onChange={e => setFilterAuditor(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white" title="Auditor que cargó el documento">
+            <option value="">Todos los auditores</option>
+            {AUDITORS.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <label className="flex flex-col">
+            <span className="text-[9px] text-[#64748B] px-1 leading-none mb-0.5">Fecha visita granja</span>
+            <input type="month" value={filterFechaVisita} onChange={e => setFilterFechaVisita(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white" title="Fecha de visita a la granja (del texto del documento)"/>
+          </label>
+          <label className="flex flex-col">
+            <span className="text-[9px] text-[#64748B] px-1 leading-none mb-0.5">Fecha generación informe</span>
+            <input type="month" value={filterFechaInforme} onChange={e => setFilterFechaInforme(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white" title="Fecha en que se cargó/generó el documento"/>
+          </label>
+          {hayFiltrosExtra && (
+            <button onClick={() => { setFilterAuditor(""); setFilterFechaVisita(""); setFilterFechaInforme(""); }}
+              className="p-1.5 rounded bg-[#1A2540] border border-[#2A3F6A] text-[#94A3B8] hover:text-white" title="Limpiar filtros adicionales">
+              <X className="w-3.5 h-3.5"/>
+            </button>
+          )}
           <button onClick={() => docsQ.refetch()} className="p-1.5 rounded bg-[#1A2540] border border-[#2A3F6A] text-[#94A3B8] hover:text-white" title="Refrescar">
             <RefreshCw className={cn("w-3.5 h-3.5", docsQ.isFetching && "animate-spin")}/>
           </button>
