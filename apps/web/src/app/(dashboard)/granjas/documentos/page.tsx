@@ -2,7 +2,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // Documentos · CRUD conectado al API
 // ═══════════════════════════════════════════════════════════════════════════════
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import {
   useDocumentos, useDocumentosStats,
@@ -12,7 +12,7 @@ import {
 import { useGranjas } from "@/hooks/useGranjas";
 import {
   Files, FileText, FileSpreadsheet, Image as ImageIcon,
-  Plus, Filter, Edit2, Trash2, X, AlertCircle, Loader2, ExternalLink, RefreshCw,
+  Plus, Filter, Edit2, Trash2, X, AlertCircle, Loader2, ExternalLink, RefreshCw, Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AUDITORS } from "@/lib/constants";
@@ -57,6 +57,40 @@ function escribirOcr(meta: DocMeta, textoLibre: string): string {
     ? `[META]auditor=${meta.auditor};fechaVisita=${meta.fechaVisita};fechaInforme=${meta.fechaInforme}[/META]`
     : "";
   return [bloque, textoLibre.trim()].filter(Boolean).join("\n");
+}
+
+// ── Convierte una URL de documento a formato embebible para vista previa ──────
+// Soporta Google Drive, OneDrive/SharePoint, PDFs directos e imágenes.
+// Devuelve { tipo, src } donde tipo decide cómo renderizar el preview.
+function urlEmbebible(url: string, tipoDoc?: string): { tipo: "iframe"|"img"|"none"; src: string } {
+  if (!url) return { tipo: "none", src: "" };
+  const u = url.trim();
+
+  // Google Drive: extraer el file ID y usar /preview
+  const driveMatch = u.match(/drive\.google\.com\/file\/d\/([^/]+)/) || u.match(/drive\.google\.com\/open\?id=([^&]+)/) || u.match(/[?&]id=([^&]+)/);
+  if (driveMatch && u.includes("drive.google.com")) {
+    return { tipo: "iframe", src: `https://drive.google.com/file/d/${driveMatch[1]}/preview` };
+  }
+  // Google Docs/Sheets/Slides: usar /preview
+  const gdocMatch = u.match(/docs\.google\.com\/(document|spreadsheets|presentation)\/d\/([^/]+)/);
+  if (gdocMatch) {
+    return { tipo: "iframe", src: `https://docs.google.com/${gdocMatch[1]}/d/${gdocMatch[2]}/preview` };
+  }
+  // OneDrive / SharePoint: usar el parámetro de embed
+  if (u.includes("1drv.ms") || u.includes("onedrive.live.com") || u.includes("sharepoint.com")) {
+    const sep = u.includes("?") ? "&" : "?";
+    return { tipo: "iframe", src: `${u}${sep}action=embedview` };
+  }
+  // Imágenes directas
+  if (/\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(u) || tipoDoc === "Imagen" || tipoDoc === "IMG") {
+    return { tipo: "img", src: u };
+  }
+  // PDF directo u otra URL: intentar iframe directo
+  if (/\.pdf(\?|$)/i.test(u) || tipoDoc === "PDF") {
+    return { tipo: "iframe", src: u };
+  }
+  // Fallback: iframe genérico (muchos sitios permiten embed)
+  return { tipo: "iframe", src: u };
 }
 
 const TIPOS = ["PDF", "Excel", "CSV", "Word", "PowerPoint", "Imagen", "Otro"];
@@ -120,6 +154,7 @@ export default function DocumentosPage() {
   const [modalOpen, setModalOpen]   = useState(false);
   const [editing, setEditing]       = useState<DocumentoItem | null>(null);
   const [saveError, setSaveError]   = useState<string | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<DocumentoItem | null>(null);
 
   const formatSize = (b: number) => {
     if (b < 1024) return `${b} B`;
@@ -263,6 +298,11 @@ export default function DocumentosPage() {
                         <td className="p-2 text-[#94A3B8] text-xs">{fmtFi}</td>
                         <td className="p-2 text-center">
                           <div className="flex items-center justify-center gap-1">
+                            <button onClick={() => setPreviewDoc(d)}
+                              className="p-1 rounded hover:bg-[#4A7AFF]/10 text-[#94A3B8] hover:text-[#4A7AFF]"
+                              title="Vista previa">
+                              <Eye className="w-3 h-3"/>
+                            </button>
                             <a href={d.url} target="_blank" rel="noopener noreferrer"
                               className="p-1 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400"
                               title="Abrir/Descargar">
@@ -293,6 +333,10 @@ export default function DocumentosPage() {
           </div>
         )}
       </div>
+
+      {previewDoc && (
+        <PreviewModal doc={previewDoc} onClose={() => setPreviewDoc(null)} />
+      )}
 
       {modalOpen && (
         <DocumentoModal
@@ -461,5 +505,100 @@ function F({ label, children }: { label: string; children: React.ReactNode }) {
       <span className="text-xs text-[#94A3B8] font-medium mb-1.5 block">{label}</span>
       {children}
     </label>
+  );
+}
+
+// ─── Modal de Vista Previa de Documento ───────────────────────────────────────
+function PreviewModal({ doc, onClose }: { doc: DocumentoItem; onClose: () => void }) {
+  const { tipo, src } = urlEmbebible(doc.url, doc.tipo);
+  const meta = leerMeta(doc.ocrTexto);
+  const [cargando, setCargando] = useState(true);
+  const [errorEmbed, setErrorEmbed] = useState(false);
+
+  // Timeout: si el iframe no carga en 8s, sugerir abrir en pestaña
+  useEffect(() => {
+    if (tipo === "none") { setCargando(false); return; }
+    const t = setTimeout(() => setCargando(false), 8000);
+    return () => clearTimeout(t);
+  }, [tipo]);
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-4xl h-[85vh] overflow-hidden flex flex-col shadow-card"
+        onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-start justify-between px-5 py-4 border-b border-[#1E2D4A] shrink-0">
+          <div className="min-w-0">
+            <h3 className="font-display font-semibold text-white text-sm truncate">{doc.nombre}</h3>
+            <p className="text-xs text-[#94A3B8] mt-0.5">
+              {doc.granja?.nombre ?? "—"} · {doc.tipo} · {doc.categoria}
+              {meta.auditor ? ` · ${meta.auditor}` : ""}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 ml-3">
+            <a href={doc.url} target="_blank" rel="noopener noreferrer"
+              className="btn-ghost text-xs flex items-center gap-1.5 px-3 py-1.5 hover:bg-[#1A2540]"
+              title="Abrir en nueva pestaña">
+              <ExternalLink className="w-3.5 h-3.5"/> Abrir
+            </a>
+            <button onClick={onClose} className="text-[#94A3B8] hover:text-white p-1"><X className="w-5 h-5"/></button>
+          </div>
+        </div>
+
+        {/* Cuerpo del preview */}
+        <div className="flex-1 bg-[#0A111F] relative overflow-auto">
+          {tipo === "none" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
+              <AlertCircle className="w-10 h-10 text-[#475569] mb-3"/>
+              <p className="text-sm text-[#94A3B8]">No hay URL disponible para previsualizar este documento.</p>
+            </div>
+          )}
+
+          {tipo === "img" && (
+            <div className="flex items-center justify-center min-h-full p-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={src} alt={doc.nombre} className="max-w-full max-h-full object-contain rounded"
+                onLoad={() => setCargando(false)} onError={() => { setCargando(false); setErrorEmbed(true); }}/>
+            </div>
+          )}
+
+          {tipo === "iframe" && (
+            <>
+              {cargando && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <Loader2 className="w-8 h-8 text-[#4A7AFF] animate-spin mb-2"/>
+                  <p className="text-xs text-[#94A3B8]">Cargando vista previa…</p>
+                </div>
+              )}
+              <iframe src={src} title={doc.nombre} className="w-full h-full border-0"
+                onLoad={() => setCargando(false)}
+                allow="autoplay" referrerPolicy="no-referrer-when-downgrade"/>
+            </>
+          )}
+
+          {errorEmbed && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6 bg-[#0A111F]">
+              <AlertCircle className="w-10 h-10 text-amber-400 mb-3"/>
+              <p className="text-sm text-white mb-1">No se pudo mostrar la vista previa embebida.</p>
+              <p className="text-xs text-[#94A3B8] mb-4">El documento puede tener restricciones de visualización.</p>
+              <a href={doc.url} target="_blank" rel="noopener noreferrer"
+                className="btn-primary text-xs bg-[#4A7AFF] hover:bg-[#3D6AE8] flex items-center gap-2 px-4 py-2">
+                <ExternalLink className="w-3.5 h-3.5"/> Abrir en nueva pestaña
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* Footer informativo */}
+        <div className="px-5 py-2.5 border-t border-[#1E2D4A] shrink-0 flex items-center justify-between">
+          <span className="text-[10px] text-[#475569]">
+            Vista previa · Si no carga, usa "Abrir" para verlo en su ubicación original
+          </span>
+          {meta.fechaVisita && (
+            <span className="text-[10px] text-[#94A3B8]">Visita: {new Date(meta.fechaVisita+"T00:00:00").toLocaleDateString("es-CO")}</span>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
