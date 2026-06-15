@@ -875,12 +875,6 @@ function generarModelo1(kpis: any[], hallazgos: any[], granjas: any[], auditor: 
   const pct  = porcentaje(kpis);
   const comp = kpis.filter(k=>k.estado==="COMPLETADO").length;
   const total= kpis.length;
-  const dona = donaChart([
-    {v:kpis.filter(k=>k.estado==="COMPLETADO").length, c:"#22C55E", label:"Completado"},
-    {v:kpis.filter(k=>k.estado==="EN_CURSO").length,   c:"#F97316", label:"En Curso"},
-    {v:kpis.filter(k=>k.estado==="EN_ESPERA").length,  c:"#FBBF24", label:"En Espera"},
-    {v:kpis.filter(k=>k.estado==="NO_INICIADO").length,c:"#EF4444", label:"No Iniciado"},
-  ], 140);
 
   // Top 3 hallazgos más críticos
   const top3 = hallazgos.slice(0,3);
@@ -893,37 +887,6 @@ ${portada("Informe Ejecutivo de Auditoría", "Control Interno y Cumplimiento KPI
 ${seccionResumen(kpis, hallazgos)}
 
 ${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
-
-<div class="section">
-  <div class="section-title">Análisis Visual de Cumplimiento</div>
-  <div class="charts-grid">
-    <div class="chart-box">
-      <div class="chart-title">Estado de Planes KPI</div>
-      <div style="display:flex;align-items:center;gap:16px">
-        ${dona}
-        <div style="flex:1">
-          ${[
-            {label:"Completado",c:"#22C55E",k:kpis.filter(k=>k.estado==="COMPLETADO").length},
-            {label:"En Curso",  c:"#F97316",k:kpis.filter(k=>k.estado==="EN_CURSO").length},
-            {label:"En Espera", c:"#FBBF24",k:kpis.filter(k=>k.estado==="EN_ESPERA").length},
-            {label:"No Iniciado",c:"#EF4444",k:kpis.filter(k=>k.estado==="NO_INICIADO").length},
-          ].map(d=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:10px">
-            <div style="width:10px;height:10px;border-radius:50%;background:${d.c};flex-shrink:0"></div>
-            <span style="flex:1;color:#475569">${d.label}</span>
-            <strong>${d.k}</strong>
-          </div>`).join("")}
-        </div>
-      </div>
-    </div>
-    <div class="chart-box">
-      <div class="chart-title">Avance por Estado</div>
-      ${barraHorizontal("Completado",   kpis.filter(k=>k.estado==="COMPLETADO").length,   total, "#22C55E")}
-      ${barraHorizontal("En Curso",     kpis.filter(k=>k.estado==="EN_CURSO").length,     total, "#F97316")}
-      ${barraHorizontal("En Espera",    kpis.filter(k=>k.estado==="EN_ESPERA").length,    total, "#FBBF24")}
-      ${barraHorizontal("No Iniciado",  kpis.filter(k=>k.estado==="NO_INICIADO").length,  total, "#EF4444")}
-    </div>
-  </div>
-</div>
 
 <div class="section">
   <div class="section-title">Hallazgos Críticos Prioritarios</div>
@@ -1234,12 +1197,6 @@ ${footer()}
 function generarModelo5(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
   const total = kpis.length;
   const pct   = porcentaje(kpis);
-  const dona  = donaChart([
-    {v:kpis.filter(k=>k.estado==="COMPLETADO").length, c:"#22C55E", label:"Completado"},
-    {v:kpis.filter(k=>k.estado==="EN_CURSO").length,   c:"#F97316", label:"En Curso"},
-    {v:kpis.filter(k=>k.estado==="EN_ESPERA").length,  c:"#FBBF24", label:"En Espera"},
-    {v:kpis.filter(k=>k.estado==="NO_INICIADO").length,c:"#EF4444", label:"No Iniciado"},
-  ], 160);
 
   const num = `AU-GEN-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
 
@@ -1271,34 +1228,6 @@ ${portada(`Informe General de Auditoría N° ${num}`, "Evaluación Integral · T
 ${seccionResumen(kpis, hallazgos)}
 
 ${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
-
-<!-- CHARTS -->
-<div class="section">
-  <div class="section-title">Análisis Visual de Cumplimiento</div>
-  <div class="charts-grid">
-    <div class="chart-box">
-      <div class="chart-title">Estado de Planes KPI</div>
-      <div style="display:flex;justify-content:center;margin-bottom:12px">${dona}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
-        ${[
-          {label:"Completado", c:"#22C55E", k:kpis.filter(k=>k.estado==="COMPLETADO").length},
-          {label:"En Curso",   c:"#F97316", k:kpis.filter(k=>k.estado==="EN_CURSO").length},
-          {label:"En Espera",  c:"#FBBF24", k:kpis.filter(k=>k.estado==="EN_ESPERA").length},
-          {label:"No Iniciado",c:"#EF4444", k:kpis.filter(k=>k.estado==="NO_INICIADO").length},
-        ].map(d=>`<div style="display:flex;align-items:center;gap:4px;font-size:10px">
-          <div style="width:8px;height:8px;background:${d.c};border-radius:50%;flex-shrink:0"></div>
-          <span style="flex:1;color:#475569">${d.label}</span><strong>${d.k}</strong>
-        </div>`).join("")}
-      </div>
-    </div>
-    <div class="chart-box">
-      <div class="chart-title">Hallazgos por Estado</div>
-      ${barraHorizontal("Abiertos", hallazgos.filter(h=>h.estado==="ABIERTO").length, hallazgos.length, "#EF4444")}
-      ${barraHorizontal("En Plan",  hallazgos.filter(h=>h.estado==="EN_PLAN").length,  hallazgos.length, "#F97316")}
-      ${barraHorizontal("Cerrados", hallazgos.filter(h=>h.estado==="CERRADO").length, hallazgos.length, "#22C55E")}
-    </div>
-  </div>
-</div>
 
 <!-- II. HALLAZGOS COMPLETOS -->
 <div class="divider">II — Hallazgos Identificados</div>
