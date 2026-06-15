@@ -4,7 +4,7 @@ import { Header } from "@/components/layout/header";
 import { useGranjasStore } from "@/store/granjas.store";
 import { useAuthStore } from "@/store/auth.store";
 import { useShallow } from "zustand/react/shallow";
-import { ESTADO_KPI } from "@/lib/granjas.constants";
+import { ESTADO_KPI, TIPO_RIESGO } from "@/lib/granjas.constants";
 import { AUDITORS } from "@/lib/constants";
 import type { KPI } from "@/lib/granjas.types";
 import {
@@ -385,6 +385,108 @@ function seccionResumen(kpis: any[], hallazgos: any[]): string {
   </div>`;
 }
 
+// ─── SECCIÓN TRAZABILIDAD DETALLADA POR KPI ──────────────────────────────────
+// Genera el detalle completo de cada KPI filtrado (estructura solicitada):
+// Información General · Hallazgo · Gestión KPI · Evidencias · Evaluación
+// Solo usa los registros filtrados — sin contenido ficticio ni datos externos.
+function seccionTrazabilidadKPI(
+  kpis: any[], hallazgos: any[], granjas: any[],
+  evidenciasPorHallazgo?: Record<string, any[]>
+): string {
+  if (!kpis.length) return "";
+
+  // Ordenar por fecha del hallazgo (más reciente primero)
+  const ordenados = [...kpis].sort((a, b) => {
+    const ha = hallazgos.find(h => h.id === a.hallazgoId);
+    const hb = hallazgos.find(h => h.id === b.hallazgoId);
+    const fa = ha?.fechaVisita ? new Date(ha.fechaVisita).getTime() : 0;
+    const fb = hb?.fechaVisita ? new Date(hb.fechaVisita).getTime() : 0;
+    return fb - fa;
+  });
+
+  const parseSeguimiento = (s: string) => {
+    const [a, b] = (s ?? "").split("||");
+    return {
+      resp: a?.replace(/^RESP:/, "")?.trim() ?? "",
+      aud:  b?.replace(/^AUD:/, "")?.trim() ?? "",
+    };
+  };
+
+  const fichas = ordenados.map((k, idx) => {
+    const h = hallazgos.find(hh => hh.id === k.hallazgoId);
+    const g = granjas.find(gr => gr.id === k.granjaId);
+    const seg = parseSeguimiento(k.seguimiento);
+    const pct = k.porcentajeAvance ?? 0;
+    const evs = (h && evidenciasPorHallazgo?.[h.id]) ? evidenciasPorHallazgo[h.id] : [];
+
+    const galeria = evs.length > 0 ? `
+      <div style="margin-top:10px">
+        <div style="font-size:10px;font-weight:700;color:#475569;margin-bottom:6px">Evidencias Fotográficas (${evs.length})</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${evs.map((ev: any) => `
+            <div style="width:90px;height:90px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;background:#f8fafc">
+              <img src="${ev.url}" alt="${ev.nombre || "evidencia"}" style="width:100%;height:100%;object-fit:cover"/>
+            </div>`).join("")}
+        </div>
+      </div>` : `<div style="margin-top:8px;font-size:10px;color:#94a3b8">Sin evidencias fotográficas asociadas.</div>`;
+
+    return `
+    <div class="section" style="page-break-inside:avoid;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #0D1526;padding-bottom:8px;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:800;color:#0D1526">Registro KPI #${idx + 1}</div>
+        <span class="badge ${clsBadge(k.estado)}">${displayEstado(k.estado)}</span>
+      </div>
+
+      <div style="font-size:10px;font-weight:700;color:#4A7AFF;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Información General</div>
+      <table style="width:100%;font-size:10px;margin-bottom:10px">
+        <tr><td style="color:#64748b;width:30%">Granja</td><td style="font-weight:600">${g?.nombre || "—"}</td></tr>
+        <tr><td style="color:#64748b">Auditor</td><td style="font-weight:600">${h?.auditorNombre || "—"}</td></tr>
+        <tr><td style="color:#64748b">Tipo de Producción</td><td>${g?.tipoOperativo || "—"}</td></tr>
+        <tr><td style="color:#64748b">Tipo de Granja</td><td>${g?.tipoGranja || "—"}</td></tr>
+      </table>
+
+      <div style="font-size:10px;font-weight:700;color:#4A7AFF;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Información del Hallazgo</div>
+      <table style="width:100%;font-size:10px;margin-bottom:6px">
+        <tr><td style="color:#64748b;width:30%">Hallazgo</td><td style="font-weight:600">${h?.titulo || k.accion?.slice(0,60) || "—"}</td></tr>
+        <tr><td style="color:#64748b">Tipo de Riesgo</td><td>${(Array.isArray(h?.tiposRiesgo) ? h.tiposRiesgo.join(", ") : "") || "—"}</td></tr>
+        <tr><td style="color:#64748b">Estado del Hallazgo</td><td>${displayEstado(h?.estado || "—")}</td></tr>
+        <tr><td style="color:#64748b">Fecha Hallazgo</td><td>${fmtFechaCorta(h?.fechaVisita)}</td></tr>
+      </table>
+      <div style="background:#f8fafc;border-radius:6px;padding:8px 10px;font-size:10px;color:#475569;line-height:1.6;margin-bottom:10px">
+        <strong style="color:#0D1526">Descripción Completa:</strong><br>${h?.descripcion || k.accion || "Sin descripción registrada."}
+      </div>
+
+      <div style="font-size:10px;font-weight:700;color:#4A7AFF;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Gestión KPI</div>
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 10px;font-size:10px;color:#1e40af;line-height:1.6;margin-bottom:8px">
+        <strong>Plan de Acción (IA):</strong><br>${k.planAccionVeterinario && k.planAccionVeterinario !== "—" ? k.planAccionVeterinario : "Pendiente de generar."}
+      </div>
+      <table style="width:100%;font-size:10px;margin-bottom:6px">
+        <tr><td style="color:#64748b;width:30%">Responsable</td><td style="font-weight:600">${k.responsable || "—"}</td></tr>
+        <tr><td style="color:#64748b">Fecha Compromiso</td><td>${fmtFechaCorta(k.fechaCompromiso)}</td></tr>
+        <tr><td style="color:#64748b">Fecha Cumplimiento</td><td>${fmtFechaCorta(k.fechaCumplimiento)}</td></tr>
+        <tr><td style="color:#64748b">Calificación Auditor</td><td>${displayEstado(k.estado)}</td></tr>
+      </table>
+      ${seg.resp ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Seguimiento Responsable:</strong> ${seg.resp}</div>` : ""}
+      ${seg.aud  ? `<div style="font-size:10px;color:#475569;margin-bottom:6px"><strong>Seguimiento Auditor:</strong> ${seg.aud}</div>` : ""}
+      <div style="margin:8px 0">
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:#64748b;margin-bottom:3px">
+          <span>Porcentaje de Avance</span><span style="font-weight:800;color:#0D1526">${pct}%</span>
+        </div>
+        <div class="progress-bar-bg" style="height:8px"><div class="progress-bar-fill" style="width:${pct}%;background:linear-gradient(90deg,#4A7AFF,#22C55E)"></div></div>
+      </div>
+
+      <div style="font-size:10px;font-weight:700;color:#4A7AFF;text-transform:uppercase;letter-spacing:0.5px;margin-top:10px">Evidencias</div>
+      ${galeria}
+    </div>`;
+  }).join("");
+
+  return `
+  <div class="section">
+    <div class="section-title">Trazabilidad Detallada por KPI (${kpis.length} registro${kpis.length !== 1 ? "s" : ""})</div>
+    ${fichas}
+  </div>`;
+}
+
 // ─── SECCIÓN HALLAZGOS TABLA ──────────────────────────────────────────────────
 function seccionHallazgos(hallazgos: any[], granjas: any[], limite=15): string {
   const lista = hallazgos.slice(0, limite);
@@ -500,7 +602,7 @@ function footer(): string {
 // ═══════════════════════════════════════════════════════════════════════════════
 // MODELO 1 — EJECUTIVO CORPORATIVO
 // ═══════════════════════════════════════════════════════════════════════════════
-function generarModelo1(kpis: any[], hallazgos: any[], granjas: any[], auditor: string): string {
+function generarModelo1(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
   const pct  = porcentaje(kpis);
   const comp = kpis.filter(k=>k.estado==="COMPLETADO").length;
   const total= kpis.length;
@@ -579,6 +681,8 @@ ${seccionResumen(kpis, hallazgos)}
   </div>
 </div>
 
+${seccionTrazabilidadKPI(kpis, hallazgos, granjas, evidenciasPorHallazgo)}
+
 ${seccionFirma(auditor)}
 ${footer()}
 </div></body></html>`;
@@ -587,7 +691,7 @@ ${footer()}
 // ═══════════════════════════════════════════════════════════════════════════════
 // MODELO 2 — TÉCNICO DETALLADO
 // ═══════════════════════════════════════════════════════════════════════════════
-function generarModelo2(kpis: any[], hallazgos: any[], granjas: any[], auditor: string): string {
+function generarModelo2(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
   const num = `AU-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Informe Técnico — Pollos Savicol S.A.S.</title>
@@ -650,6 +754,8 @@ ${seccionKPIs(kpis, granjas, hallazgos)}
   </div>
 </div>
 
+${seccionTrazabilidadKPI(kpis, hallazgos, granjas, evidenciasPorHallazgo)}
+
 ${seccionFirma(auditor)}
 ${footer()}
 </div></body></html>`;
@@ -658,7 +764,7 @@ ${footer()}
 // ═══════════════════════════════════════════════════════════════════════════════
 // MODELO 3 — DASHBOARD VISUAL
 // ═══════════════════════════════════════════════════════════════════════════════
-function generarModelo3(kpis: any[], hallazgos: any[], granjas: any[], auditor: string): string {
+function generarModelo3(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
   const total = kpis.length;
   const dona  = donaChart([
     {v:kpis.filter(k=>k.estado==="COMPLETADO").length, c:"#22C55E", label:"Completado"},
@@ -763,6 +869,8 @@ ${portada("Dashboard de Auditoría", "Visualización Ejecutiva de KPIs · Pollos
   </tbody></table>
 </div>
 
+${seccionTrazabilidadKPI(kpis, hallazgos, granjas, evidenciasPorHallazgo)}
+
 ${seccionFirma(auditor)}
 ${footer()}
 </div></body></html>`;
@@ -771,7 +879,7 @@ ${footer()}
 // ═══════════════════════════════════════════════════════════════════════════════
 // MODELO 4 — POR GRANJA INDIVIDUAL
 // ═══════════════════════════════════════════════════════════════════════════════
-function generarModelo4(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, granjaFiltroId?: string): string {
+function generarModelo4(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, granjaFiltroId?: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
   const granja = granjaFiltroId ? granjas.find(g=>g.id===granjaFiltroId) : granjas[0];
   if (!granja) return "<html><body><p>Selecciona una granja para este modelo.</p></body></html>";
 
@@ -836,6 +944,8 @@ ${seccionKPIs(kpisGranja, granjas, hallazgos)}
   </div>
 </div>
 
+${seccionTrazabilidadKPI(kpis, hallazgos, granjas, evidenciasPorHallazgo)}
+
 ${seccionFirma(auditor)}
 ${footer()}
 </div></body></html>`;
@@ -844,7 +954,7 @@ ${footer()}
 // ═══════════════════════════════════════════════════════════════════════════════
 // MODELO 5 — INFORME GENERAL COMBINADO
 // ═══════════════════════════════════════════════════════════════════════════════
-function generarModelo5(kpis: any[], hallazgos: any[], granjas: any[], auditor: string): string {
+function generarModelo5(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
   const total = kpis.length;
   const pct   = porcentaje(kpis);
   const dona  = donaChart([
@@ -975,9 +1085,33 @@ ${seccionKPIs(kpis, granjas, hallazgos)}
   </div>
 </div>
 
+${seccionTrazabilidadKPI(kpis, hallazgos, granjas, evidenciasPorHallazgo)}
+
 ${seccionFirma(auditor)}
 ${footer()}
 </div></body></html>`;
+}
+
+// ─── Cargar evidencias fotográficas de los hallazgos (para el informe) ─────────
+// Devuelve un mapa { hallazgoId: [evidencias Foto] } solo de los hallazgos dados.
+async function cargarEvidenciasInforme(
+  hallazgoIds: string[], accessToken: string | null
+): Promise<Record<string, any[]>> {
+  const API = process.env.NEXT_PUBLIC_API_URL || "";
+  const mapa: Record<string, any[]> = {};
+  if (!accessToken || hallazgoIds.length === 0) return mapa;
+  await Promise.all(hallazgoIds.map(async (hid) => {
+    try {
+      const r = await fetch(`${API}/api/v1/evidencias/hallazgo?hallazgoId=${hid}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (r.ok) {
+        const data = await r.json();
+        mapa[hid] = Array.isArray(data) ? data.filter((e: any) => e.tipo === "Foto") : [];
+      }
+    } catch { /* silencioso — el informe se genera sin esas evidencias */ }
+  }));
+  return mapa;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -986,16 +1120,17 @@ ${footer()}
 export function generarInforme(
   modelo: ModeloInforme,
   kpis: any[], hallazgos: any[], granjas: any[],
-  auditor: string, granjaFiltroId?: string
+  auditor: string, granjaFiltroId?: string,
+  evidenciasPorHallazgo?: Record<string, any[]>
 ): void {
   let html = "";
   switch(modelo) {
-    case "1-ejecutivo": html = generarModelo1(kpis, hallazgos, granjas, auditor); break;
-    case "2-tecnico":   html = generarModelo2(kpis, hallazgos, granjas, auditor); break;
-    case "3-dashboard": html = generarModelo3(kpis, hallazgos, granjas, auditor); break;
-    case "4-granja":    html = generarModelo4(kpis, hallazgos, granjas, auditor, granjaFiltroId); break;
+    case "1-ejecutivo": html = generarModelo1(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo); break;
+    case "2-tecnico":   html = generarModelo2(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo); break;
+    case "3-dashboard": html = generarModelo3(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo); break;
+    case "4-granja":    html = generarModelo4(kpis, hallazgos, granjas, auditor, granjaFiltroId, evidenciasPorHallazgo); break;
     case "5-general":
-    default:            html = generarModelo5(kpis, hallazgos, granjas, auditor); break;
+    default:            html = generarModelo5(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo); break;
   }
   const win = window.open("", "_blank");
   if (win) {
@@ -1219,10 +1354,14 @@ export async function enviarInformePorCorreo(
 
 
 // ─── Modal selector de modelos de informe ─────────────────────────────────────
-function SelectorInformeModal({ granjas, onClose, onGenerar, onEnviar }: {
+function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsList, resultadosCount, onClose, onGenerar, onEnviar }: {
   granjas:    any[];
+  filtrosActivos?: { fEstado: string; fGranja: string; fAuditor: string; fTipoRiesgo: string; fFechaHallazgo: string };
+  granjasList?:    any[];
+  auditorsList?:   any[];
+  resultadosCount?: number;
   onClose:    () => void;
-  onGenerar:  (modelo: ModeloInforme, granjaId?: string) => void;
+  onGenerar:  (modelo: ModeloInforme, granjaId?: string) => void | Promise<void>;
   onEnviar:   (modelo: ModeloInforme, email: string, asunto: string, granjaId?: string, descripcion?: string) => Promise<void>;
 }) {
   const [modeloSel,   setModeloSel]   = useState<ModeloInforme>("5-general");
@@ -1240,6 +1379,25 @@ function SelectorInformeModal({ granjas, onClose, onGenerar, onEnviar }: {
   const INP_STYLE = "w-full px-3 py-2 bg-[#0A111F] border border-[#1E2D4A] rounded-lg text-xs text-white placeholder-[#475569] focus:outline-none focus:border-[#4A7AFF] transition-colors";
 
   const modelos = Object.entries(MODELOS_INFO) as [ModeloInforme, typeof MODELOS_INFO[ModeloInforme]][];
+
+  // Filtros detectados (legibles) — para validación previa antes de generar
+  const filtrosDetectados: { label: string; valor: string }[] = (() => {
+    const f = filtrosActivos;
+    if (!f) return [];
+    const arr: { label: string; valor: string }[] = [];
+    if (f.fGranja) {
+      const g = (granjasList ?? []).find((x:any) => x.id === f.fGranja);
+      arr.push({ label: "Granja", valor: g?.nombre ?? f.fGranja });
+    }
+    if (f.fAuditor) {
+      const a = (auditorsList ?? []).find((x:any) => x.id === f.fAuditor);
+      arr.push({ label: "Auditor", valor: a?.name ?? f.fAuditor });
+    }
+    if (f.fTipoRiesgo)    arr.push({ label: "Tipo de Riesgo", valor: f.fTipoRiesgo });
+    if (f.fEstado)        arr.push({ label: "Estado", valor: f.fEstado });
+    if (f.fFechaHallazgo) arr.push({ label: "Fecha Hallazgo", valor: f.fFechaHallazgo });
+    return arr;
+  })();
 
   async function handleEnviar() {
     if (!emailDest.trim()) return;
@@ -1270,6 +1428,34 @@ function SelectorInformeModal({ granjas, onClose, onGenerar, onEnviar }: {
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+
+          {/* Filtros Detectados — validación previa */}
+          <div className="rounded-xl border border-[#4A7AFF]/30 bg-[#4A7AFF]/5 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Filter className="w-3.5 h-3.5 text-[#4A7AFF]"/>
+              <span className="text-[11px] font-semibold text-[#4A7AFF] uppercase tracking-wider">Filtros Detectados</span>
+              <span className="ml-auto text-[10px] text-[#94A3B8]">
+                {typeof resultadosCount === "number" ? `${resultadosCount} registro(s)` : ""}
+              </span>
+            </div>
+            {filtrosDetectados.length === 0 ? (
+              <p className="text-[11px] text-[#94A3B8]">
+                Sin filtros activos — el informe incluirá <strong className="text-white">todos los registros</strong> visibles.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {filtrosDetectados.map(f => (
+                  <span key={f.label} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#0A111F] border border-[#1E2D4A] text-[10px]">
+                    <span className="text-[#64748B]">{f.label}:</span>
+                    <strong className="text-white">{f.valor}</strong>
+                  </span>
+                ))}
+              </div>
+            )}
+            <p className="text-[9px] text-[#64748B] mt-2">
+              El informe se generará exclusivamente con los registros que cumplen estos filtros. No se incluye información externa.
+            </p>
+          </div>
 
           {/* Selector de modelo */}
           <div>
@@ -1367,7 +1553,7 @@ function SelectorInformeModal({ granjas, onClose, onGenerar, onEnviar }: {
         <footer className="flex items-center gap-2 px-6 py-4 border-t border-[#1E2D4A]">
           <button onClick={onClose} className="btn-ghost text-xs flex-1">Cancelar</button>
           <button
-            onClick={() => { onGenerar(modeloSel, granjaFiltro||undefined); onClose(); }}
+            onClick={async () => { await onGenerar(modeloSel, granjaFiltro||undefined); onClose(); }}
             className="btn-primary text-sm bg-[#4A7AFF] hover:bg-[#3D6AE8] flex items-center gap-2 flex-1 justify-center py-2 font-semibold"
           >
             <FileText className="w-4 h-4"/>
@@ -1403,6 +1589,7 @@ export default function KPIPage() {
   const [fEstado,        setFEstado]        = useState("");
   const [fGranja,        setFGranja]        = useState("");
   const [fAuditor,       setFAuditor]       = useState("");
+  const [fTipoRiesgo,    setFTipoRiesgo]    = useState("");
   const [fFechaHallazgo, setFFechaHallazgo] = useState("");
 
   const alertsQ      = useKpiAlerts();
@@ -1421,14 +1608,20 @@ export default function KPIPage() {
       const h = k.hallazgoId ? hallazgos.find(h => h.id === k.hallazgoId) : null;
       return h?.auditorId === fAuditor;
     });
+    if (fTipoRiesgo) list = list.filter(k => {
+      const h = k.hallazgoId ? hallazgos.find(h => h.id === k.hallazgoId) : null;
+      if (!h) return false;
+      const riesgos: string[] = Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo : [];
+      return riesgos.includes(fTipoRiesgo);
+    });
     if (fFechaHallazgo) list = list.filter(k => {
       const h = k.hallazgoId ? hallazgos.find(h => h.id === k.hallazgoId) : null;
       return h?.fechaVisita?.startsWith(fFechaHallazgo);
     });
     return list;
-  }, [kpis, hallazgos, fEstado, fGranja, fAuditor, fFechaHallazgo]);
+  }, [kpis, hallazgos, fEstado, fGranja, fAuditor, fTipoRiesgo, fFechaHallazgo]);
 
-  const hayFiltros = !!(fEstado || fGranja || fAuditor || fFechaHallazgo);
+  const hayFiltros = !!(fEstado || fGranja || fAuditor || fTipoRiesgo || fFechaHallazgo);
 
   // ── Indicadores ───────────────────────────────────────────────────────────
   const total       = kpis.length;
@@ -1440,7 +1633,7 @@ export default function KPIPage() {
 
   const SEL = "px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white focus:outline-none hover:border-[#2A3F6A] transition-colors cursor-pointer";
 
-  const filtrosActivos = { fEstado, fGranja, fAuditor, fFechaHallazgo };
+  const filtrosActivos = { fEstado, fGranja, fAuditor, fTipoRiesgo, fFechaHallazgo };
 
   return (
     <div className="flex flex-col min-h-full">
@@ -1520,7 +1713,7 @@ export default function KPIPage() {
             <span className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wider">Filtros</span>
             {hayFiltros && (
               <button
-                onClick={() => { setFEstado(""); setFGranja(""); setFAuditor(""); setFFechaHallazgo(""); }}
+                onClick={() => { setFEstado(""); setFGranja(""); setFAuditor(""); setFTipoRiesgo(""); setFFechaHallazgo(""); }}
                 className="ml-auto flex items-center gap-1 text-[10px] text-[#64748B] hover:text-white px-2 py-0.5 rounded border border-[#1E2D4A] hover:border-[#4A7AFF] transition-colors"
               >
                 <X className="w-3 h-3"/>Limpiar
@@ -1547,6 +1740,13 @@ export default function KPIPage() {
               <select value={fAuditor} onChange={e=>setFAuditor(e.target.value)} className={SEL}>
                 <option value="">Todos los auditores</option>
                 {AUDITORS.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-[#64748B] px-1">Tipo de Riesgo</span>
+              <select value={fTipoRiesgo} onChange={e=>setFTipoRiesgo(e.target.value)} className={SEL}>
+                <option value="">Todos los riesgos</option>
+                {TIPO_RIESGO.map(r=><option key={r} value={r}>{r}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-0.5">
@@ -1671,24 +1871,47 @@ export default function KPIPage() {
       {informeOpen && (
         <SelectorInformeModal
           granjas={granjas}
+          filtrosActivos={filtrosActivos}
+          granjasList={granjas}
+          auditorsList={AUDITORS}
+          resultadosCount={filtered.length}
           onClose={() => setInformeOpen(false)}
-          onGenerar={(modelo, granjaId) => {
+          onGenerar={async (modelo, granjaId) => {
             const auditorNombre = usuarios?.find((u:any)=>u.role==="AUDITOR")?.name ?? "Auditor Interno";
-            generarInforme(modelo, filtered, hallazgos, granjas, auditorNombre, granjaId);
+            // Filtrado coherente: derivar hallazgos y granjas SOLO de los KPIs filtrados
+            const hIds = new Set(filtered.map(k => k.hallazgoId).filter(Boolean));
+            const gIds = new Set(filtered.map(k => k.granjaId).filter(Boolean));
+            const hallazgosFiltrados = hallazgos.filter(h => hIds.has(h.id));
+            const granjasFiltradas   = granjas.filter(g => gIds.has(g.id));
+            // Cargar evidencias fotográficas de los hallazgos filtrados
+            const evidenciasMap = await cargarEvidenciasInforme(
+              Array.from(hIds) as string[], accessToken
+            );
+            generarInforme(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId, evidenciasMap);
           }}
           onEnviar={async (modelo, email, asunto, granjaId, descripcion) => {
             const auditorNombre = usuarios?.find((u:any)=>u.role==="AUDITOR")?.name ?? "Auditor Interno";
             const auditorEmail  = accessToken ? (JSON.parse(atob(accessToken.split(".")[1]||"e30=")).email ?? "") : "";
 
+            // Filtrado coherente: derivar hallazgos y granjas SOLO de los KPIs filtrados
+            const hIds = new Set(filtered.map(k => k.hallazgoId).filter(Boolean));
+            const gIds = new Set(filtered.map(k => k.granjaId).filter(Boolean));
+            const hallazgosFiltrados = hallazgos.filter(h => hIds.has(h.id));
+            const granjasFiltradas   = granjas.filter(g => gIds.has(g.id));
+            // Cargar evidencias fotográficas de los hallazgos filtrados
+            const evidenciasMap = await cargarEvidenciasInforme(
+              Array.from(hIds) as string[], accessToken
+            );
+
             // 1. Generar el HTML exacto del modelo seleccionado
             //    El mismo HTML que se ve en la plataforma al descargar
             const htmlInforme = (() => {
               switch (modelo) {
-                case "1-ejecutivo": return generarModelo1(filtered, hallazgos, granjas, auditorNombre);
-                case "2-tecnico":   return generarModelo2(filtered, hallazgos, granjas, auditorNombre);
-                case "3-dashboard": return generarModelo3(filtered, hallazgos, granjas, auditorNombre);
-                case "4-granja":    return generarModelo4(filtered, hallazgos, granjas, auditorNombre, granjaId);
-                default:            return generarModelo5(filtered, hallazgos, granjas, auditorNombre);
+                case "1-ejecutivo": return generarModelo1(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
+                case "2-tecnico":   return generarModelo2(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
+                case "3-dashboard": return generarModelo3(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
+                case "4-granja":    return generarModelo4(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId, evidenciasMap);
+                default:            return generarModelo5(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
               }
             })();
 
@@ -1720,7 +1943,7 @@ export default function KPIPage() {
             }
 
             // 2. Enviar correo con PDF adjunto
-            const r = await enviarInformePorCorreo(modelo, email, asunto, filtered, hallazgos, granjas, auditorNombre, accessToken||"", auditorEmail, granjaId, descripcion, pdfBase64, pdfFilename);
+            const r = await enviarInformePorCorreo(modelo, email, asunto, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, accessToken||"", auditorEmail, granjaId, descripcion, pdfBase64, pdfFilename);
             if (!r.ok) throw new Error(r.message);
           }}
         />
