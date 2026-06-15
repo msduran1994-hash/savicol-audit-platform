@@ -315,6 +315,275 @@ function barraHorizontal(label:string, value:number, max:number, color:string): 
   </div>`;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// DASHBOARD EJECUTIVO BI — Visualizaciones estilo Power BI / Google Analytics
+// Todas las gráficas son SVG inline (se rasterizan correctamente en el PDF).
+// Usan EXCLUSIVAMENTE los KPIs filtrados — sin datos ficticios.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Clasificación normalizada de estado KPI (incluye "Atrasado" calculado dinámicamente)
+// Atrasado = fechaCompromiso ya pasó y el KPI no está completado.
+type EstadoBI = "Completado" | "En Curso" | "En Espera" | "Atrasado" | "No Iniciado";
+const BI_COLORS: Record<EstadoBI, string> = {
+  "Completado":  "#22C55E",
+  "En Curso":    "#4A7AFF",
+  "En Espera":   "#FBBF24",
+  "Atrasado":    "#EF4444",
+  "No Iniciado": "#94A3B8",
+};
+const BI_ORDEN: EstadoBI[] = ["Completado", "En Curso", "En Espera", "Atrasado", "No Iniciado"];
+
+function clasificarEstadoBI(k: any): EstadoBI {
+  const raw = (k.estado ?? "").toString().toUpperCase().replace(/ /g, "_");
+  if (raw === "COMPLETADO" || raw === "CERRADO") return "Completado";
+  // Atrasado: fecha de compromiso vencida y no completado
+  if (k.fechaCompromiso) {
+    const fc = new Date(k.fechaCompromiso).getTime();
+    if (!isNaN(fc) && fc < Date.now()) return "Atrasado";
+  }
+  if (raw === "EN_CURSO")    return "En Curso";
+  if (raw === "EN_ESPERA")   return "En Espera";
+  if (raw === "NO_INICIADO" || raw === "PENDIENTE") return "No Iniciado";
+  return "En Curso";
+}
+
+function conteoEstadosBI(kpis: any[]): Record<EstadoBI, number> {
+  const c: Record<EstadoBI, number> = {
+    "Completado": 0, "En Curso": 0, "En Espera": 0, "Atrasado": 0, "No Iniciado": 0,
+  };
+  kpis.forEach(k => { c[clasificarEstadoBI(k)]++; });
+  return c;
+}
+
+// ── 1. Resumen Ejecutivo KPI — tarjetas de indicadores ────────────────────────
+function biResumenEjecutivo(kpis: any[]): string {
+  const c = conteoEstadosBI(kpis);
+  const total = kpis.length;
+  const cards = [
+    { label: "Total KPI",     val: total,            color: "#0D1526" },
+    { label: "Completados",   val: c["Completado"],  color: BI_COLORS["Completado"] },
+    { label: "En Curso",      val: c["En Curso"],    color: BI_COLORS["En Curso"] },
+    { label: "En Espera",     val: c["En Espera"],   color: BI_COLORS["En Espera"] },
+    { label: "Atrasados",     val: c["Atrasado"],    color: BI_COLORS["Atrasado"] },
+    { label: "No Iniciados",  val: c["No Iniciado"], color: BI_COLORS["No Iniciado"] },
+  ];
+  return `
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px">
+    ${cards.map(cd => `
+      <div style="background:#fff;border:1px solid #e2e8f0;border-top:3px solid ${cd.color};border-radius:8px;padding:12px 8px;text-align:center">
+        <div style="font-size:24px;font-weight:800;color:${cd.color};line-height:1">${cd.val}</div>
+        <div style="font-size:8.5px;color:#64748b;margin-top:4px;text-transform:uppercase;letter-spacing:0.3px;font-weight:600">${cd.label}</div>
+      </div>`).join("")}
+  </div>`;
+}
+
+// ── 2. Distribución de Estados — dona con % por estado ────────────────────────
+function biDistribucionEstados(kpis: any[], size = 150): string {
+  const c = conteoEstadosBI(kpis);
+  const total = kpis.length || 1;
+  const data = BI_ORDEN.map(e => ({ label: e, v: c[e], color: BI_COLORS[e] })).filter(d => d.v > 0);
+  const cx = size/2, cy = size/2, r = size*0.36, stroke = size*0.16;
+  let offset = 0;
+  const arcs = data.map(d => {
+    const frac = d.v/total;
+    const dash = frac * 2*Math.PI*r;
+    const gap  = (1-frac) * 2*Math.PI*r;
+    const ro   = offset * 2*Math.PI*r;
+    offset += frac;
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${d.color}"
+      stroke-width="${stroke}" stroke-dasharray="${dash} ${gap}"
+      stroke-dashoffset="${2*Math.PI*r*0.25 - ro}"/>`;
+  }).join("\n");
+  const completados = c["Completado"];
+  const pctComp = Math.round(completados/total*100);
+  return `
+  <div style="display:flex;align-items:center;gap:20px">
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex-shrink:0">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#f1f5f9" stroke-width="${stroke}"/>
+      ${arcs}
+      <text x="${cx}" y="${cy-2}" text-anchor="middle" font-size="${size*0.16}" font-weight="800" fill="#0D1526">${pctComp}%</text>
+      <text x="${cx}" y="${cy+13}" text-anchor="middle" font-size="${size*0.07}" fill="#64748b">cumplimiento</text>
+    </svg>
+    <div style="flex:1">
+      ${BI_ORDEN.map(e => {
+        const v = c[e]; const pct = Math.round(v/total*100);
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:10px">
+          <div style="width:11px;height:11px;border-radius:3px;background:${BI_COLORS[e]};flex-shrink:0"></div>
+          <span style="flex:1;color:#475569">${e}</span>
+          <strong style="color:#0D1526">${v}</strong>
+          <span style="color:#94a3b8;width:34px;text-align:right">${pct}%</span>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`;
+}
+
+// ── 3. Avance de Cumplimiento — gauge semicircular ────────────────────────────
+function biGaugeCumplimiento(kpis: any[]): string {
+  const c = conteoEstadosBI(kpis);
+  const total = kpis.length || 1;
+  const cerrados  = c["Completado"];
+  const activos   = c["En Curso"] + c["En Espera"];
+  const pendientes= c["No Iniciado"] + c["Atrasado"];
+  const pct = Math.round(cerrados/total*100);
+  // Gauge semicircular SVG (180°)
+  const W = 240, H = 130, cx = W/2, cy = H-10, r = 90;
+  const ang = Math.PI * (1 - pct/100); // 180°→0°
+  const x2 = cx + r*Math.cos(ang), y2 = cy - r*Math.sin(ang);
+  const color = pct>=70?"#22C55E":pct>=40?"#FBBF24":"#EF4444";
+  return `
+  <div style="text-align:center">
+    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+      <path d="M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}" fill="none" stroke="#f1f5f9" stroke-width="16" stroke-linecap="round"/>
+      <path d="M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${x2} ${y2}" fill="none" stroke="${color}" stroke-width="16" stroke-linecap="round"/>
+      <text x="${cx}" y="${cy-18}" text-anchor="middle" font-size="34" font-weight="800" fill="${color}">${pct}%</text>
+      <text x="${cx}" y="${cy-2}" text-anchor="middle" font-size="10" fill="#64748b">Cumplimiento General</text>
+    </svg>
+    <div style="display:flex;justify-content:center;gap:16px;margin-top:6px;font-size:10px">
+      <span style="color:#22C55E;font-weight:700">● Cerrados: ${cerrados}</span>
+      <span style="color:#4A7AFF;font-weight:700">● Activos: ${activos}</span>
+      <span style="color:#EF4444;font-weight:700">● Pendientes: ${pendientes}</span>
+    </div>
+  </div>`;
+}
+
+// ── 4. Tendencia de Cumplimiento — línea cronológica por mes ──────────────────
+function biTendenciaCumplimiento(kpis: any[], hallazgos: any[]): string {
+  // Agrupar por mes (YYYY-MM) usando fecha de hallazgo, compromiso y cumplimiento
+  const meses: Record<string, { hallazgo: number; compromiso: number; cumplimiento: number }> = {};
+  const ymKey = (d?: string) => { if (!d) return null; const t=new Date(d); return isNaN(t.getTime())?null:`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}`; };
+  const bump = (key: string|null, campo: "hallazgo"|"compromiso"|"cumplimiento") => {
+    if (!key) return;
+    if (!meses[key]) meses[key] = { hallazgo:0, compromiso:0, cumplimiento:0 };
+    meses[key][campo]++;
+  };
+  kpis.forEach(k => {
+    const h = hallazgos.find(hh => hh.id === k.hallazgoId);
+    bump(ymKey(h?.fechaVisita), "hallazgo");
+    bump(ymKey(k.fechaCompromiso), "compromiso");
+    bump(ymKey(k.fechaCumplimiento), "cumplimiento");
+  });
+  const keys = Object.keys(meses).sort();
+  if (keys.length === 0) return `<p style="font-size:10px;color:#94a3b8;text-align:center;padding:20px">Sin datos de fechas para mostrar tendencia.</p>`;
+
+  const W = 520, H = 180, padL = 32, padB = 28, padT = 12, padR = 12;
+  const plotW = W-padL-padR, plotH = H-padB-padT;
+  const maxV = Math.max(1, ...keys.flatMap(k => [meses[k].hallazgo, meses[k].compromiso, meses[k].cumplimiento]));
+  const xStep = keys.length>1 ? plotW/(keys.length-1) : 0;
+  const xAt = (i:number) => padL + (keys.length>1 ? i*xStep : plotW/2);
+  const yAt = (v:number) => padT + plotH - (v/maxV)*plotH;
+
+  const serie = (campo: "hallazgo"|"compromiso"|"cumplimiento", color: string) => {
+    const pts = keys.map((k,i) => `${xAt(i)},${yAt(meses[k][campo])}`).join(" ");
+    const dots = keys.map((k,i) => `<circle cx="${xAt(i)}" cy="${yAt(meses[k][campo])}" r="2.5" fill="${color}"/>`).join("");
+    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/>${dots}`;
+  };
+  // Gridlines Y
+  const grid = [0,0.5,1].map(f => {
+    const y = padT + plotH - f*plotH;
+    return `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#f1f5f9" stroke-width="1"/>
+            <text x="${padL-4}" y="${y+3}" text-anchor="end" font-size="7" fill="#94a3b8">${Math.round(f*maxV)}</text>`;
+  }).join("");
+  const xlabels = keys.map((k,i) => `<text x="${xAt(i)}" y="${H-padB+12}" text-anchor="middle" font-size="7" fill="#64748b">${k.slice(2)}</text>`).join("");
+
+  return `
+  <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
+    ${grid}
+    ${serie("hallazgo", "#94A3B8")}
+    ${serie("compromiso", "#FBBF24")}
+    ${serie("cumplimiento", "#22C55E")}
+    ${xlabels}
+  </svg>
+  <div style="display:flex;justify-content:center;gap:16px;margin-top:4px;font-size:9px">
+    <span style="color:#94A3B8;font-weight:700">● Hallazgos</span>
+    <span style="color:#FBBF24;font-weight:700">● Compromisos</span>
+    <span style="color:#22C55E;font-weight:700">● Cumplimientos</span>
+  </div>`;
+}
+
+// ── 5. Riesgos vs Estado KPI — matriz cruzada (heatmap) ───────────────────────
+function biRiesgosVsEstado(kpis: any[], hallazgos: any[]): string {
+  // Filas = tipo de riesgo, columnas = estado KPI
+  const riesgosSet = new Set<string>();
+  const matriz: Record<string, Record<EstadoBI, number>> = {};
+  kpis.forEach(k => {
+    const h = hallazgos.find(hh => hh.id === k.hallazgoId);
+    const riesgos: string[] = Array.isArray(h?.tiposRiesgo) && h.tiposRiesgo.length ? h.tiposRiesgo : ["Sin clasificar"];
+    const est = clasificarEstadoBI(k);
+    riesgos.forEach(rg => {
+      riesgosSet.add(rg);
+      if (!matriz[rg]) matriz[rg] = { "Completado":0,"En Curso":0,"En Espera":0,"Atrasado":0,"No Iniciado":0 };
+      matriz[rg][est]++;
+    });
+  });
+  const riesgos = Array.from(riesgosSet);
+  if (riesgos.length === 0) return `<p style="font-size:10px;color:#94a3b8;text-align:center;padding:16px">Sin datos de riesgo para cruzar.</p>`;
+  const maxCelda = Math.max(1, ...riesgos.flatMap(rg => BI_ORDEN.map(e => matriz[rg][e])));
+
+  return `
+  <table style="width:100%;border-collapse:collapse;font-size:9px">
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:6px 8px;color:#64748b;border-bottom:2px solid #e2e8f0">Tipo de Riesgo</th>
+        ${BI_ORDEN.map(e => `<th style="padding:6px 4px;color:${BI_COLORS[e]};border-bottom:2px solid #e2e8f0;font-size:8px">${e}</th>`).join("")}
+        <th style="padding:6px 4px;color:#0D1526;border-bottom:2px solid #e2e8f0">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${riesgos.map(rg => {
+        const filaTotal = BI_ORDEN.reduce((a,e)=>a+matriz[rg][e],0);
+        return `<tr>
+          <td style="padding:5px 8px;font-weight:600;color:#0D1526;border-bottom:1px solid #f1f5f9">${rg}</td>
+          ${BI_ORDEN.map(e => {
+            const v = matriz[rg][e];
+            const intensidad = v/maxCelda;
+            const bg = v>0 ? `${BI_COLORS[e]}${Math.round(20+intensidad*60).toString(16).padStart(2,"0")}` : "transparent";
+            return `<td style="padding:5px 4px;text-align:center;border-bottom:1px solid #f1f5f9;background:${bg};font-weight:${v>0?"700":"400"};color:${v>0?"#0D1526":"#cbd5e1"}">${v}</td>`;
+          }).join("")}
+          <td style="padding:5px 4px;text-align:center;border-bottom:1px solid #f1f5f9;font-weight:800;color:#0D1526">${filaTotal}</td>
+        </tr>`;
+      }).join("")}
+    </tbody>
+  </table>`;
+}
+
+// ── BLOQUE COMPLETO: Dashboard Ejecutivo BI ───────────────────────────────────
+function seccionDashboardEjecutivo(kpis: any[], hallazgos: any[], granjas: any[]): string {
+  if (!kpis.length) return "";
+  return `
+  <div class="section">
+    <div class="section-title">Dashboard Ejecutivo · Cumplimiento KPI</div>
+
+    <!-- 1. Resumen Ejecutivo -->
+    ${biResumenEjecutivo(kpis)}
+
+    <div class="charts-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <!-- 2. Distribución de Estados -->
+      <div class="chart-box" style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+        <div class="chart-title" style="font-size:11px;font-weight:700;color:#0D1526;margin-bottom:10px">Distribución de Estados KPI</div>
+        ${biDistribucionEstados(kpis)}
+      </div>
+      <!-- 3. Avance de Cumplimiento -->
+      <div class="chart-box" style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+        <div class="chart-title" style="font-size:11px;font-weight:700;color:#0D1526;margin-bottom:10px">Avance de Cumplimiento</div>
+        ${biGaugeCumplimiento(kpis)}
+      </div>
+    </div>
+
+    <!-- 4. Tendencia de Cumplimiento -->
+    <div class="chart-box" style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:16px">
+      <div class="chart-title" style="font-size:11px;font-weight:700;color:#0D1526;margin-bottom:10px">Tendencia de Cumplimiento (cronológica)</div>
+      ${biTendenciaCumplimiento(kpis, hallazgos)}
+    </div>
+
+    <!-- 5. Riesgos vs Estado KPI -->
+    <div class="chart-box" style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+      <div class="chart-title" style="font-size:11px;font-weight:700;color:#0D1526;margin-bottom:10px">Matriz Analítica · Riesgos vs Estado KPI</div>
+      ${biRiesgosVsEstado(kpis, hallazgos)}
+    </div>
+  </div>`;
+}
+
 // ─── PORTADA COMPARTIDA ───────────────────────────────────────────────────────
 function portada(titulo: string, subtitulo: string, kpis: any[], hallazgos: any[], auditor: string, granjaFiltro?: string): string {
   const fecha = fmtFecha(new Date().toISOString());
@@ -623,6 +892,8 @@ ${portada("Informe Ejecutivo de Auditoría", "Control Interno y Cumplimiento KPI
 
 ${seccionResumen(kpis, hallazgos)}
 
+${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
+
 <div class="section">
   <div class="section-title">Análisis Visual de Cumplimiento</div>
   <div class="charts-grid">
@@ -727,6 +998,8 @@ ${portada(`Informe Técnico de Auditoría N° ${num}`, "Evaluación Integral de 
 
 ${seccionResumen(kpis, hallazgos)}
 
+${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
+
 <div class="section">
   <div class="section-title">3. Metodología</div>
   <div style="font-size:11px;line-height:1.8;color:#475569">
@@ -737,6 +1010,8 @@ ${seccionResumen(kpis, hallazgos)}
     bioseguridad avícola colombiana.
   </div>
 </div>
+
+${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
 
 ${seccionHallazgos(hallazgos, granjas)}
 ${seccionKPIs(kpis, granjas, hallazgos)}
@@ -917,6 +1192,8 @@ ${portada(`Informe de Auditoría — ${granja.nombre}`, "Evaluación Individual 
 
 ${seccionResumen(kpisGranja, hallazgosGranja)}
 
+${seccionDashboardEjecutivo(kpisGranja, hallazgosGranja, granjas)}
+
 <div class="section">
   <div class="section-title">Hallazgos de la Granja (${hallazgosGranja.length})</div>
   ${hallazgosGranja.length > 0
@@ -992,6 +1269,8 @@ ${portada(`Informe General de Auditoría N° ${num}`, "Evaluación Integral · T
 <!-- I. RESUMEN EJECUTIVO -->
 <div class="divider">I — Resumen Ejecutivo</div>
 ${seccionResumen(kpis, hallazgos)}
+
+${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
 
 <!-- CHARTS -->
 <div class="section">
