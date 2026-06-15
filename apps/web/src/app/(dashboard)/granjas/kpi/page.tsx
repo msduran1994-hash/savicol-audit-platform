@@ -1549,11 +1549,20 @@ export async function enviarInformePorCorreo(
       }),
     });
 
-    if (response.ok) {
-      return { ok: true, message: `Informe enviado correctamente a ${destinatario}` };
+    const data = await response.json().catch(() => ({}));
+
+    // Trazabilidad real: el backend devuelve HTTP 200 incluso cuando Brevo rechaza.
+    // Debemos verificar el campo `ok` del cuerpo, no solo el status HTTP.
+    if (response.ok && data?.ok === true) {
+      return {
+        ok: true,
+        message: `Informe enviado correctamente a ${destinatario}`,
+        messageId: data?.messageId ?? null,
+      };
     } else {
-      const err = await response.json().catch(()=>({}));
-      return { ok: false, message: err?.message || `Error HTTP ${response.status}` };
+      // Propagar el error real (ej. IP de Brevo no autorizada, límite, etc.)
+      const errMsg = data?.error || data?.message || `Error HTTP ${response.status}`;
+      return { ok: false, message: errMsg };
     }
   } catch (e: any) {
     return { ok: false, message: e?.message || "Error al enviar el correo" };
