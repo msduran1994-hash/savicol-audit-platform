@@ -469,6 +469,60 @@ function PlanModal({ item, cedis, onClose, onSave, error }: {
   });
 
   const [submitting, setSubmitting] = useState(false);
+  const [generandoIA, setGenerandoIA] = useState<"" | "implementacion" | "recomendaciones">("");
+  const [iaError, setIaError] = useState<string | null>(null);
+
+  // Genera contenido IA (implementación o recomendaciones) usando el endpoint Anthropic existente.
+  // Contexto principal: Descripción Detallada + categorización del formulario.
+  async function generarIA(modo: "implementacion" | "recomendaciones") {
+    if (!form.descripcion?.trim() && !form.titulo?.trim()) {
+      setIaError("Escribe primero el título o la descripción detallada del hallazgo");
+      return;
+    }
+    setGenerandoIA(modo); setIaError(null);
+    try {
+      const cediNombre = cedis.find((c: any) => c.id === form.cediId)?.nombre ?? "CEDI Savicol";
+      const response = await fetch("/api/ai/generar-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modo,
+          accion:              form.titulo || form.descripcion,
+          descripcionHallazgo: form.descripcion,
+          tipoRiesgo:          form.tipoRiesgo,
+          criticidad:          form.criticidad,
+          estadoHallazgo:      form.estado,
+          categoria:           form.categoria,
+          areaAuditada:        `CEDIS · ${form.subtema ?? ""} ${form.subItem ?? ""}`.trim(),
+          nombreGranja:        cediNombre,
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error ?? `Error ${response.status}`);
+      }
+      const data = await response.json();
+      const texto = (data.plan ?? "").trim();
+      if (!texto) throw new Error("La IA no devolvió contenido");
+
+      if (modo === "recomendaciones") {
+        setForm(f => ({ ...f, recomendacionIA: texto }));
+      } else {
+        // Implementación: apendar al final de la descripción sin borrar lo existente
+        setForm(f => {
+          const base = (f.descripcion ?? "").trim();
+          const marca = "\n\n— PLAN DE IMPLEMENTACIÓN (IA) —\n";
+          // Si ya hay un plan IA previo, reemplazarlo en vez de duplicar
+          const sinPlanPrevio = base.split("— PLAN DE IMPLEMENTACIÓN (IA) —")[0].trim();
+          return { ...f, descripcion: sinPlanPrevio + marca + texto };
+        });
+      }
+    } catch (e: any) {
+      setIaError("Error IA: " + (e?.message ?? "desconocido"));
+    } finally {
+      setGenerandoIA("");
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -538,7 +592,15 @@ function PlanModal({ item, cedis, onClose, onSave, error }: {
                 <input type="text" value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Ej. Pediluvio inoperante - reabastecer solución" className="input-base" required/>
               </F>
               <F label="Descripción detallada *" cols={2}>
-                <textarea value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} rows={3} className="input-base resize-none" placeholder="Detalle del hallazgo y plan correctivo..." required/>
+                <div className="relative">
+                  <textarea value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} rows={3} className="input-base resize-none" placeholder="Detalle del hallazgo y plan correctivo..." required/>
+                  <button type="button" onClick={() => generarIA("implementacion")} disabled={!!generandoIA}
+                    className="absolute top-2 right-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#4A7AFF]/15 border border-[#4A7AFF]/40 text-[#4A7AFF] text-[10px] font-semibold hover:bg-[#4A7AFF]/25 disabled:opacity-50"
+                    title="Generar plan de implementación con IA a partir de la descripción">
+                    {generandoIA === "implementacion" ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>}
+                    Implementación IA
+                  </button>
+                </div>
               </F>
             </div>
           </fieldset>
@@ -596,8 +658,22 @@ function PlanModal({ item, cedis, onClose, onSave, error }: {
                 </label>
               </F>
               <F label="Recomendación IA (opcional)" cols={2}>
-                <textarea value={form.recomendacionIA ?? ""} onChange={(e) => setForm({ ...form, recomendacionIA: e.target.value })} rows={2} className="input-base resize-none" placeholder="Sugerencia automática para resolver este hallazgo..."/>
+                <div className="relative">
+                  <textarea value={form.recomendacionIA ?? ""} onChange={(e) => setForm({ ...form, recomendacionIA: e.target.value })} rows={2} className="input-base resize-none" placeholder="Sugerencia automática para resolver este hallazgo..."/>
+                  <button type="button" onClick={() => generarIA("recomendaciones")} disabled={!!generandoIA}
+                    className="absolute top-2 right-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[10px] font-semibold hover:bg-emerald-500/25 disabled:opacity-50"
+                    title="Generar recomendaciones profesionales con IA">
+                    {generandoIA === "recomendaciones" ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>}
+                    Recomendaciones IA
+                  </button>
+                </div>
               </F>
+              {iaError && (
+                <div className="col-span-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0"/>
+                  <span>{iaError}</span>
+                </div>
+              )}
             </div>
           </fieldset>
         </form>
