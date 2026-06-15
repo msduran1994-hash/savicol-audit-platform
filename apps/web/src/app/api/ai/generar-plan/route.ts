@@ -15,6 +15,8 @@ export async function POST(req: NextRequest) {
       accion, tipoRiesgo, estadoHallazgo, nombreGranja, descripcionHallazgo,
       auditor, categoria, criticidad,
       evidencias,   // EvidenciaImg[] — imágenes opcionales
+      modo,         // "plan" (default) | "implementacion" | "recomendaciones"
+      areaAuditada, // contexto adicional (ej. CEDIS / subtema)
     } = body;
 
     if (!accion || typeof accion !== "string" || !accion.trim()) {
@@ -26,27 +28,58 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "ANTHROPIC_API_KEY no configurada en Vercel." }, { status: 503 });
     }
 
-    // ── Construir el prompt de texto ──────────────────────────────────────────
+    // ── Construir el prompt de texto según el modo ────────────────────────────
     const fotosCount = Array.isArray(evidencias) ? evidencias.length : 0;
-    const promptText = [
-      "Eres auditor de bioseguridad avícola con experiencia en granjas colombianas de Savicol.",
-      "Genera un plan de acción correctivo para el siguiente hallazgo.",
-      "",
-      `Granja: ${nombreGranja || "Granja Savicol"}`,
+    const contexto = [
       `Hallazgo: ${accion.trim()}`,
-      descripcionHallazgo ? `Descripción: ${descripcionHallazgo}` : "",
-      auditor      ? `Auditor que registró el hallazgo: ${auditor}` : "",
+      descripcionHallazgo ? `Descripción detallada: ${descripcionHallazgo}` : "",
+      areaAuditada ? `Área auditada: ${areaAuditada}` : "",
+      nombreGranja ? `Ubicación/Unidad: ${nombreGranja}` : "",
+      auditor      ? `Auditor: ${auditor}` : "",
       `Tipo de riesgo: ${tipoRiesgo || "Operativo"}`,
       categoria    ? `Categoría: ${categoria}` : "",
       criticidad   ? `Criticidad: ${criticidad}` : "",
       `Estado actual: ${estadoHallazgo || "Abierto"}`,
       fotosCount > 0
-        ? `\nSe adjuntan ${fotosCount} evidencia(s) fotográfica(s) del hallazgo. Analízalas y considera lo que muestran (condiciones reales, deficiencias visibles, riesgos sanitarios) al elaborar el plan.`
+        ? `Se adjuntan ${fotosCount} evidencia(s) fotográfica(s); analízalas y considera lo que muestran.`
         : "",
-      "",
-      "INSTRUCCIONES: Máximo 80 palabras en un solo párrafo. Profesional, claro y accionable.",
-      "Incluye acción concreta, responsable sugerido y plazo. Sin introducciones. Comienza directo.",
     ].filter(Boolean).join("\n");
+
+    let promptText: string;
+    if (modo === "implementacion") {
+      promptText = [
+        "Eres auditor operacional senior de Savicol con experiencia en centros de distribución (CEDIS) avícolas en Colombia.",
+        "Con base en el siguiente hallazgo, redacta un PLAN DE IMPLEMENTACIÓN accionable.",
+        "",
+        contexto,
+        "",
+        "INSTRUCCIONES: Máximo 2 párrafos breves (110 palabras total). En prosa profesional, integra de forma fluida:",
+        "el plan de acción específico, las actividades sugeridas, las acciones preventivas y correctivas, y el resultado esperado.",
+        "Específico al hallazgo, sin contenido genérico, sin introducciones. Comienza directo con la acción.",
+      ].join("\n");
+    } else if (modo === "recomendaciones") {
+      promptText = [
+        "Eres auditor operacional senior de Savicol con experiencia en centros de distribución (CEDIS) avícolas en Colombia.",
+        "Con base en el siguiente hallazgo, redacta RECOMENDACIONES PROFESIONALES.",
+        "",
+        contexto,
+        "",
+        "INSTRUCCIONES: Máximo 2 párrafos breves (110 palabras total). En prosa profesional, integra de forma fluida:",
+        "recomendaciones profesionales, buenas prácticas, acciones de seguimiento, controles preventivos y observaciones de mejora continua.",
+        "Específico al hallazgo, sin contenido genérico, sin introducciones. Comienza directo.",
+      ].join("\n");
+    } else {
+      // Modo "plan" original (compatibilidad con módulo KPI de Granjas)
+      promptText = [
+        "Eres auditor de bioseguridad avícola con experiencia en granjas colombianas de Savicol.",
+        "Genera un plan de acción correctivo para el siguiente hallazgo.",
+        "",
+        contexto,
+        "",
+        "INSTRUCCIONES: Máximo 80 palabras en un solo párrafo. Profesional, claro y accionable.",
+        "Incluye acción concreta, responsable sugerido y plazo. Sin introducciones. Comienza directo.",
+      ].join("\n");
+    }
 
     // ── Construir el contenido del mensaje (texto + imágenes) ──────────────────
     const content: any[] = [];
@@ -79,7 +112,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 250,
+        max_tokens: (modo === "implementacion" || modo === "recomendaciones") ? 320 : 250,
         messages: [{ role: "user", content }],
       }),
     });
