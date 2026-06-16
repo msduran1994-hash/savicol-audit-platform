@@ -19,8 +19,10 @@ import {
 import { AUDITORS } from "@/lib/constants";
 import {
   CheckSquare, AlertCircle, Clock, CheckCircle2, XCircle, RefreshCw, Filter,
-  Plus, Edit2, Trash2, X, AlertTriangle, Loader2, Save, Sparkles,
+  Plus, Edit2, Trash2, X, AlertTriangle, Loader2, Save, Sparkles, FileText,
 } from "lucide-react";
+import { useAuthStore } from "@/store/auth.store";
+import { InformeCedisModal } from "./informe-cedis";
 
 const SUBTEMAS = [
   "Inventario", "Caja", "Cartera", "Logística",
@@ -123,6 +125,8 @@ export default function CumplimientoCedisPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing]     = useState<any | null>(null);
   const [errorMsg, setErrorMsg]   = useState<string | null>(null);
+  const [informeOpen, setInformeOpen] = useState(false);
+  const usuarioNombre = useAuthStore((s) => s.user?.name ?? "Auditor CEDIS");
 
   const openCreate = () => { setEditing(null); setErrorMsg(null); setModalOpen(true); };
   const openEdit   = (h: any) => { setEditing(h); setErrorMsg(null); setModalOpen(true); };
@@ -182,8 +186,15 @@ export default function CumplimientoCedisPage() {
             </button>
 
             <button
+              onClick={() => setInformeOpen(true)}
+              className="ml-auto px-3 py-1.5 rounded-lg bg-[#1A2540] border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 text-xs font-bold flex items-center gap-2"
+            >
+              <FileText className="w-3.5 h-3.5"/> Informes
+            </button>
+
+            <button
               onClick={openCreate}
-              className="ml-auto px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-xs font-bold flex items-center gap-2"
+              className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-xs font-bold flex items-center gap-2"
             >
               <Plus className="w-3.5 h-3.5"/> Nuevo Plan
             </button>
@@ -351,6 +362,15 @@ export default function CumplimientoCedisPage() {
           </ul>
         </div>
       </div>
+
+      {informeOpen && (
+        <InformeCedisModal
+          hallazgos={hallazgos}
+          cedis={cedis.map((c: any) => ({ id: c.id, nombre: c.nombre }))}
+          usuario={usuarioNombre}
+          onClose={() => setInformeOpen(false)}
+        />
+      )}
 
       {modalOpen && (
         <PlanModal
