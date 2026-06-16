@@ -41,17 +41,17 @@ const fmtFecha = (d?: string) => {
 };
 
 // ── Los 5 modelos corporativos ──────────────────────────────────────────────
-const MODELOS = [
+export const MODELOS = [
   { id: "ejecutivo",   label: "Ejecutivo Gerencial",  icon: Award,        desc: "Resumen ejecutivo, indicadores, riesgos críticos y estado de cumplimiento" },
   { id: "operativo",   label: "Auditoría Operativa",  icon: ClipboardList, desc: "Hallazgos, planes de acción, seguimientos y evidencias" },
   { id: "estrategico", label: "Estratégico",          icon: TrendingUp,   desc: "Tendencias, criticidad, cumplimiento y recomendaciones IA" },
   { id: "corporativo", label: "Corporativo",          icon: Building2,    desc: "Consolidado por CEDIS, comparativos, riesgos y desempeño" },
   { id: "tecnico",     label: "Técnico",              icon: FileSearch,   desc: "Trazabilidad completa, historial y cumplimiento detallado" },
 ] as const;
-type ModeloId = typeof MODELOS[number]["id"];
+export type ModeloId = typeof MODELOS[number]["id"];
 
 // ── Generación de PDF (patrón jsPDF + html2canvas, sin iframe) ──────────────
-async function generarPDF(html: string, filename: string): Promise<void> {
+export async function generarPDF(html: string, filename: string): Promise<void> {
   const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
     import("jspdf"), import("html2canvas"),
   ]);
@@ -134,7 +134,7 @@ async function loadXLSX(): Promise<any> {
 }
 
 // ── XLSX ejecutivo (hojas organizadas + resumen gerencial) ──────────────────
-async function generarXLSXCedis(hallazgos: any[], cedisMap: Record<string,string>, filename: string): Promise<void> {
+export async function generarXLSXCedis(hallazgos: any[], cedisMap: Record<string,string>, filename: string): Promise<void> {
   const XLSX = await loadXLSX();
   const wb = XLSX.utils.book_new();
   const k = calcular(hallazgos);
@@ -313,7 +313,7 @@ function pie(): string {
 }
 
 // ── Cálculo de indicadores comunes ──────────────────────────────────────────
-function calcular(hallazgos: any[]) {
+export function calcular(hallazgos: any[]) {
   const total = hallazgos.length;
   const criticos = hallazgos.filter(h => normCrit(h.criticidad)==="Crítica").length;
   const altos    = hallazgos.filter(h => normCrit(h.criticidad)==="Alta").length;
@@ -419,7 +419,7 @@ function tendenciaPorMes(hallazgos: any[]): { mes: string; val: number }[] {
 
 // ── Evidencias fotográficas desde Consolidado, relacionadas por cediId ───────
 // Las fotos viven embebidas en los campos observacion* de las auditorías CEDI.
-function extraerEvidencias(auditorias: any[], cediIds: Set<string>): { cedi: string; fecha: string; fotos: any[] }[] {
+export function extraerEvidencias(auditorias: any[], cediIds: Set<string>): { cedi: string; fecha: string; fotos: any[] }[] {
   const campos = ["observacionInventario","observacionCaja","observacionCartera","observacionLogistica","observacionBioseguridad","observacionInfraestructura","observacionProcedimientos","observacionRiesgo"];
   const resultado: { cedi: string; fecha: string; fotos: any[] }[] = [];
   auditorias.forEach(a => {
@@ -458,7 +458,7 @@ function seccionEvidencias(evidencias: { cedi: string; fecha: string; fotos: any
 }
 
 // ── Construcción del HTML por modelo ────────────────────────────────────────
-function construirInforme(modelo: ModeloId, hallazgos: any[], cedisMap: Record<string,string>, usuario: string, filtrosTxt: string[], evidencias: { cedi: string; fecha: string; fotos: any[] }[] = []): string {
+export function construirInforme(modelo: ModeloId, hallazgos: any[], cedisMap: Record<string,string>, usuario: string, filtrosTxt: string[], evidencias: { cedi: string; fecha: string; fotos: any[] }[] = []): string {
   const k = calcular(hallazgos);
   const md = MODELOS.find(m => m.id === modelo)!;
   const cuerpo: string[] = [];
