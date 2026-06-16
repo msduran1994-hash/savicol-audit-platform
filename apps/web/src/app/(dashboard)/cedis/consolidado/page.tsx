@@ -12,7 +12,77 @@ import type { AuditoriaCedi } from "@/lib/cedis.types";
 import {
   Plus, Search, Filter, RefreshCw, Download,
   Warehouse, Edit2, Trash2, X, ChevronDown, ChevronUp, AlertCircle, Loader2,
+  Image as ImageIcon, ImagePlus,
 } from "lucide-react";
+
+// ── Compresión inteligente de imágenes (WebP/JPEG, redimensiona, reduce peso) ──
+// Mantiene calidad visual adecuada y evita consumo excesivo de almacenamiento.
+async function comprimirImagen(
+  file: File,
+  opts: { maxDim?: number; quality?: number; preferWebp?: boolean } = {}
+): Promise<{ dataUrl: string; sizeBytes: number }> {
+  const { maxDim = 1280, quality = 0.7, preferWebp = true } = opts;
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width >= height) { height = Math.round(height * maxDim / width); width = maxDim; }
+          else                 { width  = Math.round(width  * maxDim / height); height = maxDim; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("Canvas no disponible")); return; }
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        const tipoMime = preferWebp ? "image/webp" : "image/jpeg";
+        let dataUrl = canvas.toDataURL(tipoMime, quality);
+        const mimeReal = dataUrl.substring(5, dataUrl.indexOf(";"));
+        if (preferWebp && mimeReal !== "image/webp") {
+          dataUrl = canvas.toDataURL("image/jpeg", quality);
+        }
+        const sizeBytes = Math.round((dataUrl.length - dataUrl.indexOf(",") - 1) * 3 / 4);
+        resolve({ dataUrl, sizeBytes });
+      };
+      img.onerror = () => reject(new Error("No se pudo leer la imagen"));
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── Fotos embebidas en el campo de observación ───────────────────────────────
+// Estructura: el texto del usuario va primero; al final un bloque
+// [FOTOS]{json}[/FOTOS] con un array de {n:nombre, d:dataUrl, s:size, f:fecha}.
+// Esto persiste con la auditoría sin tocar el backend (el campo ya es texto).
+interface FotoEmb { n: string; d: string; s: number; f: string; }
+
+function leerFotos(texto?: string): FotoEmb[] {
+  if (!texto) return [];
+  const m = texto.match(/\[FOTOS\]([\s\S]*?)\[\/FOTOS\]/);
+  if (!m) return [];
+  try {
+    const arr = JSON.parse(m[1]);
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+
+function textoLimpio(texto?: string): string {
+  if (!texto) return "";
+  return texto.replace(/\n?\[FOTOS\][\s\S]*?\[\/FOTOS\]/, "").trim();
+}
+
+function escribirFotos(textoUsuario: string, fotos: FotoEmb[]): string {
+  const base = textoLimpio(textoUsuario);
+  if (fotos.length === 0) return base;
+  const bloque = `[FOTOS]${JSON.stringify(fotos)}[/FOTOS]`;
+  return base ? `${base}\n${bloque}` : bloque;
+}
 
 export default function ConsolidadoCedisPage() {
   const cedis        = useCedisStore(useShallow((s) => s.cedis));
@@ -335,12 +405,22 @@ function AuditoriaCediModal({ item, cedis, onClose, onSave, error }: {
                     </div>
                     <F label={`Observación ${cat.toLowerCase()}`}>
                       <textarea
-                        value={(form as any)[fieldKey] ?? ""}
-                        onChange={(e) => setForm({ ...form, [fieldKey]: e.target.value })}
+                        value={textoLimpio((form as any)[fieldKey] ?? "")}
+                        onChange={(e) => {
+                          // Conservar las fotos embebidas al editar el texto
+                          const fotos = leerFotos((form as any)[fieldKey] ?? "");
+                          setForm({ ...form, [fieldKey]: escribirFotos(e.target.value, fotos) });
+                        }}
                         rows={3} className="input-base resize-none"
                         placeholder={`Anota hallazgos, observaciones y evidencias del área ${cat.toLowerCase()}...`}
                       />
                     </F>
+                    {/* Evidencias fotográficas por área — embebidas en la observación, persisten al guardar */}
+                    <EvidenciasCedi
+                      categoria={cat}
+                      valorObservacion={(form as any)[fieldKey] ?? ""}
+                      onFotosChange={(nuevoTexto) => setForm({ ...form, [fieldKey]: nuevoTexto })}
+                    />
                   </div>
                 )}
               </div>
@@ -385,5 +465,122 @@ function F({ label, children }: { label: string; children: React.ReactNode }) {
       <span className="text-xs text-[#94A3B8] font-medium mb-1.5 block">{label}</span>
       {children}
     </label>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EvidenciasCedi — fotos por categoría embebidas en el campo de observación.
+// Comprime (WebP), muestra preview, permite ampliar y eliminar. Persiste al
+// guardar la auditoría (las fotos viajan dentro del texto de la observación).
+// ═══════════════════════════════════════════════════════════════════════════════
+const MAX_FOTOS_CAT = 5;       // límite por categoría para proteger el rendimiento
+const MAX_KB_FOTO   = 400;     // aviso si una foto comprimida supera este tamaño
+
+function EvidenciasCedi({ categoria, valorObservacion, onFotosChange }: {
+  categoria: string;
+  valorObservacion: string;
+  onFotosChange: (nuevoTexto: string) => void;
+}) {
+  const fotos = leerFotos(valorObservacion);
+  const [subiendo, setSubiendo] = useState(false);
+  const [errEv, setErrEv]       = useState<string | null>(null);
+  const [ampliada, setAmpliada] = useState<FotoEmb | null>(null);
+
+  async function procesarArchivos(files: File[]) {
+    const imgs = files.filter(f => f.type.startsWith("image/"));
+    if (!imgs.length) return;
+    if (fotos.length + imgs.length > MAX_FOTOS_CAT) {
+      setErrEv(`Máximo ${MAX_FOTOS_CAT} fotos por área. Tienes ${fotos.length}.`);
+      return;
+    }
+    setSubiendo(true); setErrEv(null);
+    try {
+      const nuevas: FotoEmb[] = [];
+      for (const file of imgs) {
+        const { dataUrl, sizeBytes } = await comprimirImagen(file, { maxDim: 1280, quality: 0.7, preferWebp: true });
+        if (sizeBytes / 1024 > MAX_KB_FOTO) {
+          // recomprimir más agresivo si quedó grande
+          const recomp = await comprimirImagen(file, { maxDim: 1024, quality: 0.6, preferWebp: true });
+          nuevas.push({ n: file.name.replace(/\.[^.]+$/, ""), d: recomp.dataUrl, s: recomp.sizeBytes, f: new Date().toISOString() });
+        } else {
+          nuevas.push({ n: file.name.replace(/\.[^.]+$/, ""), d: dataUrl, s: sizeBytes, f: new Date().toISOString() });
+        }
+      }
+      const todas = [...fotos, ...nuevas];
+      onFotosChange(escribirFotos(valorObservacion, todas));
+    } catch (ex: any) {
+      setErrEv(ex?.message ?? "Error al procesar las imágenes");
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  async function onFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    await procesarArchivos(files);
+  }
+  async function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    await procesarArchivos(Array.from(e.dataTransfer.files ?? []));
+  }
+  function eliminar(idx: number) {
+    const todas = fotos.filter((_, i) => i !== idx);
+    onFotosChange(escribirFotos(valorObservacion, todas));
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-[#1E2D4A]/60">
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide flex items-center gap-1.5">
+          <ImageIcon className="w-3.5 h-3.5"/> Evidencias Fotográficas · {categoria}
+          <span className="text-[9px] text-[#475569] font-normal normal-case">({fotos.length}/{MAX_FOTOS_CAT})</span>
+        </label>
+        <label className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors cursor-pointer
+          ${fotos.length < MAX_FOTOS_CAT ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25" : "bg-[#1E2D4A]/40 text-[#475569] border-[#1E2D4A] cursor-not-allowed"}`}>
+          {subiendo ? <Loader2 className="w-3 h-3 animate-spin"/> : <ImagePlus className="w-3 h-3"/>}
+          {subiendo ? "Procesando…" : "Adjuntar fotos"}
+          <input type="file" accept="image/*" multiple disabled={subiendo || fotos.length >= MAX_FOTOS_CAT}
+            onChange={onFilesSelected} className="hidden"/>
+        </label>
+      </div>
+
+      {errEv && <p className="text-[10px] text-amber-400 mb-2">{errEv}</p>}
+
+      <div onDragOver={e => e.preventDefault()} onDrop={onDrop}
+        className="rounded-lg border border-dashed border-[#1E2D4A] bg-[#0A111F]/50 p-2">
+        {fotos.length > 0 ? (
+          <div className="grid grid-cols-5 gap-2">
+            {fotos.map((ev, idx) => (
+              <div key={idx} className="relative group rounded-lg overflow-hidden border border-[#1E2D4A] bg-[#0A111F] aspect-square">
+                <img src={ev.d} alt={ev.n} className="w-full h-full object-cover cursor-pointer" onClick={() => setAmpliada(ev)}/>
+                <button type="button" onClick={() => eliminar(idx)}
+                  className="absolute top-1 right-1 p-1 rounded-md bg-black/70 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/90"
+                  title="Eliminar imagen">
+                  <Trash2 className="w-3 h-3"/>
+                </button>
+                <div className="absolute bottom-0 inset-x-0 bg-black/60 px-1.5 py-0.5">
+                  <p className="text-[8px] text-white/80 truncate">{(ev.s/1024).toFixed(0)} KB</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[10px] text-[#475569] text-center py-2">Arrastra imágenes aquí o usa "Adjuntar fotos"</p>
+        )}
+      </div>
+
+      {ampliada && (
+        <div className="fixed inset-0 bg-black/85 z-[60] flex items-center justify-center p-6" onClick={() => setAmpliada(null)}>
+          <div className="max-w-3xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-white truncate">{ampliada.n} · {new Date(ampliada.f).toLocaleDateString("es-CO")}</p>
+              <button onClick={() => setAmpliada(null)} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
+            </div>
+            <img src={ampliada.d} alt={ampliada.n} className="max-w-full max-h-[78vh] object-contain rounded-lg"/>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
