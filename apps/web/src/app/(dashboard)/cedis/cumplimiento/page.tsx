@@ -79,6 +79,7 @@ export default function CumplimientoCedisPage() {
 
   // Tambien podemos leer del store (ya hidratado) para mantener compat con UI legacy
   const hallazgosStore = useCedisStore(useShallow((s) => s.hallazgos));
+  const auditoriasStore = useCedisStore(useShallow((s) => s.auditorias));
 
   // Preferimos API live (siempre actualizado tras mutación)
   const hallazgos = hallazgosApi.length > 0 ? hallazgosApi : hallazgosStore;
@@ -367,6 +368,7 @@ export default function CumplimientoCedisPage() {
         <InformeCedisModal
           hallazgos={hallazgos}
           cedis={cedis.map((c: any) => ({ id: c.id, nombre: c.nombre }))}
+          auditorias={auditoriasStore}
           usuario={usuarioNombre}
           onClose={() => setInformeOpen(false)}
         />
