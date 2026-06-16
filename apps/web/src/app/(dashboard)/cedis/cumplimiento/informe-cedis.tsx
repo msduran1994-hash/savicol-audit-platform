@@ -2,7 +2,7 @@
 import { useState, useMemo } from "react";
 import {
   X, FileText, Download, Loader2, Sparkles, Award, ClipboardList,
-  TrendingUp, Building2, FileSearch, Filter,
+  TrendingUp, Building2, FileSearch, Filter, FileSpreadsheet, BarChart3, Mail,
 } from "lucide-react";
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -84,7 +84,164 @@ async function generarPDF(html: string, filename: string): Promise<void> {
   }
 }
 
-// ── Bloques HTML reutilizables ──────────────────────────────────────────────
+// Genera el PDF y devuelve su base64 (para adjuntar al correo), sin descargarlo
+async function generarPDFBase64(html: string): Promise<string> {
+  const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+    import("jspdf"), import("html2canvas"),
+  ]);
+  let container: HTMLDivElement | null = document.createElement("div");
+  container.style.cssText = "position:absolute;top:0;left:-10000px;width:794px;background:#fff;z-index:-1;";
+  container.innerHTML = html;
+  document.body.appendChild(container);
+  try {
+    await new Promise(r => setTimeout(r, 500));
+    const canvas = await html2canvas(container, { scale:2, useCORS:true, backgroundColor:"#fff", logging:false, windowWidth:794 });
+    const pdf = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4", compress:true });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const pxPerMm = canvas.width / pageW;
+    const pageHpx = Math.floor(pageH * pxPerMm);
+    let rendered = 0, idx = 0;
+    while (rendered < canvas.height) {
+      if (idx > 0) pdf.addPage();
+      const sliceH = Math.min(pageHpx, canvas.height - rendered);
+      const pc = document.createElement("canvas");
+      pc.width = canvas.width; pc.height = sliceH;
+      const ctx = pc.getContext("2d");
+      if (ctx) { ctx.fillStyle="#fff"; ctx.fillRect(0,0,pc.width,pc.height); ctx.drawImage(canvas,0,rendered,canvas.width,sliceH,0,0,canvas.width,sliceH); }
+      pdf.addImage(pc.toDataURL("image/jpeg",0.82), "JPEG", 0, 0, pageW, (sliceH*pageW)/canvas.width, undefined, "FAST");
+      rendered += sliceH; idx++;
+    }
+    return pdf.output("datauristring").split(",")[1];
+  } finally {
+    if (container?.parentNode) document.body.removeChild(container);
+    container = null;
+  }
+}
+
+// ── Carga dinámica de SheetJS (XLSX) desde CDN — sin dependencias nuevas ────
+async function loadXLSX(): Promise<any> {
+  if ((window as any).XLSX) return (window as any).XLSX;
+  await new Promise<void>((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("No se pudo cargar la librería de Excel"));
+    document.head.appendChild(s);
+  });
+  return (window as any).XLSX;
+}
+
+// ── XLSX ejecutivo (hojas organizadas + resumen gerencial) ──────────────────
+async function generarXLSXCedis(hallazgos: any[], cedisMap: Record<string,string>, filename: string): Promise<void> {
+  const XLSX = await loadXLSX();
+  const wb = XLSX.utils.book_new();
+  const k = calcular(hallazgos);
+
+  // Hoja 1: Resumen Gerencial
+  const resumen = [
+    ["POLLOS SAVICOL S.A.S. — INFORME EJECUTIVO CEDIS"],
+    ["NIT", "860.403.972-5"],
+    ["Fecha de generación", new Date().toLocaleDateString("es-CO")],
+    [],
+    ["INDICADOR", "VALOR"],
+    ["Total Hallazgos", k.total],
+    ["Críticos", k.criticos],
+    ["Altos", k.altos],
+    ["Abiertos", k.abiertos],
+    ["Cerrados", k.cerrados],
+    ["Reincidentes", k.reincidentes],
+    ["Cumplimiento Global (%)", k.cumpl],
+    ["Avance Promedio (%)", k.avancePromedio],
+    [],
+    ["DISTRIBUCIÓN POR CRITICIDAD", ""],
+    ...Object.entries(k.critCount).map(([c, v]) => [c, v as number]),
+    [],
+    ["DISTRIBUCIÓN POR ESTADO", ""],
+    ...Object.entries(k.estadoCount).map(([e, v]) => [e, v as number]),
+    [],
+    ["DISTRIBUCIÓN POR TIPO DE RIESGO", ""],
+    ...Object.entries(k.riesgoCount).map(([r, v]) => [r, v as number]),
+  ];
+  const wsR = XLSX.utils.aoa_to_sheet(resumen);
+  wsR["!cols"] = [{ wch: 32 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, wsR, "Resumen Gerencial");
+
+  // Hoja 2: Hallazgos detallado
+  const hallData = hallazgos.map(h => ({
+    "CEDI": cedisMap[h.cediId] || "—",
+    "Título": h.titulo || "—",
+    "Subtema": h.subtema || "—",
+    "Categoría": h.categoria || "—",
+    "Descripción": (h.descripcion || "").slice(0, 250),
+    "Criticidad": normCrit(h.criticidad),
+    "Tipo de Riesgo": h.tipoRiesgo || "—",
+    "Estado": normEstado(h.estado),
+    "Responsable": h.responsable || "—",
+    "Avance (%)": h.porcentajeAvance ?? 0,
+    "Fecha Compromiso": fmtFecha(h.fechaCompromiso),
+    "Recomendación IA": (h.recomendacionIA || "").replace(/[#*]/g, "").slice(0, 300),
+  }));
+  const wsH = XLSX.utils.json_to_sheet(hallData);
+  wsH["!cols"] = [{wch:18},{wch:28},{wch:16},{wch:16},{wch:40},{wch:12},{wch:14},{wch:14},{wch:18},{wch:10},{wch:16},{wch:40}];
+  XLSX.utils.book_append_sheet(wb, wsH, "Hallazgos");
+
+  // Hoja 3: Consolidado por CEDI
+  const porCedi: Record<string, any[]> = {};
+  hallazgos.forEach(h => { (porCedi[h.cediId] = porCedi[h.cediId] || []).push(h); });
+  const cediData = Object.entries(porCedi).map(([cid, hs]) => {
+    const kc = calcular(hs);
+    return {
+      "CEDI": cedisMap[cid] || "—",
+      "Hallazgos": kc.total,
+      "Críticos": kc.criticos,
+      "Altos": kc.altos,
+      "Abiertos": kc.abiertos,
+      "Cerrados": kc.cerrados,
+      "Cumplimiento (%)": kc.cumpl,
+    };
+  });
+  const wsC = XLSX.utils.json_to_sheet(cediData);
+  wsC["!cols"] = [{wch:20},{wch:11},{wch:10},{wch:8},{wch:10},{wch:10},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, wsC, "Consolidado por CEDI");
+
+  XLSX.writeFile(wb, filename);
+}
+
+// ── Envío por correo con trazabilidad (patrón del módulo KPI) ───────────────
+async function enviarInformeCorreo(opts: {
+  destinatarios: string[];
+  asunto: string;
+  htmlEmail: string;
+  pdfBase64: string;
+  pdfFilename: string;
+  apiToken: string;
+}): Promise<{ ok: boolean; message: string }> {
+  const { destinatarios, asunto, htmlEmail, pdfBase64, pdfFilename, apiToken } = opts;
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1/email/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken}` },
+      body: JSON.stringify({
+        to: destinatarios.join(","),
+        subject: asunto,
+        html: htmlEmail,
+        pdfBase64,
+        pdfFilename,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    // Trazabilidad: el backend devuelve HTTP 200 aunque Brevo rechace; verificar data.ok
+    if (response.ok && data?.ok === true) {
+      return { ok: true, message: `Informe enviado correctamente a ${destinatarios.join(", ")}` };
+    }
+    return { ok: false, message: data?.error || data?.message || `Error HTTP ${response.status}` };
+  } catch (e: any) {
+    return { ok: false, message: e?.message ?? "Error de red al enviar el correo" };
+  }
+}
+
+
 function portada(titulo: string, subtitulo: string, usuario: string, filtrosTxt: string[]): string {
   const hoy = new Date().toLocaleDateString("es-CO", { day:"2-digit", month:"long", year:"numeric" });
   return `
@@ -404,11 +561,13 @@ function construirInforme(modelo: ModeloId, hallazgos: any[], cedisMap: Record<s
 }
 
 // ── Modal generador de informes ─────────────────────────────────────────────
-export function InformeCedisModal({ hallazgos, cedis, auditorias = [], usuario, onClose }: {
+export function InformeCedisModal({ hallazgos, cedis, auditorias = [], usuario, apiToken = "", usuarioEmail = "", onClose }: {
   hallazgos: any[];
   cedis: { id: string; nombre: string }[];
   auditorias?: any[];
   usuario: string;
+  apiToken?: string;
+  usuarioEmail?: string;
   onClose: () => void;
 }) {
   const [modelo, setModelo]       = useState<ModeloId>("ejecutivo");
@@ -419,6 +578,10 @@ export function InformeCedisModal({ hallazgos, cedis, auditorias = [], usuario, 
   const [fFechaVisita, setFFechaVisita]   = useState("");
   const [fFechaRegistro, setFFechaRegistro] = useState("");
   const [generando, setGenerando] = useState(false);
+  const [generandoXlsx, setGenerandoXlsx] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [correosExtra, setCorreosExtra] = useState("");
+  const [envioMsg, setEnvioMsg] = useState<{ ok: boolean; texto: string } | null>(null);
 
   const cedisMap = useMemo(() => Object.fromEntries(cedis.map(c => [c.id, c.nombre])), [cedis]);
   const subtemas = useMemo(() => Array.from(new Set(hallazgos.map(h => h.subtema).filter(Boolean))), [hallazgos]);
@@ -447,19 +610,68 @@ export function InformeCedisModal({ hallazgos, cedis, auditorias = [], usuario, 
     return t;
   }, [fCedi, fSubtema, fEstado, fCrit, fFechaVisita, fFechaRegistro, cedisMap]);
 
+  function construirHTMLActual(): string {
+    const cediIds = new Set(filtrados.map(h => h.cediId).filter(Boolean));
+    const evidencias = extraerEvidencias(auditorias, cediIds);
+    return construirInforme(modelo, filtrados, cedisMap, usuario, filtrosTxt, evidencias);
+  }
+
   async function descargar() {
     if (filtrados.length === 0) return;
     setGenerando(true);
     try {
-      // Evidencias desde Consolidado, relacionadas por los CEDIS en alcance
-      const cediIds = new Set(filtrados.map(h => h.cediId).filter(Boolean));
-      const evidencias = extraerEvidencias(auditorias, cediIds);
-      const html = construirInforme(modelo, filtrados, cedisMap, usuario, filtrosTxt, evidencias);
+      const html = construirHTMLActual();
       const md = MODELOS.find(m => m.id === modelo)!;
       await generarPDF(html, `Informe-${md.label.replace(/ /g,"-")}-CEDIS-${new Date().toISOString().slice(0,10)}.pdf`);
     } catch (e: any) {
       alert("Error al generar el informe: " + (e?.message ?? "desconocido"));
     } finally { setGenerando(false); }
+  }
+
+  async function descargarXlsx() {
+    if (filtrados.length === 0) return;
+    setGenerandoXlsx(true);
+    try {
+      const md = MODELOS.find(m => m.id === modelo)!;
+      await generarXLSXCedis(filtrados, cedisMap, `Informe-${md.label.replace(/ /g,"-")}-CEDIS-${new Date().toISOString().slice(0,10)}.xlsx`);
+    } catch (e: any) {
+      alert("Error al generar el Excel: " + (e?.message ?? "desconocido"));
+    } finally { setGenerandoXlsx(false); }
+  }
+
+  async function enviarCorreo() {
+    if (filtrados.length === 0) return;
+    const destinatarios = [usuarioEmail, ...correosExtra.split(/[,;\s]+/).map(s => s.trim())].filter(e => e && e.includes("@"));
+    if (destinatarios.length === 0) { setEnvioMsg({ ok: false, texto: "No hay correo de destino válido" }); return; }
+    setEnviando(true); setEnvioMsg(null);
+    try {
+      const html = construirHTMLActual();
+      const md = MODELOS.find(m => m.id === modelo)!;
+      const pdfBase64 = await generarPDFBase64(html);
+      const k = calcular(filtrados);
+      const htmlEmail = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+        <div style="background:linear-gradient(135deg,#0D1526,#0A2D1F);padding:28px;text-align:center;border-radius:8px 8px 0 0">
+          <div style="color:#fff;font-size:20px;font-weight:800">Pollos Savicol S.A.S.</div>
+          <div style="color:rgba(255,255,255,0.8);font-size:12px;margin-top:4px">Control Interno y Auditoría · CEDIS</div>
+        </div>
+        <div style="background:#f8fafc;padding:24px;border:1px solid #e2e8f0">
+          <h2 style="color:#1a202c;font-size:16px;margin-bottom:12px">Informe ${md.label}</h2>
+          <p style="color:#475569;font-size:13px;line-height:1.7">Se adjunta el informe ejecutivo de cumplimiento CEDIS (${filtrados.length} hallazgos en alcance). Cumplimiento global: <strong>${k.cumpl}%</strong> · Críticos: <strong>${k.criticos}</strong>.</p>
+          ${filtrosTxt.length ? `<p style="color:#94a3b8;font-size:11px">Filtros: ${filtrosTxt.join(" · ")}</p>` : ""}
+        </div>
+        <div style="background:#0D1526;padding:12px;text-align:center;border-radius:0 0 8px 8px">
+          <p style="color:rgba(255,255,255,0.5);font-size:10px;margin:0">Pollos Savicol S.A.S. · Auditoría Interna</p>
+        </div></div>`;
+      const r = await enviarInformeCorreo({
+        destinatarios, asunto: `Informe ${md.label} · CEDIS · Savicol`,
+        htmlEmail, pdfBase64,
+        pdfFilename: `Informe-${md.label.replace(/ /g,"-")}-CEDIS-${new Date().toISOString().slice(0,10)}.pdf`,
+        apiToken,
+      });
+      setEnvioMsg({ ok: r.ok, texto: r.message });
+    } catch (e: any) {
+      setEnvioMsg({ ok: false, texto: e?.message ?? "Error al enviar" });
+    } finally { setEnviando(false); }
   }
 
   const SEL = "bg-[#0A111F] border border-[#1E2D4A] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-emerald-500/50 outline-none";
@@ -512,14 +724,48 @@ export function InformeCedisModal({ hallazgos, cedis, auditorias = [], usuario, 
             {filtrados.length === 0 && <span className="text-[10px] text-amber-400">Ajusta los filtros: no hay registros</span>}
           </div>
 
-          {/* Acciones */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1E2D4A]">
-            <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs text-[#94A3B8] hover:text-white">Cancelar</button>
-            <button onClick={descargar} disabled={generando || filtrados.length===0}
-              className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-xs font-bold flex items-center gap-2 disabled:opacity-40">
-              {generando ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Download className="w-3.5 h-3.5"/>}
-              {generando ? "Generando PDF..." : "Descargar PDF"}
-            </button>
+          {/* Exportaciones */}
+          <div>
+            <p className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-2">Exportar / Visualizar</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button onClick={descargar} disabled={generando || filtrados.length===0}
+                className="px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-40">
+                {generando ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Download className="w-3.5 h-3.5"/>}
+                {generando ? "Generando..." : "PDF Ejecutivo"}
+              </button>
+              <button onClick={descargarXlsx} disabled={generandoXlsx || filtrados.length===0}
+                className="px-3 py-2 rounded-lg bg-[#1A2540] border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-40">
+                {generandoXlsx ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <FileSpreadsheet className="w-3.5 h-3.5"/>}
+                {generandoXlsx ? "Generando..." : "XLSX Ejecutivo"}
+              </button>
+              <a href="/cedis" target="_self"
+                className="px-3 py-2 rounded-lg bg-[#1A2540] border border-[#4A7AFF]/30 text-[#4A7AFF] hover:bg-[#4A7AFF]/10 text-xs font-bold flex items-center justify-center gap-2">
+                <BarChart3 className="w-3.5 h-3.5"/> Abrir Dashboard BI
+              </a>
+            </div>
+          </div>
+
+          {/* Envío por correo con trazabilidad */}
+          <div className="rounded-lg border border-[#1E2D4A] bg-[#0A111F] p-3">
+            <p className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-2 flex items-center gap-1.5"><Mail className="w-3 h-3"/> Enviar Informe por Correo</p>
+            <p className="text-[10px] text-[#64748B] mb-2">Destinatario principal: <strong className="text-[#94A3B8]">{usuarioEmail || "(usuario autenticado)"}</strong>. Adjunta el PDF generado.</p>
+            <div className="flex items-center gap-2">
+              <input value={correosExtra} onChange={e=>setCorreosExtra(e.target.value)}
+                placeholder="Correos adicionales (separados por coma)"
+                className="flex-1 bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-[#475569] focus:border-emerald-500/50 outline-none"/>
+              <button onClick={enviarCorreo} disabled={enviando || filtrados.length===0}
+                className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-xs font-bold flex items-center gap-2 disabled:opacity-40 shrink-0">
+                {enviando ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Mail className="w-3.5 h-3.5"/>}
+                {enviando ? "Enviando..." : "Enviar"}
+              </button>
+            </div>
+            {envioMsg && (
+              <p className={`text-[10px] mt-2 ${envioMsg.ok ? "text-emerald-400" : "text-red-400"}`}>{envioMsg.texto}</p>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end pt-1">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs text-[#94A3B8] hover:text-white">Cerrar</button>
           </div>
         </div>
       </div>
