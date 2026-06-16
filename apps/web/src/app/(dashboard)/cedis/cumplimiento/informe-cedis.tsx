@@ -1,0 +1,390 @@
+"use client";
+import { useState, useMemo } from "react";
+import {
+  X, FileText, Download, Loader2, Sparkles, Award, ClipboardList,
+  TrendingUp, Building2, FileSearch, Filter,
+} from "lucide-react";
+
+/* ════════════════════════════════════════════════════════════════════════════
+   GENERADOR DE INFORMES EJECUTIVOS — CEDIS → Cumplimiento
+   Fase 1: estructura, filtros (CEDIS, Subtema, Estado, Criticidad, Fechas) y los
+   5 modelos corporativos en PDF. Reutiliza el patrón del módulo Granjas → KPI.
+   Datos reales del store CEDIS. Sin datos ficticios.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.972-5", area: "Control Interno y Auditoría · CEDIS" };
+
+// ── Normalización de valores backend (MAYÚSCULAS) → legibles ────────────────
+const sinAcentos = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const normCrit = (c: string): "Crítica"|"Alta"|"Media"|"Baja"|"—" => {
+  const v = sinAcentos((c ?? "").toString().toUpperCase());
+  if (v.startsWith("CRIT")) return "Crítica";
+  if (v.startsWith("ALT"))  return "Alta";
+  if (v.startsWith("MED"))  return "Media";
+  if (v.startsWith("BAJ"))  return "Baja";
+  return "—";
+};
+const normEstado = (e: string): string => {
+  const v = sinAcentos((e ?? "").toString().toUpperCase()).replace(/ /g, "_");
+  if (v === "ABIERTO")          return "Abierto";
+  if (v === "EN_PLAN")          return "En Plan";
+  if (v === "EN_VERIFICACION")  return "En Verificación";
+  if (v === "CERRADO")          return "Cerrado";
+  if (v === "REINCIDENTE")      return "Reincidente";
+  return e || "—";
+};
+const fmtFecha = (d?: string) => {
+  if (!d) return "—";
+  const t = new Date(d);
+  return isNaN(t.getTime()) ? "—" : t.toLocaleDateString("es-CO", { day:"2-digit", month:"2-digit", year:"numeric" });
+};
+
+// ── Los 5 modelos corporativos ──────────────────────────────────────────────
+const MODELOS = [
+  { id: "ejecutivo",   label: "Ejecutivo Gerencial",  icon: Award,        desc: "Resumen ejecutivo, indicadores, riesgos críticos y estado de cumplimiento" },
+  { id: "operativo",   label: "Auditoría Operativa",  icon: ClipboardList, desc: "Hallazgos, planes de acción, seguimientos y evidencias" },
+  { id: "estrategico", label: "Estratégico",          icon: TrendingUp,   desc: "Tendencias, criticidad, cumplimiento y recomendaciones IA" },
+  { id: "corporativo", label: "Corporativo",          icon: Building2,    desc: "Consolidado por CEDIS, comparativos, riesgos y desempeño" },
+  { id: "tecnico",     label: "Técnico",              icon: FileSearch,   desc: "Trazabilidad completa, historial y cumplimiento detallado" },
+] as const;
+type ModeloId = typeof MODELOS[number]["id"];
+
+// ── Generación de PDF (patrón jsPDF + html2canvas, sin iframe) ──────────────
+async function generarPDF(html: string, filename: string): Promise<void> {
+  const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+    import("jspdf"), import("html2canvas"),
+  ]);
+  let container: HTMLDivElement | null = document.createElement("div");
+  container.style.cssText = "position:absolute;top:0;left:-10000px;width:794px;background:#fff;z-index:-1;";
+  container.innerHTML = html;
+  document.body.appendChild(container);
+  try {
+    await new Promise(r => setTimeout(r, 500));
+    const canvas = await html2canvas(container, { scale:2, useCORS:true, backgroundColor:"#fff", logging:false, windowWidth:794 });
+    const pdf = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4", compress:true });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const pxPerMm = canvas.width / pageW;
+    const pageHpx = Math.floor(pageH * pxPerMm);
+    let rendered = 0, idx = 0;
+    while (rendered < canvas.height) {
+      if (idx > 0) pdf.addPage();
+      const sliceH = Math.min(pageHpx, canvas.height - rendered);
+      const pc = document.createElement("canvas");
+      pc.width = canvas.width; pc.height = sliceH;
+      const ctx = pc.getContext("2d");
+      if (ctx) { ctx.fillStyle="#fff"; ctx.fillRect(0,0,pc.width,pc.height); ctx.drawImage(canvas,0,rendered,canvas.width,sliceH,0,0,canvas.width,sliceH); }
+      pdf.addImage(pc.toDataURL("image/jpeg",0.82), "JPEG", 0, 0, pageW, (sliceH*pageW)/canvas.width, undefined, "FAST");
+      rendered += sliceH; idx++;
+    }
+    pdf.save(filename);
+  } finally {
+    if (container?.parentNode) document.body.removeChild(container);
+    container = null;
+  }
+}
+
+// ── Bloques HTML reutilizables ──────────────────────────────────────────────
+function portada(titulo: string, subtitulo: string, usuario: string, filtrosTxt: string[]): string {
+  const hoy = new Date().toLocaleDateString("es-CO", { day:"2-digit", month:"long", year:"numeric" });
+  return `
+  <div style="background:linear-gradient(135deg,#0D1526,#0A2D1F);color:#fff;padding:44px 40px">
+    <div style="font-size:11px;letter-spacing:3px;color:#10B981;text-transform:uppercase;font-weight:700">${EMPRESA.area}</div>
+    <h1 style="font-size:28px;margin:14px 0 6px;font-weight:800">${titulo}</h1>
+    <p style="font-size:14px;color:#94A3B8;margin:0">${subtitulo}</p>
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.15);font-size:12px;color:#cbd5e1">
+      <strong style="color:#fff">${EMPRESA.nombre}</strong> · NIT ${EMPRESA.nit}<br>
+      Generado: ${hoy} · Usuario: ${usuario}
+    </div>
+    ${filtrosTxt.length
+      ? `<div style="margin-top:12px;font-size:11px;color:#94A3B8"><strong style="color:#10B981">Filtros aplicados:</strong> ${filtrosTxt.join(" · ")}</div>`
+      : `<div style="margin-top:12px;font-size:11px;color:#94A3B8">Informe completo — sin filtros</div>`}
+  </div>`;
+}
+
+function tarjetasIndicadores(items: { l: string; v: any; c: string }[]): string {
+  return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:22px">
+    ${items.map(k => `<div style="border:1px solid #e2e8f0;border-top:3px solid ${k.c};border-radius:8px;padding:13px;text-align:center">
+      <div style="font-size:24px;font-weight:800;color:${k.c}">${k.v}</div>
+      <div style="font-size:10px;color:#64748b;text-transform:uppercase;margin-top:3px">${k.l}</div>
+    </div>`).join("")}
+  </div>`;
+}
+
+function barras(titulo: string, datos: { label: string; val: number; color: string }[]): string {
+  const max = Math.max(1, ...datos.map(d => d.val));
+  return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:18px">
+    <h3 style="font-size:12px;margin:0 0 12px;color:#0D1526">${titulo}</h3>
+    ${datos.map(d => `<div style="margin-bottom:7px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#475569;margin-bottom:2px"><span>${d.label}</span><strong style="color:${d.color}">${d.val}</strong></div>
+      <div style="height:7px;background:#f1f5f9;border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.round(d.val/max*100)}%;background:${d.color};border-radius:4px"></div></div>
+    </div>`).join("")}
+  </div>`;
+}
+
+function tablaHallazgos(hallazgos: any[], cedisMap: Record<string,string>, limite = 30): string {
+  const filas = hallazgos.slice(0, limite).map(h => `<tr>
+    <td style="padding:5px 6px;border-bottom:1px solid #f1f5f9">${(h.titulo||"—").slice(0,38)}</td>
+    <td style="padding:5px 6px;border-bottom:1px solid #f1f5f9">${cedisMap[h.cediId]||"—"}</td>
+    <td style="padding:5px 6px;border-bottom:1px solid #f1f5f9">${h.subtema||"—"}</td>
+    <td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;text-align:center">${normCrit(h.criticidad)}</td>
+    <td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;text-align:center">${normEstado(h.estado)}</td>
+    <td style="padding:5px 6px;border-bottom:1px solid #f1f5f9">${h.responsable||"—"}</td>
+  </tr>`).join("");
+  return `<table style="width:100%;border-collapse:collapse;font-size:9.5px;margin-bottom:20px">
+    <thead><tr style="background:#f8fafc">
+      <th style="text-align:left;padding:6px;border-bottom:2px solid #e2e8f0">Hallazgo</th>
+      <th style="text-align:left;padding:6px;border-bottom:2px solid #e2e8f0">CEDI</th>
+      <th style="text-align:left;padding:6px;border-bottom:2px solid #e2e8f0">Subtema</th>
+      <th style="text-align:center;padding:6px;border-bottom:2px solid #e2e8f0">Criticidad</th>
+      <th style="text-align:center;padding:6px;border-bottom:2px solid #e2e8f0">Estado</th>
+      <th style="text-align:left;padding:6px;border-bottom:2px solid #e2e8f0">Responsable</th>
+    </tr></thead><tbody>${filas}</tbody></table>`;
+}
+
+function pie(): string {
+  const hoy = new Date().toLocaleDateString("es-CO", { day:"2-digit", month:"long", year:"numeric" });
+  return `<div style="margin-top:28px;padding-top:14px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;text-align:center">
+    ${EMPRESA.nombre} · ${EMPRESA.area} · Documento generado automáticamente · ${hoy}
+  </div>`;
+}
+
+// ── Cálculo de indicadores comunes ──────────────────────────────────────────
+function calcular(hallazgos: any[]) {
+  const total = hallazgos.length;
+  const criticos = hallazgos.filter(h => normCrit(h.criticidad)==="Crítica").length;
+  const altos    = hallazgos.filter(h => normCrit(h.criticidad)==="Alta").length;
+  const cerrados = hallazgos.filter(h => normEstado(h.estado)==="Cerrado").length;
+  const abiertos = hallazgos.filter(h => normEstado(h.estado)==="Abierto").length;
+  const reincidentes = hallazgos.filter(h => h.reincidente).length;
+  const cumpl = total>0 ? Math.round(cerrados/total*100) : 0;
+  const avancePromedio = total>0 ? Math.round(hallazgos.reduce((a,h)=>a+(h.porcentajeAvance??0),0)/total) : 0;
+  const critCount = { "Crítica":criticos, "Alta":altos,
+    "Media": hallazgos.filter(h=>normCrit(h.criticidad)==="Media").length,
+    "Baja":  hallazgos.filter(h=>normCrit(h.criticidad)==="Baja").length };
+  const estadoCount: Record<string,number> = {};
+  hallazgos.forEach(h => { const e = normEstado(h.estado); estadoCount[e] = (estadoCount[e]??0)+1; });
+  const riesgoCount: Record<string,number> = {};
+  hallazgos.forEach(h => { const r = h.tipoRiesgo||"—"; riesgoCount[r] = (riesgoCount[r]??0)+1; });
+  return { total, criticos, altos, cerrados, abiertos, reincidentes, cumpl, avancePromedio, critCount, estadoCount, riesgoCount };
+}
+
+// ── Construcción del HTML por modelo ────────────────────────────────────────
+function construirInforme(modelo: ModeloId, hallazgos: any[], cedisMap: Record<string,string>, usuario: string, filtrosTxt: string[]): string {
+  const k = calcular(hallazgos);
+  const md = MODELOS.find(m => m.id === modelo)!;
+  const cuerpo: string[] = [];
+
+  const indicadoresBase = [
+    { l:"Hallazgos", v:k.total, c:"#4A7AFF" },
+    { l:"Críticos", v:k.criticos, c:"#EF4444" },
+    { l:"Abiertos", v:k.abiertos, c:"#F59E0B" },
+    { l:"Cerrados", v:k.cerrados, c:"#22C55E" },
+    { l:"Reincidentes", v:k.reincidentes, c:"#8B5CF6" },
+    { l:"Cumplimiento", v:k.cumpl+"%", c:"#10B981" },
+  ];
+  const barrasCrit = Object.entries(k.critCount).map(([label,val]) => ({ label, val: val as number, color: label==="Crítica"?"#EF4444":label==="Alta"?"#F59E0B":label==="Media"?"#FBBF24":"#22C55E" }));
+  const barrasEstado = Object.entries(k.estadoCount).map(([label,val]) => ({ label, val: val as number, color:"#4A7AFF" }));
+  const barrasRiesgo = Object.entries(k.riesgoCount).map(([label,val]) => ({ label, val: val as number, color:"#8B5CF6" }));
+
+  if (modelo === "ejecutivo") {
+    cuerpo.push(`<h2 style="font-size:16px;border-left:4px solid #10B981;padding-left:10px;margin:0 0 16px">Resumen Ejecutivo</h2>`);
+    cuerpo.push(tarjetasIndicadores(indicadoresBase));
+    cuerpo.push(`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">${barras("Estado de Cumplimiento", barrasEstado)}${barras("Riesgos Críticos por Criticidad", barrasCrit)}</div>`);
+    cuerpo.push(`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;font-size:11px;line-height:1.7;color:#166534;margin-top:6px">
+      <strong>Diagnóstico:</strong> Se evaluaron ${k.total} hallazgos en los CEDIS auditados, con ${k.criticos} de criticidad crítica (${k.total>0?Math.round(k.criticos/k.total*100):0}%) y ${k.abiertos} abiertos. El cumplimiento global es del ${k.cumpl}%. ${k.reincidentes>0?`Se registran ${k.reincidentes} hallazgo(s) reincidente(s) que requieren atención prioritaria.`:"Sin reincidencias registradas."}</div>`);
+  } else if (modelo === "operativo") {
+    cuerpo.push(`<h2 style="font-size:16px;border-left:4px solid #10B981;padding-left:10px;margin:0 0 16px">Hallazgos y Planes de Acción</h2>`);
+    cuerpo.push(tarjetasIndicadores(indicadoresBase.slice(0,3)));
+    cuerpo.push(tablaHallazgos(hallazgos, cedisMap));
+    cuerpo.push(`<h3 style="font-size:13px;margin:14px 0 10px;color:#0D1526">Detalle de Planes y Seguimiento</h3>`);
+    hallazgos.slice(0,10).forEach(h => {
+      cuerpo.push(`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:#0D1526">${h.titulo||"—"} <span style="font-weight:400;color:#94a3b8;font-size:10px">· ${cedisMap[h.cediId]||"—"} · ${normCrit(h.criticidad)}</span></div>
+        <p style="font-size:10.5px;color:#475569;margin:6px 0">${(h.descripcion||"Sin descripción").slice(0,260)}</p>
+        ${h.recomendacionIA?`<div style="font-size:10px;color:#166534;background:#f0fdf4;border-radius:6px;padding:8px;margin-top:6px"><strong>Plan/Recomendación IA:</strong> ${h.recomendacionIA.replace(/[#*]/g,"").slice(0,280)}</div>`:""}
+        <div style="font-size:9.5px;color:#94a3b8;margin-top:6px">Responsable: ${h.responsable||"—"} · Avance: ${h.porcentajeAvance??0}% · Estado: ${normEstado(h.estado)}</div>
+      </div>`);
+    });
+  } else if (modelo === "estrategico") {
+    cuerpo.push(`<h2 style="font-size:16px;border-left:4px solid #10B981;padding-left:10px;margin:0 0 16px">Análisis Estratégico</h2>`);
+    cuerpo.push(tarjetasIndicadores(indicadoresBase));
+    cuerpo.push(`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">${barras("Distribución por Criticidad", barrasCrit)}${barras("Distribución por Tipo de Riesgo", barrasRiesgo)}</div>`);
+    cuerpo.push(`<h3 style="font-size:13px;margin:14px 0 10px;color:#0D1526">Recomendaciones IA Consolidadas</h3>`);
+    const conIA = hallazgos.filter(h => h.recomendacionIA);
+    if (conIA.length) {
+      conIA.slice(0,8).forEach(h => cuerpo.push(`<div style="border-left:3px solid #10B981;padding:6px 12px;margin-bottom:8px;background:#f8fafc">
+        <div style="font-size:11px;font-weight:600;color:#0D1526">${h.titulo||"—"}</div>
+        <p style="font-size:10px;color:#475569;margin:4px 0 0">${h.recomendacionIA.replace(/[#*]/g,"").slice(0,240)}</p></div>`));
+    } else {
+      cuerpo.push(`<p style="font-size:11px;color:#94a3b8">No hay recomendaciones IA generadas para los hallazgos filtrados. Usa los botones "Recomendaciones IA" en cada plan para generarlas.</p>`);
+    }
+  } else if (modelo === "corporativo") {
+    cuerpo.push(`<h2 style="font-size:16px;border-left:4px solid #10B981;padding-left:10px;margin:0 0 16px">Consolidado Corporativo por CEDIS</h2>`);
+    cuerpo.push(tarjetasIndicadores(indicadoresBase));
+    // Agrupar por CEDI
+    const porCedi: Record<string, any[]> = {};
+    hallazgos.forEach(h => { (porCedi[h.cediId] = porCedi[h.cediId] || []).push(h); });
+    const filasCedi = Object.entries(porCedi).map(([cid, hs]) => {
+      const kc = calcular(hs);
+      return `<tr>
+        <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9;font-weight:600">${cedisMap[cid]||"—"}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9;text-align:center">${kc.total}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9;text-align:center;color:#EF4444;font-weight:700">${kc.criticos}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9;text-align:center">${kc.abiertos}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9;text-align:center">${kc.cerrados}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #f1f5f9;text-align:center;font-weight:700;color:${kc.cumpl>=70?"#22C55E":kc.cumpl>=40?"#F59E0B":"#EF4444"}">${kc.cumpl}%</td>
+      </tr>`;
+    }).join("");
+    cuerpo.push(`<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:18px">
+      <thead><tr style="background:#f8fafc">
+        <th style="text-align:left;padding:8px;border-bottom:2px solid #e2e8f0">CEDI</th>
+        <th style="text-align:center;padding:8px;border-bottom:2px solid #e2e8f0">Hallazgos</th>
+        <th style="text-align:center;padding:8px;border-bottom:2px solid #e2e8f0">Críticos</th>
+        <th style="text-align:center;padding:8px;border-bottom:2px solid #e2e8f0">Abiertos</th>
+        <th style="text-align:center;padding:8px;border-bottom:2px solid #e2e8f0">Cerrados</th>
+        <th style="text-align:center;padding:8px;border-bottom:2px solid #e2e8f0">Cumplimiento</th>
+      </tr></thead><tbody>${filasCedi}</tbody></table>`);
+    cuerpo.push(barras("Riesgos por Tipo (Consolidado)", barrasRiesgo));
+  } else if (modelo === "tecnico") {
+    cuerpo.push(`<h2 style="font-size:16px;border-left:4px solid #10B981;padding-left:10px;margin:0 0 16px">Trazabilidad y Cumplimiento Detallado</h2>`);
+    cuerpo.push(tarjetasIndicadores(indicadoresBase));
+    cuerpo.push(`<h3 style="font-size:13px;margin:10px 0;color:#0D1526">Registro Completo de Hallazgos</h3>`);
+    hallazgos.forEach((h, i) => {
+      cuerpo.push(`<div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;margin-bottom:8px;font-size:10px">
+        <div style="font-weight:700;color:#0D1526;font-size:11px">#${i+1} · ${h.titulo||"—"}</div>
+        <table style="width:100%;margin-top:6px;font-size:9.5px;color:#475569">
+          <tr><td style="padding:2px;width:33%"><strong>CEDI:</strong> ${cedisMap[h.cediId]||"—"}</td><td style="padding:2px;width:33%"><strong>Subtema:</strong> ${h.subtema||"—"}</td><td style="padding:2px"><strong>Categoría:</strong> ${h.categoria||"—"}</td></tr>
+          <tr><td style="padding:2px"><strong>Criticidad:</strong> ${normCrit(h.criticidad)}</td><td style="padding:2px"><strong>Riesgo:</strong> ${h.tipoRiesgo||"—"}</td><td style="padding:2px"><strong>Estado:</strong> ${normEstado(h.estado)}</td></tr>
+          <tr><td style="padding:2px"><strong>Responsable:</strong> ${h.responsable||"—"}</td><td style="padding:2px"><strong>Compromiso:</strong> ${fmtFecha(h.fechaCompromiso)}</td><td style="padding:2px"><strong>Avance:</strong> ${h.porcentajeAvance??0}%</td></tr>
+        </table>
+        <p style="font-size:9.5px;color:#475569;margin:6px 0 0"><strong>Descripción:</strong> ${(h.descripcion||"—").slice(0,300)}</p>
+      </div>`);
+    });
+  }
+
+  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#0D1526;width:794px">
+    ${portada("Informe " + md.label, md.desc, usuario, filtrosTxt)}
+    <div style="padding:30px 40px">${cuerpo.join("")}${pie()}</div>
+  </div>`;
+}
+
+// ── Modal generador de informes ─────────────────────────────────────────────
+export function InformeCedisModal({ hallazgos, cedis, usuario, onClose }: {
+  hallazgos: any[];
+  cedis: { id: string; nombre: string }[];
+  usuario: string;
+  onClose: () => void;
+}) {
+  const [modelo, setModelo]       = useState<ModeloId>("ejecutivo");
+  const [fCedi, setFCedi]         = useState("");
+  const [fSubtema, setFSubtema]   = useState("");
+  const [fEstado, setFEstado]     = useState("");
+  const [fCrit, setFCrit]         = useState("");
+  const [fFechaVisita, setFFechaVisita]   = useState("");
+  const [fFechaRegistro, setFFechaRegistro] = useState("");
+  const [generando, setGenerando] = useState(false);
+
+  const cedisMap = useMemo(() => Object.fromEntries(cedis.map(c => [c.id, c.nombre])), [cedis]);
+  const subtemas = useMemo(() => Array.from(new Set(hallazgos.map(h => h.subtema).filter(Boolean))), [hallazgos]);
+
+  // Filtrado por los filtros activos
+  const filtrados = useMemo(() => {
+    return hallazgos.filter(h => {
+      if (fCedi && h.cediId !== fCedi) return false;
+      if (fSubtema && h.subtema !== fSubtema) return false;
+      if (fEstado && normEstado(h.estado) !== fEstado) return false;
+      if (fCrit && normCrit(h.criticidad) !== fCrit) return false;
+      if (fFechaVisita) { const f = (h.fechaCompromiso ?? h.createdAt ?? "").slice(0,7); if (f !== fFechaVisita) return false; }
+      if (fFechaRegistro) { const f = (h.createdAt ?? "").slice(0,7); if (f !== fFechaRegistro) return false; }
+      return true;
+    });
+  }, [hallazgos, fCedi, fSubtema, fEstado, fCrit, fFechaVisita, fFechaRegistro]);
+
+  const filtrosTxt = useMemo(() => {
+    const t: string[] = [];
+    if (fCedi) t.push(`CEDI: ${cedisMap[fCedi]||fCedi}`);
+    if (fSubtema) t.push(`Subtema: ${fSubtema}`);
+    if (fEstado) t.push(`Estado: ${fEstado}`);
+    if (fCrit) t.push(`Criticidad: ${fCrit}`);
+    if (fFechaVisita) t.push(`Fecha visita: ${fFechaVisita}`);
+    if (fFechaRegistro) t.push(`Fecha registro: ${fFechaRegistro}`);
+    return t;
+  }, [fCedi, fSubtema, fEstado, fCrit, fFechaVisita, fFechaRegistro, cedisMap]);
+
+  async function descargar() {
+    if (filtrados.length === 0) return;
+    setGenerando(true);
+    try {
+      const html = construirInforme(modelo, filtrados, cedisMap, usuario, filtrosTxt);
+      const md = MODELOS.find(m => m.id === modelo)!;
+      await generarPDF(html, `Informe-${md.label.replace(/ /g,"-")}-CEDIS-${new Date().toISOString().slice(0,10)}.pdf`);
+    } catch (e: any) {
+      alert("Error al generar el informe: " + (e?.message ?? "desconocido"));
+    } finally { setGenerando(false); }
+  }
+
+  const SEL = "bg-[#0A111F] border border-[#1E2D4A] rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-emerald-500/50 outline-none";
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1E2D4A] sticky top-0 bg-[#0D1526] z-10">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-emerald-400"/>
+            <h3 className="font-display font-semibold text-white text-sm">Generar Informe Ejecutivo · CEDIS</h3>
+          </div>
+          <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          {/* Selector de modelo */}
+          <div>
+            <p className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-2">Modelo de Informe</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {MODELOS.map(m => (
+                <button key={m.id} onClick={() => setModelo(m.id)}
+                  className={`flex items-start gap-2.5 p-3 rounded-lg border text-left transition-colors ${modelo===m.id ? "bg-emerald-500/15 border-emerald-500/50" : "bg-[#0A111F] border-[#1E2D4A] hover:border-[#2A3F6A]"}`}>
+                  <m.icon className={`w-4 h-4 mt-0.5 shrink-0 ${modelo===m.id ? "text-emerald-400" : "text-[#94A3B8]"}`}/>
+                  <div>
+                    <p className="text-xs font-semibold text-white">{m.label}</p>
+                    <p className="text-[10px] text-[#94A3B8] leading-snug mt-0.5">{m.desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Filtros */}
+          <div>
+            <p className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-2 flex items-center gap-1.5"><Filter className="w-3 h-3"/> Filtros de Generación</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              <select value={fCedi} onChange={e=>setFCedi(e.target.value)} className={SEL}><option value="">Todos los CEDIS</option>{cedis.map(c=><option key={c.id} value={c.id}>{c.nombre}</option>)}</select>
+              <select value={fSubtema} onChange={e=>setFSubtema(e.target.value)} className={SEL}><option value="">Todos los subtemas</option>{subtemas.map(s=><option key={s} value={s}>{s}</option>)}</select>
+              <select value={fEstado} onChange={e=>setFEstado(e.target.value)} className={SEL}><option value="">Todos los estados</option>{["Abierto","En Plan","En Verificación","Cerrado","Reincidente"].map(e=><option key={e} value={e}>{e}</option>)}</select>
+              <select value={fCrit} onChange={e=>setFCrit(e.target.value)} className={SEL}><option value="">Toda criticidad</option>{["Crítica","Alta","Media","Baja"].map(c=><option key={c} value={c}>{c}</option>)}</select>
+              <input type="month" value={fFechaVisita} onChange={e=>setFFechaVisita(e.target.value)} className={SEL} title="Fecha de visita"/>
+              <input type="month" value={fFechaRegistro} onChange={e=>setFFechaRegistro(e.target.value)} className={SEL} title="Fecha de registro"/>
+            </div>
+          </div>
+
+          {/* Resumen alcance */}
+          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#0A111F] border border-[#1E2D4A]">
+            <span className="text-xs text-[#94A3B8]">Registros en alcance: <strong className="text-white">{filtrados.length}</strong> de {hallazgos.length}</span>
+            {filtrados.length === 0 && <span className="text-[10px] text-amber-400">Ajusta los filtros: no hay registros</span>}
+          </div>
+
+          {/* Acciones */}
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1E2D4A]">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs text-[#94A3B8] hover:text-white">Cancelar</button>
+            <button onClick={descargar} disabled={generando || filtrados.length===0}
+              className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-xs font-bold flex items-center gap-2 disabled:opacity-40">
+              {generando ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Download className="w-3.5 h-3.5"/>}
+              {generando ? "Generando PDF..." : "Descargar PDF"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
