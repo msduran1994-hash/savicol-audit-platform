@@ -128,6 +128,8 @@ export default function CumplimientoCedisPage() {
   const [errorMsg, setErrorMsg]   = useState<string | null>(null);
   const [informeOpen, setInformeOpen] = useState(false);
   const usuarioNombre = useAuthStore((s) => s.user?.name ?? "Auditor CEDIS");
+  const accessTokenCedis = useAuthStore((s) => s.accessToken ?? "");
+  const usuarioEmailCedis = useAuthStore((s) => s.user?.email ?? "");
 
   const openCreate = () => { setEditing(null); setErrorMsg(null); setModalOpen(true); };
   const openEdit   = (h: any) => { setEditing(h); setErrorMsg(null); setModalOpen(true); };
@@ -370,6 +372,8 @@ export default function CumplimientoCedisPage() {
           cedis={cedis.map((c: any) => ({ id: c.id, nombre: c.nombre }))}
           auditorias={auditoriasStore}
           usuario={usuarioNombre}
+          apiToken={accessTokenCedis}
+          usuarioEmail={usuarioEmailCedis}
           onClose={() => setInformeOpen(false)}
         />
       )}
