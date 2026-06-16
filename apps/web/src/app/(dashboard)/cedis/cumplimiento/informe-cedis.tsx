@@ -4,6 +4,7 @@ import {
   X, FileText, Download, Loader2, Sparkles, Award, ClipboardList,
   TrendingUp, Building2, FileSearch, Filter, FileSpreadsheet, BarChart3, Mail,
 } from "lucide-react";
+import { LOGO_SAVICOL } from "./savicol-logo";
 
 /* ════════════════════════════════════════════════════════════════════════════
    GENERADOR DE INFORMES EJECUTIVOS — CEDIS → Cumplimiento
@@ -245,11 +246,16 @@ async function enviarInformeCorreo(opts: {
 function portada(titulo: string, subtitulo: string, usuario: string, filtrosTxt: string[]): string {
   const hoy = new Date().toLocaleDateString("es-CO", { day:"2-digit", month:"long", year:"numeric" });
   return `
-  <div style="background:linear-gradient(135deg,#0D1526,#0A2D1F);color:#fff;padding:44px 40px">
-    <div style="font-size:11px;letter-spacing:3px;color:#10B981;text-transform:uppercase;font-weight:700">${EMPRESA.area}</div>
-    <h1 style="font-size:28px;margin:14px 0 6px;font-weight:800">${titulo}</h1>
-    <p style="font-size:14px;color:#94A3B8;margin:0">${subtitulo}</p>
-    <div style="margin-top:24px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.15);font-size:12px;color:#cbd5e1">
+  <div style="background:linear-gradient(135deg,#0D1526,#0A2D1F);color:#fff;padding:36px 40px">
+    <div style="display:flex;align-items:flex-start;gap:22px">
+      <img src="${LOGO_SAVICOL}" alt="Pollos Savicol S.A.S." style="width:74px;height:auto;border-radius:6px;flex-shrink:0"/>
+      <div style="flex:1">
+        <div style="font-size:11px;letter-spacing:3px;color:#10B981;text-transform:uppercase;font-weight:700">${EMPRESA.area}</div>
+        <h1 style="font-size:28px;margin:10px 0 6px;font-weight:800">${titulo}</h1>
+        <p style="font-size:14px;color:#94A3B8;margin:0">${subtitulo}</p>
+      </div>
+    </div>
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.15);font-size:12px;color:#cbd5e1">
       <strong style="color:#fff">${EMPRESA.nombre}</strong> · NIT ${EMPRESA.nit}<br>
       Generado: ${hoy} · Usuario: ${usuario}
     </div>
