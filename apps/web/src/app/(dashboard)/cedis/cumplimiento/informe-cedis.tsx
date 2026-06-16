@@ -169,8 +169,133 @@ function calcular(hallazgos: any[]) {
   return { total, criticos, altos, cerrados, abiertos, reincidentes, cumpl, avancePromedio, critCount, estadoCount, riesgoCount };
 }
 
+// ── Visualizaciones SVG ejecutivas (rasterizan en el PDF) ───────────────────
+// Estilo dashboard ejecutivo: dona, gauge, tendencia. Colores corporativos.
+function svgDona(datos: { label: string; val: number; color: string }[], titulo: string): string {
+  const total = datos.reduce((a, d) => a + d.val, 0) || 1;
+  let acum = 0;
+  const r = 52, cx = 70, cy = 70, sw = 26;
+  const circ = 2 * Math.PI * r;
+  const segs = datos.filter(d => d.val > 0).map(d => {
+    const frac = d.val / total;
+    const dash = frac * circ;
+    const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${d.color}" stroke-width="${sw}"
+      stroke-dasharray="${dash} ${circ - dash}" stroke-dashoffset="${-acum * circ}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    acum += frac;
+    return seg;
+  }).join("");
+  const leyenda = datos.map(d => `<div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#475569;margin-bottom:3px">
+    <span style="width:10px;height:10px;border-radius:2px;background:${d.color};display:inline-block"></span>
+    ${d.label}: <strong>${d.val}</strong> (${Math.round(d.val / total * 100)}%)
+  </div>`).join("");
+  return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:18px">
+    <h3 style="font-size:12px;margin:0 0 10px;color:#0D1526">${titulo}</h3>
+    <div style="display:flex;align-items:center;gap:20px">
+      <svg width="140" height="140" viewBox="0 0 140 140">${segs}
+        <text x="70" y="66" text-anchor="middle" font-size="22" font-weight="800" fill="#0D1526">${total}</text>
+        <text x="70" y="82" text-anchor="middle" font-size="9" fill="#94a3b8">TOTAL</text>
+      </svg>
+      <div style="flex:1">${leyenda}</div>
+    </div>
+  </div>`;
+}
+
+function svgGauge(pct: number, titulo: string, sub: string): string {
+  const r = 56, cx = 70, cy = 70;
+  const ang = (pct / 100) * 180;
+  const rad = (180 - ang) * Math.PI / 180;
+  const x = cx + r * Math.cos(rad), y = cy - r * Math.sin(rad);
+  const largeArc = ang > 180 ? 1 : 0;
+  const color = pct >= 70 ? "#22C55E" : pct >= 40 ? "#F59E0B" : "#EF4444";
+  return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:18px;text-align:center">
+    <h3 style="font-size:12px;margin:0 0 6px;color:#0D1526">${titulo}</h3>
+    <svg width="150" height="90" viewBox="0 0 140 80">
+      <path d="M 14 70 A 56 56 0 0 1 126 70" fill="none" stroke="#f1f5f9" stroke-width="14" stroke-linecap="round"/>
+      <path d="M 14 70 A 56 56 0 ${largeArc} 1 ${x.toFixed(1)} ${y.toFixed(1)}" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round"/>
+      <text x="70" y="60" text-anchor="middle" font-size="24" font-weight="800" fill="${color}">${pct}%</text>
+    </svg>
+    <p style="font-size:10px;color:#94a3b8;margin:4px 0 0">${sub}</p>
+  </div>`;
+}
+
+function svgTendencia(porMes: { mes: string; val: number }[], titulo: string): string {
+  if (porMes.length === 0) return "";
+  const w = 480, h = 130, pad = 28;
+  const max = Math.max(1, ...porMes.map(p => p.val));
+  const stepX = (w - pad * 2) / Math.max(1, porMes.length - 1);
+  const puntos = porMes.map((p, i) => {
+    const x = pad + i * stepX;
+    const y = h - pad - (p.val / max) * (h - pad * 2);
+    return { x, y, ...p };
+  });
+  const linea = puntos.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const area = `${linea} L ${puntos[puntos.length - 1].x.toFixed(1)} ${h - pad} L ${puntos[0].x.toFixed(1)} ${h - pad} Z`;
+  const dots = puntos.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#10B981"/>
+    <text x="${p.x.toFixed(1)}" y="${(p.y - 7).toFixed(1)}" text-anchor="middle" font-size="9" fill="#0D1526" font-weight="700">${p.val}</text>`).join("");
+  const labels = puntos.map(p => `<text x="${p.x.toFixed(1)}" y="${h - 10}" text-anchor="middle" font-size="8" fill="#94a3b8">${p.mes}</text>`).join("");
+  return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:18px">
+    <h3 style="font-size:12px;margin:0 0 10px;color:#0D1526">${titulo}</h3>
+    <svg width="100%" height="${h}" viewBox="0 0 ${w} ${h}">
+      <path d="${area}" fill="#10B98115"/>
+      <path d="${linea}" fill="none" stroke="#10B981" stroke-width="2"/>
+      ${dots}${labels}
+    </svg>
+  </div>`;
+}
+
+// Agrupa hallazgos por mes (de createdAt) para la tendencia
+function tendenciaPorMes(hallazgos: any[]): { mes: string; val: number }[] {
+  const meses: Record<string, number> = {};
+  hallazgos.forEach(h => {
+    const f = (h.createdAt ?? h.fechaCompromiso ?? "").slice(0, 7);
+    if (f) meses[f] = (meses[f] ?? 0) + 1;
+  });
+  return Object.entries(meses).sort((a, b) => a[0].localeCompare(b[0])).slice(-6)
+    .map(([mes, val]) => ({ mes: mes.slice(5) + "/" + mes.slice(2, 4), val }));
+}
+
+// ── Evidencias fotográficas desde Consolidado, relacionadas por cediId ───────
+// Las fotos viven embebidas en los campos observacion* de las auditorías CEDI.
+function extraerEvidencias(auditorias: any[], cediIds: Set<string>): { cedi: string; fecha: string; fotos: any[] }[] {
+  const campos = ["observacionInventario","observacionCaja","observacionCartera","observacionLogistica","observacionBioseguridad","observacionInfraestructura","observacionProcedimientos","observacionRiesgo"];
+  const resultado: { cedi: string; fecha: string; fotos: any[] }[] = [];
+  auditorias.forEach(a => {
+    if (cediIds.size > 0 && !cediIds.has(a.cediId)) return;
+    const fotos: any[] = [];
+    campos.forEach(campo => {
+      const txt = a[campo] ?? "";
+      const m = txt.match(/\[FOTOS\]([\s\S]*?)\[\/FOTOS\]/);
+      if (m) {
+        try {
+          const arr = JSON.parse(m[1]);
+          if (Array.isArray(arr)) arr.forEach((f: any) => fotos.push({ ...f, area: campo.replace("observacion", "") }));
+        } catch { /* ignore */ }
+      }
+    });
+    if (fotos.length > 0) resultado.push({ cedi: a.cediId, fecha: a.fechaVisita ?? "", fotos });
+  });
+  return resultado;
+}
+
+function seccionEvidencias(evidencias: { cedi: string; fecha: string; fotos: any[] }[], cedisMap: Record<string,string>): string {
+  if (evidencias.length === 0) return "";
+  const bloques = evidencias.map(ev => {
+    const imgs = ev.fotos.slice(0, 6).map(f => `<div style="display:inline-block;width:108px;margin:4px;vertical-align:top">
+      <img src="${f.d}" style="width:108px;height:108px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0"/>
+      <p style="font-size:8px;color:#94a3b8;margin:2px 0 0;text-align:center">${f.area || "—"}</p>
+    </div>`).join("");
+    return `<div style="margin-bottom:14px">
+      <p style="font-size:11px;font-weight:600;color:#0D1526;margin:0 0 4px">${cedisMap[ev.cedi] || "—"} · Visita ${fmtFecha(ev.fecha)} · ${ev.fotos.length} evidencia(s)</p>
+      <div>${imgs}</div>
+    </div>`;
+  }).join("");
+  return `<h2 style="font-size:16px;border-left:4px solid #10B981;padding-left:10px;margin:18px 0 16px">Evidencias Fotográficas</h2>
+    <p style="font-size:10px;color:#94a3b8;margin:0 0 10px">Imágenes obtenidas automáticamente desde el módulo Consolidado, relacionadas por CEDI.</p>
+    ${bloques}`;
+}
+
 // ── Construcción del HTML por modelo ────────────────────────────────────────
-function construirInforme(modelo: ModeloId, hallazgos: any[], cedisMap: Record<string,string>, usuario: string, filtrosTxt: string[]): string {
+function construirInforme(modelo: ModeloId, hallazgos: any[], cedisMap: Record<string,string>, usuario: string, filtrosTxt: string[], evidencias: { cedi: string; fecha: string; fotos: any[] }[] = []): string {
   const k = calcular(hallazgos);
   const md = MODELOS.find(m => m.id === modelo)!;
   const cuerpo: string[] = [];
@@ -190,9 +315,15 @@ function construirInforme(modelo: ModeloId, hallazgos: any[], cedisMap: Record<s
   if (modelo === "ejecutivo") {
     cuerpo.push(`<h2 style="font-size:16px;border-left:4px solid #10B981;padding-left:10px;margin:0 0 16px">Resumen Ejecutivo</h2>`);
     cuerpo.push(tarjetasIndicadores(indicadoresBase));
-    cuerpo.push(`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">${barras("Estado de Cumplimiento", barrasEstado)}${barras("Riesgos Críticos por Criticidad", barrasCrit)}</div>`);
+    // Dashboard ejecutivo con visualizaciones
+    cuerpo.push(`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      ${svgDona(barrasCrit, "Distribución por Criticidad")}
+      ${svgGauge(k.cumpl, "Estado de Cumplimiento Global", `${k.cerrados} de ${k.total} hallazgos cerrados`)}
+    </div>`);
+    cuerpo.push(`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">${barras("Estado de Cumplimiento", barrasEstado)}${barras("Riesgos por Tipo", barrasRiesgo)}</div>`);
     cuerpo.push(`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;font-size:11px;line-height:1.7;color:#166534;margin-top:6px">
       <strong>Diagnóstico:</strong> Se evaluaron ${k.total} hallazgos en los CEDIS auditados, con ${k.criticos} de criticidad crítica (${k.total>0?Math.round(k.criticos/k.total*100):0}%) y ${k.abiertos} abiertos. El cumplimiento global es del ${k.cumpl}%. ${k.reincidentes>0?`Se registran ${k.reincidentes} hallazgo(s) reincidente(s) que requieren atención prioritaria.`:"Sin reincidencias registradas."}</div>`);
+    cuerpo.push(seccionEvidencias(evidencias, cedisMap));
   } else if (modelo === "operativo") {
     cuerpo.push(`<h2 style="font-size:16px;border-left:4px solid #10B981;padding-left:10px;margin:0 0 16px">Hallazgos y Planes de Acción</h2>`);
     cuerpo.push(tarjetasIndicadores(indicadoresBase.slice(0,3)));
@@ -206,10 +337,12 @@ function construirInforme(modelo: ModeloId, hallazgos: any[], cedisMap: Record<s
         <div style="font-size:9.5px;color:#94a3b8;margin-top:6px">Responsable: ${h.responsable||"—"} · Avance: ${h.porcentajeAvance??0}% · Estado: ${normEstado(h.estado)}</div>
       </div>`);
     });
+    cuerpo.push(seccionEvidencias(evidencias, cedisMap));
   } else if (modelo === "estrategico") {
     cuerpo.push(`<h2 style="font-size:16px;border-left:4px solid #10B981;padding-left:10px;margin:0 0 16px">Análisis Estratégico</h2>`);
     cuerpo.push(tarjetasIndicadores(indicadoresBase));
-    cuerpo.push(`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">${barras("Distribución por Criticidad", barrasCrit)}${barras("Distribución por Tipo de Riesgo", barrasRiesgo)}</div>`);
+    cuerpo.push(svgTendencia(tendenciaPorMes(hallazgos), "Tendencia de Hallazgos por Mes"));
+    cuerpo.push(`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">${svgDona(barrasCrit, "Distribución por Criticidad")}${barras("Distribución por Tipo de Riesgo", barrasRiesgo)}</div>`);
     cuerpo.push(`<h3 style="font-size:13px;margin:14px 0 10px;color:#0D1526">Recomendaciones IA Consolidadas</h3>`);
     const conIA = hallazgos.filter(h => h.recomendacionIA);
     if (conIA.length) {
@@ -245,7 +378,8 @@ function construirInforme(modelo: ModeloId, hallazgos: any[], cedisMap: Record<s
         <th style="text-align:center;padding:8px;border-bottom:2px solid #e2e8f0">Cerrados</th>
         <th style="text-align:center;padding:8px;border-bottom:2px solid #e2e8f0">Cumplimiento</th>
       </tr></thead><tbody>${filasCedi}</tbody></table>`);
-    cuerpo.push(barras("Riesgos por Tipo (Consolidado)", barrasRiesgo));
+    cuerpo.push(`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">${svgDona(barrasRiesgo.map(r=>({...r,color:r.label==="REPUTACIONAL"?"#8B5CF6":r.label==="FINANCIERO"?"#F59E0B":r.label==="CONTAGIO"?"#EC4899":r.label==="LEGAL"?"#EF4444":"#4A7AFF"})), "Riesgos por Tipo (Consolidado)")}${barras("Cumplimiento por CEDI", Object.entries(porCedi).map(([cid,hs])=>({label:cedisMap[cid]||"—",val:calcular(hs).cumpl,color:"#10B981"})))}</div>`);
+    cuerpo.push(seccionEvidencias(evidencias, cedisMap));
   } else if (modelo === "tecnico") {
     cuerpo.push(`<h2 style="font-size:16px;border-left:4px solid #10B981;padding-left:10px;margin:0 0 16px">Trazabilidad y Cumplimiento Detallado</h2>`);
     cuerpo.push(tarjetasIndicadores(indicadoresBase));
@@ -270,9 +404,10 @@ function construirInforme(modelo: ModeloId, hallazgos: any[], cedisMap: Record<s
 }
 
 // ── Modal generador de informes ─────────────────────────────────────────────
-export function InformeCedisModal({ hallazgos, cedis, usuario, onClose }: {
+export function InformeCedisModal({ hallazgos, cedis, auditorias = [], usuario, onClose }: {
   hallazgos: any[];
   cedis: { id: string; nombre: string }[];
+  auditorias?: any[];
   usuario: string;
   onClose: () => void;
 }) {
@@ -316,7 +451,10 @@ export function InformeCedisModal({ hallazgos, cedis, usuario, onClose }: {
     if (filtrados.length === 0) return;
     setGenerando(true);
     try {
-      const html = construirInforme(modelo, filtrados, cedisMap, usuario, filtrosTxt);
+      // Evidencias desde Consolidado, relacionadas por los CEDIS en alcance
+      const cediIds = new Set(filtrados.map(h => h.cediId).filter(Boolean));
+      const evidencias = extraerEvidencias(auditorias, cediIds);
+      const html = construirInforme(modelo, filtrados, cedisMap, usuario, filtrosTxt, evidencias);
       const md = MODELOS.find(m => m.id === modelo)!;
       await generarPDF(html, `Informe-${md.label.replace(/ /g,"-")}-CEDIS-${new Date().toISOString().slice(0,10)}.pdf`);
     } catch (e: any) {
