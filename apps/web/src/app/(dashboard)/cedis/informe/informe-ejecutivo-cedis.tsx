@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import { X, FileText, Download, Loader2, Sparkles, Building2, Filter, Calendar } from "lucide-react";
-import { LOGO_SAVICOL } from "./savicol-logo";
+import { LOGO_SAVICOL } from "../cumplimiento/savicol-logo";
 
 /* ════════════════════════════════════════════════════════════════════════════
    INFORME EJECUTIVO CEDIS — Exportar PDF (17 secciones)
