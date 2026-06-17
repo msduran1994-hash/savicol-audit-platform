@@ -6,7 +6,9 @@ import { useAuthStore } from "@/store/auth.store";
 import {
   useLotes, useCreateLote, useUpdateLote, useDeleteLote,
   loteVacio, avanceGlobal, GALPONES,
+  PRELIMINARES_BASE, RECEPCION_BASE,
   type LoteData, type LoteItem, type EstadoLote,
+  type FilaPreliminar, type FilaRecepcion,
 } from "@/hooks/useLotes";
 import {
   Egg, Plus, Search, Trash2, X, Loader2, Pencil, AlertTriangle,
@@ -233,6 +235,28 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
   const [data, setData] = useState<LoteData>(() => item ? { ...item.data } : loteVacio(""));
   const [error, setError] = useState<string | null>(null);
 
+  // Filas de Preliminares y Recepción: parten del modelo base y se completan con lo guardado
+  const [prelim, setPrelimState] = useState<FilaPreliminar[]>(() => {
+    const guardado = item?.data.preliminares ?? [];
+    return PRELIMINARES_BASE.map((base, i) => ({
+      concepto: base.concepto, objetivo: base.objetivo,
+      valor: guardado[i]?.valor ?? "", cumple: guardado[i]?.cumple ?? "",
+    }));
+  });
+  const [recep, setRecepState] = useState<FilaRecepcion[]>(() => {
+    const guardado = item?.data.recepcion ?? [];
+    return RECEPCION_BASE.map((base, i) => ({
+      parametro: base.parametro, referencia: base.referencia,
+      valor: guardado[i]?.valor ?? "",
+    }));
+  });
+  function setPrelim(i: number, campo: "valor" | "cumple", v: string) {
+    setPrelimState(arr => arr.map((f, idx) => idx === i ? { ...f, [campo]: v } : f));
+  }
+  function setRecep(i: number, v: string) {
+    setRecepState(arr => arr.map((f, idx) => idx === i ? { ...f, valor: v } : f));
+  }
+
   function set<K extends keyof LoteData>(k: K, v: LoteData[K]) {
     setData(d => ({ ...d, [k]: v }));
   }
@@ -244,11 +268,22 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
     setError(null);
     if (!data.codigo.trim()) { setError("El código del lote es obligatorio"); setTab("generales"); return; }
     if (!data.granjaId)       { setError("Debes seleccionar una granja"); setTab("generales"); return; }
-    // Marcar Datos Generales como completos
+
+    // Una etapa se considera completa si tiene al menos un valor diligenciado
+    const prelimCompleto = prelim.some(f => f.valor.trim() !== "" || f.cumple !== "");
+    const recepCompleto  = recep.some(f => f.valor.trim() !== "");
+
     const payload: LoteData = {
       ...data,
       granjaNombre: granjas.find(g => g.id === data.granjaId)?.nombre ?? data.granjaNombre,
-      avance: { ...data.avance, datosGenerales: true },
+      preliminares: prelim,
+      recepcion: recep,
+      avance: {
+        ...data.avance,
+        datosGenerales: true,
+        preliminares: prelimCompleto,
+        recepcion: recepCompleto,
+      },
     };
     try {
       if (esEdicion && item) await onUpdate(item.id, payload);
@@ -351,19 +386,93 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
             </div>
           )}
 
-          {tab !== "generales" && (
+          {tab === "preliminares" && (
+            <div>
+              <h3 className="text-sm font-bold text-white mb-1">Aspectos Preliminares (antes de recibir el pollito)</h3>
+              <p className="text-[11px] text-[#64748B] mb-4">Verificación de condiciones previas al ingreso del pollito</p>
+              <div className="overflow-x-auto rounded-lg border border-[#1E2D4A]">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-[#0A111F] text-[#94A3B8] text-xs">
+                      <th className="text-left font-medium px-3 py-2.5">Concepto</th>
+                      <th className="text-left font-medium px-3 py-2.5 w-32">Objetivo</th>
+                      <th className="text-left font-medium px-3 py-2.5 w-40">Valor / Resultado</th>
+                      <th className="text-left font-medium px-3 py-2.5 w-32">¿Cumple?</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prelim.map((fila, i) => (
+                      <tr key={i} className="border-t border-[#1E2D4A]">
+                        <td className="px-3 py-2 text-white">{fila.concepto}</td>
+                        <td className="px-3 py-2 text-[#64748B] italic text-xs">{fila.objetivo}</td>
+                        <td className="px-2 py-1.5">
+                          <input value={fila.valor} onChange={e => setPrelim(i, "valor", e.target.value)} placeholder="—"
+                            className="w-full bg-[#0A111F] border border-[#1E2D4A] rounded-md px-2 py-1.5 text-sm text-white outline-none focus:border-emerald-500/50"/>
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <select value={fila.cumple} onChange={e => setPrelim(i, "cumple", e.target.value)}
+                            className="w-full bg-[#0A111F] border border-[#1E2D4A] rounded-md px-2 py-1.5 text-sm text-white outline-none focus:border-emerald-500/50">
+                            <option value="">—</option>
+                            <option value="si">Sí cumple</option>
+                            <option value="no">No cumple</option>
+                            <option value="parcial">Parcial</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {tab === "recepcion" && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-white mb-1">Durante la Recepción del Pollito</h3>
+                <p className="text-[11px] text-[#64748B] mb-4">Evaluación de calidad del pollito al momento de la recepción</p>
+                <div className="overflow-x-auto rounded-lg border border-[#1E2D4A]">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-[#0A111F] text-[#94A3B8] text-xs">
+                        <th className="text-left font-medium px-3 py-2.5">Parámetro</th>
+                        <th className="text-left font-medium px-3 py-2.5 w-32">Referencia</th>
+                        <th className="text-left font-medium px-3 py-2.5 w-40">Valor registrado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recep.map((fila, i) => (
+                        <tr key={i} className="border-t border-[#1E2D4A]">
+                          <td className="px-3 py-2 text-white">{fila.parametro}</td>
+                          <td className="px-3 py-2 text-[#64748B] italic text-xs">{fila.referencia}</td>
+                          <td className="px-2 py-1.5">
+                            <input value={fila.valor} onChange={e => setRecep(i, e.target.value)} placeholder="0"
+                              className="w-full bg-[#0A111F] border border-[#1E2D4A] rounded-md px-2 py-1.5 text-sm text-white outline-none focus:border-emerald-500/50"/>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><label className={LBL}>Observaciones</label><textarea value={data.recepcionObs ?? ""} onChange={e => set("recepcionObs", e.target.value)} rows={3} placeholder="Observaciones de la recepción…" className={cn(IN, "resize-none")}/></div>
+                <div><label className={LBL}>Plan de Acción</label><textarea value={data.recepcionPlan ?? ""} onChange={e => set("recepcionPlan", e.target.value)} rows={3} placeholder="Acciones correctivas si aplica…" className={cn(IN, "resize-none")}/></div>
+              </div>
+            </div>
+          )}
+
+          {(tab === "seguimiento" || tab === "descargue") && (
             <div className="text-center py-16">
               <div className="w-14 h-14 rounded-2xl bg-[#1A2540] flex items-center justify-center mx-auto mb-4">
                 <AlertTriangle className="w-7 h-7 text-amber-400"/>
               </div>
               <p className="text-sm font-semibold text-white mb-1">Sección en preparación</p>
               <p className="text-xs text-[#64748B] max-w-md mx-auto">
-                {tab === "preliminares" && "Aspectos preliminares (antes de recibir el pollito): temperatura de cama, ambiente, humedad, ventiladores, bebederos y comederos."}
-                {tab === "recepcion"    && "Recepción del pollito: peso promedio, uniformidad, ombligos, débiles, deshidratados, deformidades, total recibido y rechazado."}
                 {tab === "seguimiento"  && "Seguimiento día 1 a 7: mortalidad, consumo de agua y alimento, peso, temperaturas, bioseguridad y comportamiento por galpón."}
                 {tab === "descargue"    && "Checklist profesional de descargue (30 preguntas) con semaforización, cumplimiento por sección y exportación a PDF."}
               </p>
-              <p className="text-[11px] text-emerald-400/70 mt-3">Esta sección se habilita en la siguiente fase. Por ahora, completa y guarda los Datos Generales.</p>
+              <p className="text-[11px] text-emerald-400/70 mt-3">Esta sección se habilita en la siguiente fase.</p>
             </div>
           )}
         </div>
