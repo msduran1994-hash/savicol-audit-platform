@@ -208,6 +208,95 @@ export const SEGUIMIENTO_INDICADORES: { clave: string; label: string; tipo: "num
 
 export const SEG_SELECT_OPCIONES = ["Óptimo", "Aceptable", "Deficiente"];
 
+// ── Checklist de Descargue: 30 preguntas en 5 secciones (6 c/u) ──
+export const CHECKLIST_SECCIONES: { seccion: string; preguntas: string[] }[] = [
+  {
+    seccion: "1. Transporte y Documentación",
+    preguntas: [
+      "Documentación legal del lote completa y vigente",
+      "Certificados sanitarios y de vacunación presentes",
+      "Guía de movilización y remisión correctas",
+      "Condiciones de transporte adecuadas (temperatura/ventilación)",
+      "Tiempo de viaje dentro de los parámetros establecidos",
+      "Vehículo limpio y desinfectado antes del cargue",
+    ],
+  },
+  {
+    seccion: "2. Preparación y Alistamiento",
+    preguntas: [
+      "Galpón preparado y precalentado antes del arribo",
+      "Equipos de calefacción calibrados y operativos",
+      "Disponibilidad de agua limpia y fresca",
+      "Disponibilidad de alimento de iniciación",
+      "Cama en condiciones óptimas (seca y nivelada)",
+      "Densidad de comederos y bebederos según norma",
+    ],
+  },
+  {
+    seccion: "3. Bioseguridad y Sanitización",
+    preguntas: [
+      "Protocolos de bioseguridad implementados y verificados",
+      "Control de acceso al galpón restringido",
+      "Pediluvios y arcos de desinfección operativos",
+      "Desinfección completa de instalaciones realizada",
+      "Personal con dotación y elementos de protección",
+      "Manejo adecuado de residuos y mortalidad",
+    ],
+  },
+  {
+    seccion: "4. Recepción y Descargue",
+    preguntas: [
+      "Temperatura ambiente adecuada al momento del descargue",
+      "Tiempo de descargue dentro del rango óptimo",
+      "Manejo cuidadoso del pollito durante el descargue",
+      "Distribución uniforme del pollito en el galpón",
+      "Acceso inmediato a agua y alimento tras el ingreso",
+      "Conteo y registro de aves recibidas y rechazadas",
+    ],
+  },
+  {
+    seccion: "5. Evaluación 0–7 Días",
+    preguntas: [
+      "Mortalidad dentro de los parámetros esperados",
+      "Consumo de agua acorde a la edad del lote",
+      "Consumo de alimento acorde a la curva esperada",
+      "Uniformidad del lote en seguimiento",
+      "Bienestar animal y comportamiento normal",
+      "Buche lleno verificado en las primeras horas",
+    ],
+  },
+];
+
+// Cinco preguntas críticas de la pestaña Alistamiento (previa a la recepción)
+export const ALISTAMIENTO_PREGUNTAS: string[] = [
+  "¿El galpón cumple condiciones ambientales para la recepción?",
+  "¿Los equipos de ventilación, calefacción y extracción funcionan correctamente?",
+  "¿Los protocolos de bioseguridad están implementados y verificados?",
+  "¿Agua y alimento están disponibles y validados?",
+  "¿La documentación legal y sanitaria del lote está completa?",
+];
+
+export const RESULTADO_OPCIONES = ["cumple", "no_cumple", "parcial", "na"] as const;
+
+// Total de preguntas del checklist (para cálculos de cumplimiento)
+export const CHECKLIST_TOTAL = CHECKLIST_SECCIONES.reduce((a, s) => a + s.preguntas.length, 0);
+
+// Cumplimiento (%) a partir de una lista de resultados. "cumple"=100, "parcial"=50,
+// "no_cumple"=0; "na" y vacío se excluyen del denominador.
+export function calcularCumplimiento(resultados: string[]): number {
+  const validos = resultados.filter(r => r === "cumple" || r === "no_cumple" || r === "parcial");
+  if (validos.length === 0) return 0;
+  const suma = validos.reduce((a, r) => a + (r === "cumple" ? 100 : r === "parcial" ? 50 : 0), 0);
+  return Math.round(suma / validos.length);
+}
+
+// Semáforo según porcentaje
+export function semaforo(pct: number): { label: string; color: string } {
+  if (pct >= 85) return { label: "Óptimo",   color: "#22C55E" };
+  if (pct >= 60) return { label: "Aceptable",color: "#F59E0B" };
+  return { label: "Crítico", color: "#EF4444" };
+}
+
 export function loteVacio(granjaId: string, granjaNombre?: string): LoteData {
   return {
     codigo: "", tipoProduccion: "engorde", raza: "", proveedor: "",
