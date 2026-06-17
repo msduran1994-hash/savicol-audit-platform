@@ -598,7 +598,14 @@ function EvidenciaPreview({ ev, meta }: { ev: any; meta: Record<string, string> 
     if (!ev.url) { setErrorPrev("Sin archivo"); return; }
     setCargando(true);
     try {
-      if (ev.tipo === "PDF" && canvasRef.current) {
+      if (ev.tipo === "PDF") {
+        // Esperar a que el canvas esté montado (hasta ~1s) antes de renderizar
+        let intentos = 0;
+        while (!canvasRef.current && intentos < 20) {
+          await new Promise(r => setTimeout(r, 50));
+          intentos++;
+        }
+        if (!canvasRef.current) throw new Error("canvas no disponible");
         const n = await renderPDFCanvas(ev.url, canvasRef.current, pagina);
         setPdfPages(n);
       } else if (ev.tipo === "Excel") {
@@ -612,7 +619,7 @@ function EvidenciaPreview({ ev, meta }: { ev: any; meta: Record<string, string> 
   }
   // Cargar la vista previa al montar (el componente se remonta por key={ev.id})
   useEffect(() => {
-    const t = setTimeout(() => cargarPreview(1), 80);
+    const t = setTimeout(() => cargarPreview(1), 120);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -658,37 +665,44 @@ function EvidenciaPreview({ ev, meta }: { ev: any; meta: Record<string, string> 
 
       {/* Cuerpo de vista previa */}
       <div className="p-4 bg-[#0A111F] min-h-[360px]">
-        {cargando && <div className="flex items-center justify-center gap-2 text-emerald-400 text-sm py-16"><Loader2 className="w-4 h-4 animate-spin"/> Generando vista previa…</div>}
-        {errorPrev && !cargando && <div className="flex items-center gap-2 text-amber-300 text-xs py-8 px-3 bg-amber-500/10 rounded-lg"><AlertCircle className="w-4 h-4 shrink-0"/> {errorPrev}</div>}
+        {errorPrev && <div className="flex items-center gap-2 text-amber-300 text-xs py-8 px-3 bg-amber-500/10 rounded-lg"><AlertCircle className="w-4 h-4 shrink-0"/> {errorPrev}</div>}
 
-        {!cargando && !errorPrev && ev.tipo === "PDF" && (
+        {/* PDF: el canvas SIEMPRE está montado (no condicionado por `cargando`),
+            de lo contrario canvasRef.current sería null al renderizar y saldría en blanco. */}
+        {!errorPrev && ev.tipo === "PDF" && (
           <div>
             <div className="flex items-center justify-center gap-3 mb-3">
-              <button onClick={() => cambiarPagina(-1)} disabled={pdfPage<=1} className="px-2 py-1 rounded bg-[#1A2540] text-white text-xs disabled:opacity-40">‹ Anterior</button>
+              <button onClick={() => cambiarPagina(-1)} disabled={cargando || pdfPage<=1} className="px-2 py-1 rounded bg-[#1A2540] text-white text-xs disabled:opacity-40">‹ Anterior</button>
               <span className="text-xs text-[#94A3B8]">Página {pdfPage} de {pdfPages || "…"}</span>
-              <button onClick={() => cambiarPagina(1)} disabled={pdfPages>0 && pdfPage>=pdfPages} className="px-2 py-1 rounded bg-[#1A2540] text-white text-xs disabled:opacity-40">Siguiente ›</button>
+              <button onClick={() => cambiarPagina(1)} disabled={cargando || (pdfPages>0 && pdfPage>=pdfPages)} className="px-2 py-1 rounded bg-[#1A2540] text-white text-xs disabled:opacity-40">Siguiente ›</button>
               <button onClick={() => setAmpliado(true)} title="Ampliar" className="px-2 py-1 rounded bg-[#1A2540] text-white text-xs flex items-center gap-1"><Maximize2 className="w-3 h-3"/></button>
             </div>
-            <div className="overflow-auto max-h-[460px] flex justify-center bg-white rounded-lg">
+            <div className="relative overflow-auto max-h-[460px] flex justify-center bg-white rounded-lg min-h-[300px]">
+              {cargando && <div className="absolute inset-0 flex items-center justify-center gap-2 text-emerald-500 text-sm bg-white/80 z-10"><Loader2 className="w-4 h-4 animate-spin"/> Generando vista previa…</div>}
               <canvas ref={canvasRef} className="max-w-full"/>
             </div>
           </div>
         )}
 
-        {!cargando && !errorPrev && ev.tipo === "Excel" && xlsx && (
+        {!errorPrev && ev.tipo === "Excel" && (
           <div>
-            <p className="text-[11px] text-[#94A3B8] mb-2">{xlsx.hojas.length} hoja(s): {xlsx.hojas.join(", ")}</p>
-            <div className="overflow-auto max-h-[460px] border border-[#1E2D4A] rounded-lg">
-              <table className="text-[11px] text-[#cbd5e1] border-collapse w-full">
-                <tbody>
-                  {xlsx.filas.map((fila, fi) => (
-                    <tr key={fi} className={fi===0 ? "bg-[#1A2540] font-semibold" : ""}>
-                      {(fila.length ? fila : [""]).map((c: any, ci) => <td key={ci} className="border border-[#1E2D4A] px-2 py-1 whitespace-nowrap">{String(c ?? "")}</td>)}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {cargando && <div className="flex items-center justify-center gap-2 text-emerald-400 text-sm py-16"><Loader2 className="w-4 h-4 animate-spin"/> Generando vista previa…</div>}
+            {xlsx && (
+              <>
+                <p className="text-[11px] text-[#94A3B8] mb-2">{xlsx.hojas.length} hoja(s): {xlsx.hojas.join(", ")}</p>
+                <div className="overflow-auto max-h-[460px] border border-[#1E2D4A] rounded-lg">
+                  <table className="text-[11px] text-[#cbd5e1] border-collapse w-full">
+                    <tbody>
+                      {xlsx.filas.map((fila, fi) => (
+                        <tr key={fi} className={fi===0 ? "bg-[#1A2540] font-semibold" : ""}>
+                          {(fila.length ? fila : [""]).map((c: any, ci) => <td key={ci} className="border border-[#1E2D4A] px-2 py-1 whitespace-nowrap">{String(c ?? "")}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -722,7 +736,11 @@ function PdfAmpliadoEv({ url }: { url: string }) {
   const [pg, setPg] = useState(1);
   const [tot, setTot] = useState(0);
   useEffect(() => {
-    const t = setTimeout(async () => { if (ref.current) setTot(await renderPDFCanvas(url, ref.current, 1)); }, 60);
+    const t = setTimeout(async () => {
+      let intentos = 0;
+      while (!ref.current && intentos < 20) { await new Promise(r => setTimeout(r, 50)); intentos++; }
+      if (ref.current) setTot(await renderPDFCanvas(url, ref.current, 1));
+    }, 80);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
