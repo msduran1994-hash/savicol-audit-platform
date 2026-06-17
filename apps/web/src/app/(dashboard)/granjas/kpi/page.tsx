@@ -1524,9 +1524,18 @@ export async function enviarInformePorCorreo(
   </div>
 </div>`;
 
-    // Usar el PDF real si fue generado externamente, sino el HTML base64
-    const finalPdfBase64   = pdfBase64Externo && pdfBase64Externo.length > 100 ? pdfBase64Externo : pdfBase64;
-    const finalPdfFilename = pdfFilenameExterno ?? pdfFilename;
+    // Usar el PDF real si fue generado externamente, sino el HTML base64.
+    // IMPORTANTE: si caemos al HTML base64, el nombre DEBE terminar en .html
+    // para que el destinatario nunca reciba un archivo .pdf que en realidad es
+    // HTML (eso causaba que el informe se abriera corrupto o con error).
+    const usandoPdfReal    = !!(pdfBase64Externo && pdfBase64Externo.length > 100);
+    const finalPdfBase64   = usandoPdfReal ? pdfBase64Externo! : pdfBase64;
+    let   finalPdfFilename = pdfFilenameExterno ?? pdfFilename;
+    if (!usandoPdfReal) {
+      // Garantizar coherencia: contenido HTML → extensión .html
+      finalPdfFilename = finalPdfFilename.replace(/\.pdf$/i, ".html");
+      if (!/\.html$/i.test(finalPdfFilename)) finalPdfFilename += ".html";
+    }
 
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1/email/send`, {
       method: "POST",
