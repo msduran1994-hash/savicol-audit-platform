@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
       "- Cada sección debe ser profesional, técnica, ejecutiva y ESPECÍFICA a este CEDI y sus hallazgos reales.",
       "- NO inventes datos, cifras, normas ni hechos que no estén en el contexto. Si algo no consta, mantente general pero veraz.",
       "- Español formal de auditoría corporativa. Sin introducciones tipo 'A continuación...'.",
+      "- Redacta en primera persona institucional como el equipo de auditoría humano. NUNCA menciones 'IA', 'inteligencia artificial', 'modelo', 'asistente' ni te refieras a cómo se generó el texto. El informe debe leerse como redactado íntegramente por el auditor.",
       "",
       "El JSON debe tener EXACTAMENTE estas claves (todas string, prosa de 2-4 frases salvo indicación):",
       "{",
