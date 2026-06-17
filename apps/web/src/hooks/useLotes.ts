@@ -162,6 +162,32 @@ export function useDeleteLote() {
 export const GALPONES = Array.from({ length: 14 }, (_, i) => String(i + 1));
 export const DIAS = [1, 2, 3, 4, 5, 6, 7];
 
+// Conceptos predefinidos de la pestaña Preliminares (antes de recibir el pollito)
+export const PRELIMINARES_BASE: { concepto: string; objetivo: string }[] = [
+  { concepto: "Temperatura de cama (°C)",     objetivo: "32 – 35 °C" },
+  { concepto: "Temperatura ambiente (°C)",    objetivo: "28 – 30 °C" },
+  { concepto: "Humedad relativa (%)",         objetivo: "60 – 70 %" },
+  { concepto: "Funcionamiento ventiladores",  objetivo: "Óptimo" },
+  { concepto: "Funcionamiento extractores",   objetivo: "Óptimo" },
+  { concepto: "Bebederos listos",             objetivo: "Sí" },
+  { concepto: "Comederos listos",             objetivo: "Sí" },
+  { concepto: "Calidad de la cama",           objetivo: "Buena" },
+  { concepto: "# Comederos habilitados",      objetivo: "Según densidad" },
+  { concepto: "Temperatura vehículo (°C)",    objetivo: "Registro" },
+];
+
+// Parámetros predefinidos de la pestaña Recepción del pollito
+export const RECEPCION_BASE: { parametro: string; referencia: string }[] = [
+  { parametro: "Peso promedio (g)",         referencia: "≥ 40 g" },
+  { parametro: "Uniformidad (%)",           referencia: "≥ 90%" },
+  { parametro: "Ombligos defectuosos (%)",  referencia: "≤ 1%" },
+  { parametro: "Pollitos débiles (%)",      referencia: "≤ 0.5%" },
+  { parametro: "Pollitos deshidratados (%)",referencia: "≤ 1%" },
+  { parametro: "Deformidades (%)",          referencia: "≤ 0.5%" },
+  { parametro: "Total recibido (aves)",     referencia: "—" },
+  { parametro: "Rechazados",                referencia: "—" },
+];
+
 export function loteVacio(granjaId: string, granjaNombre?: string): LoteData {
   return {
     codigo: "", tipoProduccion: "engorde", raza: "", proveedor: "",
