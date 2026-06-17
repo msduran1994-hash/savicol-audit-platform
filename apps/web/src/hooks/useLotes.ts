@@ -188,6 +188,26 @@ export const RECEPCION_BASE: { parametro: string; referencia: string }[] = [
   { parametro: "Rechazados",                referencia: "—" },
 ];
 
+// Indicadores predefinidos de la pestaña Seguimiento Día 1–7.
+// `tipo` define el control: "num" = campo numérico; "select" = lista (bioseguridad/comportamiento)
+export const SEGUIMIENTO_INDICADORES: { clave: string; label: string; tipo: "num" | "select" }[] = [
+  { clave: "muestra",        label: "Muestra (aves)",          tipo: "num" },
+  { clave: "avesVivas",      label: "Aves vivas",              tipo: "num" },
+  { clave: "avesMuertas",    label: "Aves muertas",            tipo: "num" },
+  { clave: "mortDiaria",     label: "Mortalidad diaria (%)",   tipo: "num" },
+  { clave: "mortAcumulada",  label: "Mortalidad acumulada (%)",tipo: "num" },
+  { clave: "consumoAgua",    label: "Consumo agua (L)",        tipo: "num" },
+  { clave: "consumoAlimento",label: "Consumo alimento (kg)",   tipo: "num" },
+  { clave: "peso",           label: "Peso promedio (g)",       tipo: "num" },
+  { clave: "tempAmbiente",   label: "Temp. ambiente (°C)",     tipo: "num" },
+  { clave: "tempCriadora",   label: "Temp. bajo criadora (°C)",tipo: "num" },
+  { clave: "tempCloacal",    label: "Temp. cloacal (°C)",      tipo: "num" },
+  { clave: "bioseguridad",   label: "Bioseguridad",            tipo: "select" },
+  { clave: "comportamiento", label: "Comportamiento",          tipo: "select" },
+];
+
+export const SEG_SELECT_OPCIONES = ["Óptimo", "Aceptable", "Deficiente"];
+
 export function loteVacio(granjaId: string, granjaNombre?: string): LoteData {
   return {
     codigo: "", tipoProduccion: "engorde", raza: "", proveedor: "",
