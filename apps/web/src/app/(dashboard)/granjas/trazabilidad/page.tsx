@@ -8,12 +8,16 @@ import {
   loteVacio, avanceGlobal, GALPONES,
   PRELIMINARES_BASE, RECEPCION_BASE,
   SEGUIMIENTO_INDICADORES, SEG_SELECT_OPCIONES, DIAS,
+  CHECKLIST_SECCIONES, ALISTAMIENTO_PREGUNTAS, CHECKLIST_TOTAL,
+  calcularCumplimiento, semaforo,
   type LoteData, type LoteItem, type EstadoLote,
   type FilaPreliminar, type FilaRecepcion, type SeguimientoDia,
+  type PreguntaChecklist, type PreguntaAlistamiento,
 } from "@/hooks/useLotes";
 import {
   Egg, Plus, Search, Trash2, X, Loader2, Pencil, AlertTriangle,
   CheckCircle2, Circle, TrendingUp, Bird, Calendar, ChevronRight,
+  ClipboardCheck, FileDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +37,7 @@ const TABS = [
   { id: "preliminares",label: "Preliminares" },
   { id: "recepcion",   label: "Recepción" },
   { id: "seguimiento", label: "Seg. D1–D7" },
+  { id: "alistamiento",label: "Alistamiento" },
   { id: "descargue",   label: "Descargue" },
 ];
 
@@ -267,6 +272,41 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
     setSeguimState(arr => arr.map((d, idx) => idx === diaIdx ? { ...d, [clave]: v } : d));
   }
 
+  // Checklist de Descargue: 30 preguntas aplanadas (sección + pregunta + resultado/obs/evidencia)
+  const [checklist, setChecklistState] = useState<PreguntaChecklist[]>(() => {
+    const guardado = item?.data.checklist ?? [];
+    const flat: PreguntaChecklist[] = [];
+    CHECKLIST_SECCIONES.forEach(sec => {
+      sec.preguntas.forEach(preg => {
+        const prev = guardado.find(g => g.seccion === sec.seccion && g.pregunta === preg);
+        flat.push({ seccion: sec.seccion, pregunta: preg, resultado: prev?.resultado ?? "", observacion: prev?.observacion ?? "", evidencia: prev?.evidencia ?? "" });
+      });
+    });
+    return flat;
+  });
+  function setChecklist(idx: number, campo: "resultado" | "observacion" | "evidencia", v: string) {
+    setChecklistState(arr => arr.map((p, i) => i === idx ? { ...p, [campo]: v } : p));
+  }
+  const [checklistAuditor, setChecklistAuditor] = useState(item?.data.checklistAuditor ?? usuario);
+  const [checklistFecha, setChecklistFecha] = useState(item?.data.checklistFecha ?? new Date().toISOString().slice(0, 10));
+
+  // Alistamiento: 5 preguntas críticas
+  const [alist, setAlistState] = useState<PreguntaAlistamiento[]>(() => {
+    const guardado = item?.data.alistamiento ?? [];
+    return ALISTAMIENTO_PREGUNTAS.map((preg, i) => ({
+      pregunta: preg,
+      resultado: guardado[i]?.resultado ?? "",
+      observacion: guardado[i]?.observacion ?? "",
+    }));
+  });
+  function setAlist(i: number, campo: "resultado" | "observacion", v: string) {
+    setAlistState(arr => arr.map((p, idx) => idx === i ? { ...p, [campo]: v } : p));
+  }
+
+  // Cumplimiento global del checklist (para semáforo en cabecera)
+  const cumplimientoGlobal = calcularCumplimiento(checklist.map(p => p.resultado));
+  const respondidas = checklist.filter(p => p.resultado !== "").length;
+
   function set<K extends keyof LoteData>(k: K, v: LoteData[K]) {
     setData(d => ({ ...d, [k]: v }));
   }
@@ -283,6 +323,8 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
     const prelimCompleto = prelim.some(f => f.valor.trim() !== "" || f.cumple !== "");
     const recepCompleto  = recep.some(f => f.valor.trim() !== "");
     const seguimCompleto = seguim.some(dia => Object.values(dia).some(v => (v ?? "").toString().trim() !== ""));
+    const descargueCompleto   = checklist.some(p => p.resultado !== "");
+    const alistamientoCompleto = alist.some(p => p.resultado !== "");
 
     const payload: LoteData = {
       ...data,
@@ -290,12 +332,18 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
       preliminares: prelim,
       recepcion: recep,
       seguimiento: seguim,
+      checklist,
+      checklistAuditor,
+      checklistFecha,
+      alistamiento: alist,
       avance: {
         ...data.avance,
         datosGenerales: true,
         preliminares: prelimCompleto,
         recepcion: recepCompleto,
         seguimiento: seguimCompleto,
+        descargue: descargueCompleto,
+        alistamiento: alistamientoCompleto,
       },
     };
     try {
@@ -521,16 +569,130 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
             </div>
           )}
 
-          {tab === "descargue" && (
-            <div className="text-center py-16">
-              <div className="w-14 h-14 rounded-2xl bg-[#1A2540] flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle className="w-7 h-7 text-amber-400"/>
+          {tab === "alistamiento" && (
+            <div>
+              <h3 className="text-sm font-bold text-white mb-1">Alistamiento — Evaluación previa a la recepción</h3>
+              <p className="text-[11px] text-[#64748B] mb-4">5 preguntas críticas que deben verificarse antes del arribo del lote</p>
+              {(() => {
+                const cumpl = calcularCumplimiento(alist.map(a => a.resultado));
+                const sem = semaforo(cumpl);
+                return (
+                  <div className="flex items-center justify-between bg-[#0A111F] rounded-xl p-3 mb-4 border border-[#1E2D4A]">
+                    <span className="text-xs text-[#94A3B8]">Cumplimiento de alistamiento</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: `${sem.color}22`, color: sem.color }}>{sem.label}</span>
+                      <span className="text-base font-bold" style={{ color: sem.color }}>{cumpl}%</span>
+                    </div>
+                  </div>
+                );
+              })()}
+              <div className="space-y-3">
+                {alist.map((p, i) => (
+                  <div key={i} className="bg-[#0A111F] rounded-xl p-3 border border-[#1E2D4A]">
+                    <p className="text-sm text-white mb-2">{i + 1}. {p.pregunta}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <select value={p.resultado} onChange={e => setAlist(i, "resultado", e.target.value)}
+                        className="bg-[#0D1526] border border-[#1E2D4A] rounded-md px-2 py-1.5 text-sm text-white outline-none focus:border-emerald-500/50">
+                        <option value="">Resultado…</option>
+                        <option value="cumple">Cumple</option>
+                        <option value="no_cumple">No cumple</option>
+                        <option value="parcial">Parcial</option>
+                        <option value="na">N/A</option>
+                      </select>
+                      <input value={p.observacion} onChange={e => setAlist(i, "observacion", e.target.value)} placeholder="Observación…"
+                        className="bg-[#0D1526] border border-[#1E2D4A] rounded-md px-2 py-1.5 text-sm text-white outline-none focus:border-emerald-500/50"/>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <p className="text-sm font-semibold text-white mb-1">Sección en preparación</p>
-              <p className="text-xs text-[#64748B] max-w-md mx-auto">
-                Checklist profesional de descargue (30 preguntas) con semaforización, cumplimiento por sección y exportación a PDF.
-              </p>
-              <p className="text-[11px] text-emerald-400/70 mt-3">Esta sección se habilita en la siguiente fase.</p>
+            </div>
+          )}
+
+          {tab === "descargue" && (
+            <div className="space-y-4">
+              {/* Cabecera con semáforo y cumplimiento global */}
+              {(() => {
+                const sem = semaforo(cumplimientoGlobal);
+                return (
+                  <div className="rounded-xl p-4 border" style={{ background: `${sem.color}10`, borderColor: `${sem.color}40` }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: `${sem.color}22`, color: sem.color }}>
+                          <ClipboardCheck className="w-6 h-6"/>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-white">Checklist de Descargue</p>
+                          <p className="text-[11px] text-[#94A3B8]">{data.codigo || "Lote"} — {respondidas}/{CHECKLIST_TOTAL} preguntas respondidas</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold inline-block mb-1" style={{ background: `${sem.color}22`, color: sem.color }}>{sem.label}</span>
+                        <p className="text-2xl font-bold" style={{ color: sem.color }}>{cumplimientoGlobal}%</p>
+                        <p className="text-[9px] text-[#94A3B8]">Cumplimiento</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Auditor y fecha */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><label className={LBL}>Auditor *</label><input value={checklistAuditor} onChange={e => setChecklistAuditor(e.target.value)} placeholder="Nombre del auditor" className={IN}/></div>
+                <div><label className={LBL}>Fecha de visita *</label><input type="date" value={checklistFecha} onChange={e => setChecklistFecha(e.target.value)} className={IN}/></div>
+              </div>
+
+              {/* Secciones del checklist */}
+              {CHECKLIST_SECCIONES.map(sec => {
+                const indices = checklist.map((p, idx) => ({ p, idx })).filter(x => x.p.seccion === sec.seccion);
+                const cumplSec = calcularCumplimiento(indices.map(x => x.p.resultado));
+                const semSec = semaforo(cumplSec);
+                return (
+                  <div key={sec.seccion} className="rounded-xl border border-[#1E2D4A] overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-[#0A111F]">
+                      <h4 className="text-sm font-bold text-white">{sec.seccion}</h4>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: `${semSec.color}22`, color: semSec.color }}>{cumplSec}%</span>
+                    </div>
+                    <div className="divide-y divide-[#1E2D4A]">
+                      {indices.map(({ p, idx }, n) => (
+                        <div key={idx} className="px-4 py-3">
+                          <div className="flex gap-2 mb-2">
+                            <span className="text-[#64748B] text-xs shrink-0">{n + 1}.</span>
+                            <p className="text-sm text-white">{p.pregunta}</p>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pl-5">
+                            <select value={p.resultado} onChange={e => setChecklist(idx, "resultado", e.target.value)}
+                              className="bg-[#0A111F] border border-[#1E2D4A] rounded-md px-2 py-1.5 text-xs text-white outline-none focus:border-emerald-500/50">
+                              <option value="">Resultado…</option>
+                              <option value="cumple">Cumple</option>
+                              <option value="no_cumple">No cumple</option>
+                              <option value="parcial">Parcial</option>
+                              <option value="na">N/A</option>
+                            </select>
+                            <input value={p.observacion} onChange={e => setChecklist(idx, "observacion", e.target.value)} placeholder="Observación…"
+                              className="bg-[#0A111F] border border-[#1E2D4A] rounded-md px-2 py-1.5 text-xs text-white outline-none focus:border-emerald-500/50"/>
+                            <input value={p.evidencia} onChange={e => setChecklist(idx, "evidencia", e.target.value)} placeholder="URL evidencia…"
+                              className="bg-[#0A111F] border border-[#1E2D4A] rounded-md px-2 py-1.5 text-xs text-white outline-none focus:border-emerald-500/50"/>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Observaciones generales y plan */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><label className={LBL}>Observaciones generales</label><textarea value={data.checklistObsGeneral ?? ""} onChange={e => set("checklistObsGeneral", e.target.value)} rows={3} placeholder="Observaciones del descargue…" className={cn(IN, "resize-none")}/></div>
+                <div><label className={LBL}>Plan de Acción</label><textarea value={data.checklistPlan ?? ""} onChange={e => set("checklistPlan", e.target.value)} rows={3} placeholder="Acciones correctivas…" className={cn(IN, "resize-none")}/></div>
+              </div>
+
+              {/* Botón PDF */}
+              <div className="flex justify-end">
+                <button onClick={() => generarPDFChecklist(data, checklist, alist, checklistAuditor, checklistFecha, cumplimientoGlobal)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1A2540] hover:bg-[#243150] text-emerald-300 text-sm font-semibold">
+                  <FileDown className="w-4 h-4"/> Descargar PDF Checklist
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -554,4 +716,157 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
       </div>
     </div>
   );
+}
+
+// ─── PDF nativo del Checklist de Descargue (jsPDF, texto real seleccionable) ───
+const RESULTADO_LABEL: Record<string, string> = {
+  cumple: "Cumple", no_cumple: "No cumple", parcial: "Parcial", na: "N/A", "": "—",
+};
+async function generarPDFChecklist(
+  data: LoteData,
+  checklist: PreguntaChecklist[],
+  alist: PreguntaAlistamiento[],
+  auditor: string,
+  fecha: string,
+  cumplimientoGlobal: number,
+) {
+  const { default: jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+  const PW = doc.internal.pageSize.getWidth();
+  const PH = doc.internal.pageSize.getHeight();
+  const M = 15, CW = PW - M * 2;
+  let y = M;
+  const setFill = (hex: string) => { const n = parseInt(hex.replace("#",""),16); doc.setFillColor((n>>16)&255,(n>>8)&255,n&255); };
+  const setText = (hex: string) => { const n = parseInt(hex.replace("#",""),16); doc.setTextColor((n>>16)&255,(n>>8)&255,n&255); };
+  const need = (h: number) => { if (y + h > PH - M) { doc.addPage(); y = M; } };
+  const semColor = (pct: number) => pct >= 85 ? "#16A34A" : pct >= 60 ? "#D97706" : "#DC2626";
+  const semLabel = (pct: number) => pct >= 85 ? "ÓPTIMO" : pct >= 60 ? "ACEPTABLE" : "CRÍTICO";
+  const cumpl = (rs: string[]) => {
+    const v = rs.filter(r => r === "cumple" || r === "no_cumple" || r === "parcial");
+    if (!v.length) return 0;
+    return Math.round(v.reduce((a, r) => a + (r === "cumple" ? 100 : r === "parcial" ? 50 : 0), 0) / v.length);
+  };
+
+  // Encabezado corporativo
+  setFill("#0D1526"); doc.rect(0, 0, PW, 34, "F");
+  setFill("#C41230"); doc.rect(0, 32, PW, 2, "F");
+  setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
+  doc.text("Pollos Savicol S.A.S.", M, 13);
+  setText("#94A3B8"); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+  doc.text("NIT 860.403.972-5  ·  Auditoría Interna · Trazabilidad Avícola", M, 19);
+  setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+  doc.text("Checklist de Descargue y Recepción", M, 28);
+  y = 42;
+
+  // Datos del lote
+  doc.setFont("helvetica", "bold"); doc.setFontSize(11); setText("#0D1526");
+  doc.text("Información del Lote", M, y); y += 2;
+  setFill("#10B981"); doc.rect(M, y, 26, 0.7, "F"); y += 6;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); setText("#334155");
+  const info = [
+    `Código: ${data.codigo || "—"}`, `Granja: ${data.granjaNombre || "—"}`,
+    `Raza: ${data.raza || "—"}`, `Galpón: ${data.galponPrincipal || "—"}`,
+    `Auditor: ${auditor || "—"}`, `Fecha: ${fecha || "—"}`,
+  ];
+  for (let i = 0; i < info.length; i += 2) {
+    doc.text(info[i], M, y);
+    if (info[i+1]) doc.text(info[i+1], M + CW/2, y);
+    y += 5.5;
+  }
+  y += 3;
+
+  // Resumen de cumplimiento global con semáforo
+  need(20);
+  const cg = semColor(cumplimientoGlobal);
+  setFill("#F8FAFC"); doc.roundedRect(M, y, CW, 16, 2, 2, "F");
+  setText("#475569"); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+  doc.text("Cumplimiento Global", M + 4, y + 7);
+  setText(cg); doc.setFontSize(18);
+  doc.text(`${cumplimientoGlobal}%`, M + 4, y + 13.5);
+  setText(cg); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+  doc.text(semLabel(cumplimientoGlobal), PW - M - 4, y + 10, { align: "right" });
+  y += 22;
+
+  // Secciones del checklist
+  const secciones = Array.from(new Set(checklist.map(p => p.seccion)));
+  secciones.forEach(sec => {
+    const filas = checklist.filter(p => p.seccion === sec);
+    const pct = cumpl(filas.map(f => f.resultado));
+    need(14);
+    setFill("#0D1526"); doc.rect(M, y, CW, 8, "F");
+    setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+    doc.text(sec, M + 3, y + 5.3);
+    setText(semColor(pct)); doc.text(`${pct}%`, PW - M - 3, y + 5.3, { align: "right" });
+    y += 8;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    filas.forEach((f, i) => {
+      const pregLines = doc.splitTextToSize(f.pregunta, CW - 40);
+      const obsLines = f.observacion ? doc.splitTextToSize(`Obs: ${f.observacion}`, CW - 8) : [];
+      const rowH = Math.max(6, pregLines.length * 3.6 + 2) + (obsLines.length * 3.4);
+      need(rowH);
+      if (i % 2 === 0) { setFill("#F8FAFC"); doc.rect(M, y, CW, rowH, "F"); }
+      setText("#334155"); doc.text(pregLines, M + 3, y + 4);
+      const rl = RESULTADO_LABEL[f.resultado] ?? "—";
+      const rc = f.resultado === "cumple" ? "#16A34A" : f.resultado === "no_cumple" ? "#DC2626" : f.resultado === "parcial" ? "#D97706" : "#64748B";
+      setText(rc); doc.setFont("helvetica", "bold");
+      doc.text(rl, PW - M - 3, y + 4, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      if (obsLines.length) { setText("#64748B"); doc.text(obsLines, M + 5, y + 4 + pregLines.length * 3.6); }
+      y += rowH;
+    });
+    y += 4;
+  });
+
+  // Alistamiento
+  const alistResp = alist.filter(a => a.resultado);
+  if (alistResp.length) {
+    need(14);
+    const pctA = cumpl(alist.map(a => a.resultado));
+    setFill("#0D1526"); doc.rect(M, y, CW, 8, "F");
+    setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+    doc.text("Alistamiento — Preguntas Críticas", M + 3, y + 5.3);
+    setText(semColor(pctA)); doc.text(`${pctA}%`, PW - M - 3, y + 5.3, { align: "right" });
+    y += 8;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    alist.forEach((a, i) => {
+      const lines = doc.splitTextToSize(`${i+1}. ${a.pregunta}`, CW - 40);
+      const rowH = Math.max(6, lines.length * 3.6 + 2);
+      need(rowH);
+      if (i % 2 === 0) { setFill("#F8FAFC"); doc.rect(M, y, CW, rowH, "F"); }
+      setText("#334155"); doc.text(lines, M + 3, y + 4);
+      const rl = RESULTADO_LABEL[a.resultado] ?? "—";
+      setText("#0D1526"); doc.setFont("helvetica", "bold");
+      doc.text(rl, PW - M - 3, y + 4, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      y += rowH;
+    });
+    y += 4;
+  }
+
+  // Observaciones generales y plan
+  if (data.checklistObsGeneral || data.checklistPlan) {
+    need(20);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10); setText("#0D1526");
+    doc.text("Observaciones y Plan de Acción", M, y); y += 6;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); setText("#334155");
+    if (data.checklistObsGeneral) {
+      const l = doc.splitTextToSize(`Observaciones: ${data.checklistObsGeneral}`, CW);
+      need(l.length * 4 + 2); doc.text(l, M, y); y += l.length * 4 + 2;
+    }
+    if (data.checklistPlan) {
+      const l = doc.splitTextToSize(`Plan de acción: ${data.checklistPlan}`, CW);
+      need(l.length * 4 + 2); doc.text(l, M, y); y += l.length * 4 + 2;
+    }
+  }
+
+  // Pie de página
+  const pages = doc.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    setText("#94A3B8"); doc.setFont("helvetica", "normal"); doc.setFontSize(7);
+    doc.text("Pollos Savicol S.A.S. · Trazabilidad Avícola · Documento confidencial", M, PH - 8);
+    doc.text(`Página ${p} de ${pages}`, PW - M, PH - 8, { align: "right" });
+  }
+
+  doc.save(`Checklist-Descargue-${data.codigo || "lote"}.pdf`);
 }
