@@ -7,8 +7,9 @@ import {
   useLotes, useCreateLote, useUpdateLote, useDeleteLote,
   loteVacio, avanceGlobal, GALPONES,
   PRELIMINARES_BASE, RECEPCION_BASE,
+  SEGUIMIENTO_INDICADORES, SEG_SELECT_OPCIONES, DIAS,
   type LoteData, type LoteItem, type EstadoLote,
-  type FilaPreliminar, type FilaRecepcion,
+  type FilaPreliminar, type FilaRecepcion, type SeguimientoDia,
 } from "@/hooks/useLotes";
 import {
   Egg, Plus, Search, Trash2, X, Loader2, Pencil, AlertTriangle,
@@ -257,6 +258,15 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
     setRecepState(arr => arr.map((f, idx) => idx === i ? { ...f, valor: v } : f));
   }
 
+  // Seguimiento D1–D7: array de 7 días, cada uno un objeto indicador→valor
+  const [seguim, setSeguimState] = useState<SeguimientoDia[]>(() => {
+    const guardado = item?.data.seguimiento ?? [];
+    return DIAS.map((_, i) => guardado[i] ? { ...guardado[i] } : {});
+  });
+  function setSeguim(diaIdx: number, clave: string, v: string) {
+    setSeguimState(arr => arr.map((d, idx) => idx === diaIdx ? { ...d, [clave]: v } : d));
+  }
+
   function set<K extends keyof LoteData>(k: K, v: LoteData[K]) {
     setData(d => ({ ...d, [k]: v }));
   }
@@ -272,17 +282,20 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
     // Una etapa se considera completa si tiene al menos un valor diligenciado
     const prelimCompleto = prelim.some(f => f.valor.trim() !== "" || f.cumple !== "");
     const recepCompleto  = recep.some(f => f.valor.trim() !== "");
+    const seguimCompleto = seguim.some(dia => Object.values(dia).some(v => (v ?? "").toString().trim() !== ""));
 
     const payload: LoteData = {
       ...data,
       granjaNombre: granjas.find(g => g.id === data.granjaId)?.nombre ?? data.granjaNombre,
       preliminares: prelim,
       recepcion: recep,
+      seguimiento: seguim,
       avance: {
         ...data.avance,
         datosGenerales: true,
         preliminares: prelimCompleto,
         recepcion: recepCompleto,
+        seguimiento: seguimCompleto,
       },
     };
     try {
@@ -462,15 +475,60 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
             </div>
           )}
 
-          {(tab === "seguimiento" || tab === "descargue") && (
+          {tab === "seguimiento" && (
+            <div>
+              <h3 className="text-sm font-bold text-white mb-1">Seguimiento Día 1 a 7</h3>
+              <p className="text-[11px] text-[#64748B] mb-4">Monitoreo diario de indicadores productivos, ambientales y sanitarios</p>
+              <div className="overflow-x-auto rounded-lg border border-[#1E2D4A]">
+                <table className="text-sm border-collapse" style={{ minWidth: "760px" }}>
+                  <thead>
+                    <tr className="bg-[#0A111F]">
+                      <th className="text-left font-medium px-3 py-2.5 text-[#94A3B8] text-xs sticky left-0 bg-[#0A111F] z-10" style={{ minWidth: "150px" }}>Indicador</th>
+                      {DIAS.map(d => (
+                        <th key={d} className="text-center font-semibold px-2 py-2.5 text-emerald-300 text-xs" style={{ minWidth: "80px" }}>Día {d}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {SEGUIMIENTO_INDICADORES.map(ind => (
+                      <tr key={ind.clave} className="border-t border-[#1E2D4A]">
+                        <td className="px-3 py-1.5 text-white text-xs sticky left-0 bg-[#0D1526] z-10">{ind.label}</td>
+                        {DIAS.map((_, diaIdx) => (
+                          <td key={diaIdx} className="px-1 py-1">
+                            {ind.tipo === "num" ? (
+                              <input
+                                value={seguim[diaIdx]?.[ind.clave] ?? ""}
+                                onChange={e => setSeguim(diaIdx, ind.clave, e.target.value)}
+                                placeholder="—"
+                                className="w-full bg-[#0A111F] border border-[#1E2D4A] rounded-md px-1.5 py-1 text-xs text-white text-center outline-none focus:border-emerald-500/50"/>
+                            ) : (
+                              <select
+                                value={seguim[diaIdx]?.[ind.clave] ?? ""}
+                                onChange={e => setSeguim(diaIdx, ind.clave, e.target.value)}
+                                className="w-full bg-[#0A111F] border border-[#1E2D4A] rounded-md px-1 py-1 text-xs text-white outline-none focus:border-emerald-500/50">
+                                <option value="">—</option>
+                                {SEG_SELECT_OPCIONES.map(o => <option key={o} value={o}>{o}</option>)}
+                              </select>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] text-[#475569] mt-3">Las evidencias fotográficas por día y galpón se habilitan en la siguiente fase.</p>
+            </div>
+          )}
+
+          {tab === "descargue" && (
             <div className="text-center py-16">
               <div className="w-14 h-14 rounded-2xl bg-[#1A2540] flex items-center justify-center mx-auto mb-4">
                 <AlertTriangle className="w-7 h-7 text-amber-400"/>
               </div>
               <p className="text-sm font-semibold text-white mb-1">Sección en preparación</p>
               <p className="text-xs text-[#64748B] max-w-md mx-auto">
-                {tab === "seguimiento"  && "Seguimiento día 1 a 7: mortalidad, consumo de agua y alimento, peso, temperaturas, bioseguridad y comportamiento por galpón."}
-                {tab === "descargue"    && "Checklist profesional de descargue (30 preguntas) con semaforización, cumplimiento por sección y exportación a PDF."}
+                Checklist profesional de descargue (30 preguntas) con semaforización, cumplimiento por sección y exportación a PDF.
               </p>
               <p className="text-[11px] text-emerald-400/70 mt-3">Esta sección se habilita en la siguiente fase.</p>
             </div>
