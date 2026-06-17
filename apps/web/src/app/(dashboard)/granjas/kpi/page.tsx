@@ -1352,6 +1352,191 @@ export function generarInforme(
 // ═══════════════════════════════════════════════════════════════════════════════
 // FUNCIÓN ENVIAR POR CORREO — USA EL EMAILSERVICE DEL BACKEND
 // ═══════════════════════════════════════════════════════════════════════════════
+// ─── Generación de PDF NATIVO con jsPDF (texto real, sin html2canvas) ──────────
+// Genera el PDF escribiendo texto y tablas directamente. No depende de renderizar
+// HTML ni capturar el navegador → el contenido SIEMPRE aparece y es seleccionable.
+async function generarPDFNativo(
+  modelo: ModeloInforme,
+  kpis: any[], hallazgos: any[], granjas: any[],
+  auditor: string, granjaFiltroId?: string
+): Promise<{ b64: string; filename: string }> {
+  const { default: jsPDF } = await import("jspdf");
+  const fecha = new Date().toISOString().slice(0, 10);
+  const filename = `Informe-Auditoria-Savicol-${modelo}-${fecha}.pdf`;
+
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+  const PW = doc.internal.pageSize.getWidth();
+  const PH = doc.internal.pageSize.getHeight();
+  const M = 15;                       // margen
+  const CW = PW - M * 2;              // ancho de contenido
+  let y = M;
+
+  const nombreGranja = (id?: string) => granjas.find(g => g.id === id)?.nombre ?? "—";
+  const fFecha = (d?: string) => d ? new Date(d).toLocaleDateString("es-CO") : "—";
+  const norm = (s: string) => (s ?? "").toString();
+
+  // Salto de página si no cabe `h` mm
+  function need(h: number) {
+    if (y + h > PH - M) { doc.addPage(); y = M; }
+  }
+  function setFill(hex: string) {
+    const n = parseInt(hex.replace("#",""), 16);
+    doc.setFillColor((n>>16)&255, (n>>8)&255, n&255);
+  }
+  function setText(hex: string) {
+    const n = parseInt(hex.replace("#",""), 16);
+    doc.setTextColor((n>>16)&255, (n>>8)&255, n&255);
+  }
+
+  // ── Portada / encabezado corporativo ──
+  setFill("#0D1526"); doc.rect(0, 0, PW, 38, "F");
+  setFill("#C41230"); doc.rect(0, 36, PW, 2, "F");
+  setText("#FFFFFF");
+  doc.setFont("helvetica", "bold"); doc.setFontSize(16);
+  doc.text("Pollos Savicol S.A.S.", M, 15);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+  setText("#94A3B8");
+  doc.text("NIT 860.403.972-5  ·  Auditoría Interna · Control Interno", M, 21);
+  setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+  doc.text(MODELOS_INFO[modelo].titulo, M, 30);
+  setText("#94A3B8"); doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+  doc.text(`Generado: ${new Date().toLocaleDateString("es-CO")}  ·  Auditor: ${auditor || "—"}`, M, 34.5);
+  y = 46;
+
+  // ── Indicadores ──
+  const total = kpis.length;
+  const comp = kpis.filter(k => k.estado === "COMPLETADO").length;
+  const enCurso = kpis.filter(k => k.estado === "EN_CURSO").length;
+  const noInic = kpis.filter(k => k.estado === "NO_INICIADO").length;
+  const pct = total ? Math.round(kpis.reduce((a,k)=>a+(k.porcentajeAvance||0),0)/total) : 0;
+  const hallAb = hallazgos.filter(h => h.estado === "ABIERTO").length;
+  const hallCerr = hallazgos.filter(h => h.estado === "CERRADO").length;
+
+  doc.setFont("helvetica", "bold"); doc.setFontSize(12); setText("#0D1526");
+  doc.text("Resumen Ejecutivo", M, y); y += 2;
+  setFill("#10B981"); doc.rect(M, y, 30, 0.8, "F"); y += 7;
+
+  // Tarjetas KPI (4 columnas)
+  const cards = [
+    { n: String(total),  l: "Total KPIs",    c: "#4A7AFF" },
+    { n: String(comp),   l: "Completados",   c: "#22C55E" },
+    { n: String(enCurso),l: "En Curso",      c: "#F97316" },
+    { n: String(noInic), l: "No Iniciados",  c: "#EF4444" },
+  ];
+  const cw = (CW - 9) / 4;
+  cards.forEach((c, i) => {
+    const x = M + i * (cw + 3);
+    setFill("#F8FAFC"); doc.roundedRect(x, y, cw, 18, 2, 2, "F");
+    setText(c.c); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
+    doc.text(c.n, x + cw/2, y + 8, { align: "center" });
+    setText("#64748B"); doc.setFont("helvetica", "normal"); doc.setFontSize(7);
+    doc.text(c.l, x + cw/2, y + 14, { align: "center" });
+  });
+  y += 24;
+
+  // Barra de avance global
+  setText("#475569"); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+  doc.text("Avance global de planes de acción", M, y);
+  setText("#0D1526"); doc.text(`${pct}%`, PW - M, y, { align: "right" }); y += 3;
+  setFill("#E2E8F0"); doc.roundedRect(M, y, CW, 4, 1, 1, "F");
+  setFill("#22C55E"); doc.roundedRect(M, y, CW * pct / 100, 4, 1, 1, "F"); y += 9;
+  setText("#64748B"); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+  doc.text(`Hallazgos abiertos: ${hallAb}    Hallazgos cerrados: ${hallCerr}    En plan: ${hallazgos.filter(h=>h.estado==="EN_PLAN").length}`, M, y);
+  y += 10;
+
+  // ── Helper: tabla genérica con encabezado y filas ──
+  function tabla(titulo: string, cols: { h: string; w: number }[], filas: string[][]) {
+    need(20);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(12); setText("#0D1526");
+    doc.text(titulo, M, y); y += 2;
+    setFill("#10B981"); doc.rect(M, y, 30, 0.8, "F"); y += 6;
+
+    // Encabezado
+    setFill("#0D1526"); doc.rect(M, y, CW, 7, "F");
+    setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
+    let cx = M + 2;
+    cols.forEach(c => { doc.text(c.h, cx, y + 4.6); cx += c.w; });
+    y += 7;
+
+    // Filas
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7);
+    filas.forEach((fila, ri) => {
+      // Calcular alto de fila según el texto más largo (wrap)
+      const wrapped = fila.map((celda, ci) => doc.splitTextToSize(norm(celda), cols[ci].w - 3));
+      const rowH = Math.max(6, ...wrapped.map(w => w.length * 3.5 + 2.5));
+      need(rowH);
+      if (ri % 2 === 0) { setFill("#F8FAFC"); doc.rect(M, y, CW, rowH, "F"); }
+      setText("#334155");
+      cx = M + 2;
+      wrapped.forEach((w, ci) => { doc.text(w, cx, y + 4); cx += cols[ci].w; });
+      y += rowH;
+    });
+    y += 8;
+  }
+
+  // ── Tabla de Hallazgos ──
+  if (hallazgos.length > 0) {
+    const filtH = granjaFiltroId ? hallazgos.filter(h => h.granjaId === granjaFiltroId) : hallazgos;
+    tabla(
+      "Hallazgos de Auditoría",
+      [{ h: "Hallazgo", w: 58 }, { h: "Granja", w: 38 }, { h: "Fecha", w: 24 }, { h: "Estado", w: 30 }],
+      filtH.map(h => [
+        norm(h.titulo || h.descripcion || "—"),
+        nombreGranja(h.granjaId),
+        fFecha(h.fechaVisita),
+        norm(h.estado || "—").replace(/_/g, " "),
+      ])
+    );
+  }
+
+  // ── Tabla de Planes de Acción (KPIs) ──
+  if (kpis.length > 0) {
+    const filtK = granjaFiltroId ? kpis.filter(k => k.granjaId === granjaFiltroId) : kpis;
+    tabla(
+      "Planes de Acción · Cumplimiento KPI",
+      [{ h: "Plan / Acción", w: 60 }, { h: "Responsable", w: 38 }, { h: "Estado", w: 28 }, { h: "Avance", w: 24 }],
+      filtK.map(k => [
+        norm(k.titulo || k.descripcion || "—"),
+        norm(k.responsable || "—"),
+        norm(k.estado || "—").replace(/_/g, " "),
+        `${k.porcentajeAvance ?? 0}%`,
+      ])
+    );
+  }
+
+  // ── Detalle por granja (modelo 4 o si hay filtro) ──
+  if ((modelo === "4-granja" || granjaFiltroId) && granjas.length > 0) {
+    const gs = granjaFiltroId ? granjas.filter(g => g.id === granjaFiltroId) : granjas;
+    gs.forEach(g => {
+      const kg = kpis.filter(k => k.granjaId === g.id);
+      const hg = hallazgos.filter(h => h.granjaId === g.id);
+      const pg = kg.length ? Math.round(kg.reduce((a,k)=>a+(k.porcentajeAvance||0),0)/kg.length) : 0;
+      need(22);
+      setFill("#F1F5F9"); doc.roundedRect(M, y, CW, 16, 2, 2, "F");
+      setText("#0D1526"); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+      doc.text(norm(g.nombre), M + 3, y + 6);
+      setText("#64748B"); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+      doc.text(`KPIs: ${kg.length}   Hallazgos: ${hg.length}   Avance: ${pg}%`, M + 3, y + 12);
+      y += 20;
+    });
+  }
+
+  // ── Pie de página en todas las páginas ──
+  const pages = doc.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    setText("#94A3B8"); doc.setFont("helvetica", "normal"); doc.setFontSize(7);
+    doc.text("Pollos Savicol S.A.S. · Auditoría Interna · Documento confidencial", M, PH - 8);
+    doc.text(`Página ${p} de ${pages}`, PW - M, PH - 8, { align: "right" });
+  }
+
+  const dataUri = doc.output("datauristring");
+  const b64 = dataUri.split(",")[1];
+  if (!b64 || b64.length < 1000) throw new Error("El PDF generado está vacío");
+  return { b64, filename };
+}
+
+
 // ─── Convertir HTML del informe a PDF real usando html2canvas + jsPDF ───────────
 // Renderiza el HTML en el browser → captura con html2canvas → genera PDF con jsPDF
 // El PDF resultante es IDÉNTICO al informe visible en la plataforma
@@ -2159,13 +2344,13 @@ export default function KPIPage() {
                 )
               : htmlInforme;
 
-            // 3. Convertir HTML a PDF REAL en el browser (html2canvas + jsPDF)
-            //    El PDF generado es idéntico al informe visible en la plataforma
+            // 3. Generar el PDF con texto NATIVO (jsPDF directo, sin html2canvas).
+            //    Garantiza que el contenido siempre aparezca y sea seleccionable.
             let pdfBase64 = "";
             let pdfFilename = `Informe-Auditoria-Savicol-${modelo}-${new Date().toISOString().slice(0,10)}.pdf`;
-            // Si falla la generación del PDF, htmlToPDFBase64 lanza error y NO se envía
+            // Si falla la generación, generarPDFNativo lanza error y NO se envía
             // un HTML como si fuera PDF. El error se propaga al usuario.
-            const { b64, filename: fn } = await htmlToPDFBase64(htmlConDesc);
+            const { b64, filename: fn } = await generarPDFNativo(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId);
             pdfBase64  = b64;
             pdfFilename = fn;
 
