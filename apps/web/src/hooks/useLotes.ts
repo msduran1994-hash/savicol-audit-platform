@@ -316,3 +316,107 @@ export function avanceGlobal(data: LoteData): number {
   const hechas = etapas.filter(Boolean).length;
   return Math.round((hechas / etapas.length) * 100);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Evidencias fotográficas del lote (Fase 3b)
+// Se guardan como documentos tipo "Imagen" con marcador [FOTO-LOTE] en ocrTexto,
+// asociando lote/día/galpón. Separadas del JSON del lote para no saturarlo.
+// ═══════════════════════════════════════════════════════════════════════════════
+export interface FotoLote {
+  id: string;
+  url: string;          // data URI de la imagen
+  nombre: string;
+  dia: string;
+  galpon: string;
+  size: number;
+  uploadedAt: string;
+}
+
+const MARCADOR_FOTO = "[FOTO-LOTE]";
+
+export function leerMetaFoto(ocr?: string): { loteCodigo: string; dia: string; galpon: string } {
+  const m = (ocr ?? "").match(/\[FOTO-LOTE\]([\s\S]*?)\[\/FOTO-LOTE\]/);
+  const out = { loteCodigo: "", dia: "", galpon: "" };
+  if (m) m[1].split(";").forEach(par => {
+    const i = par.indexOf("=");
+    if (i > 0) {
+      const k = par.slice(0, i).trim(), v = par.slice(i + 1).trim();
+      if (k === "loteCodigo") out.loteCodigo = v;
+      else if (k === "dia") out.dia = v;
+      else if (k === "galpon") out.galpon = v;
+    }
+  });
+  return out;
+}
+
+// Lista las fotos de un lote concreto (filtra por código de lote en el marcador)
+export function useFotosLote(loteCodigo?: string) {
+  return useQuery({
+    queryKey: ["fotos-lote", loteCodigo],
+    queryFn: async () => {
+      const docs = await apiGet<DocRaw[]>(`/documentos`);
+      return (docs ?? [])
+        .filter(d => (d.nombre ?? "").includes(MARCADOR_FOTO))
+        .filter(d => !loteCodigo || leerMetaFoto(d.ocrTexto).loteCodigo === loteCodigo)
+        .map(d => {
+          const meta = leerMetaFoto(d.ocrTexto);
+          return {
+            id: d.id, url: (d as any).url ?? "", nombre: d.nombre.replace(/\s*\[FOTO-LOTE\]\s*/, "").trim(),
+            dia: meta.dia, galpon: meta.galpon, size: (d as any).size ?? 0, uploadedAt: d.uploadedAt,
+          } as FotoLote;
+        })
+        .sort((a, b) => (a.dia || "").localeCompare(b.dia || ""));
+    },
+    enabled: !!loteCodigo,
+    staleTime: 20_000,
+  });
+}
+
+export function useCreateFotoLote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { granjaId: string; loteCodigo: string; dia: string; galpon: string; nombre: string; url: string; size: number }) =>
+      apiPost<DocRaw>("/documentos", {
+        granjaId: dto.granjaId,
+        nombre: `FOTO ${dto.loteCodigo} D${dto.dia} G${dto.galpon} ${MARCADOR_FOTO}`,
+        tipo: "Imagen",
+        categoria: "Otro",
+        size: dto.size,
+        url: dto.url,
+        ocrTexto: `${MARCADOR_FOTO}loteCodigo=${dto.loteCodigo};dia=${dto.dia};galpon=${dto.galpon}${MARCADOR_FOTO.replace("[", "[/")}`,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fotos-lote"] }),
+  });
+}
+
+export function useDeleteFotoLote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete<{ message: string }>(`/documentos/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fotos-lote"] }),
+  });
+}
+
+// Comprime una imagen (File) a JPEG con ancho máximo y calidad dada → data URI
+export async function comprimirImagen(file: File, maxAncho = 1280, calidad = 0.7): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const escala = Math.min(1, maxAncho / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * escala);
+        canvas.height = Math.round(img.height * escala);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("No se pudo procesar la imagen")); return; }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", calidad));
+      };
+      img.onerror = () => reject(new Error("Imagen inválida"));
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    reader.readAsDataURL(file);
+  });
+}
