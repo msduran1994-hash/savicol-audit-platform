@@ -19,6 +19,7 @@ const MAIN_NAV = [
   { href: "/cronograma",    label: "Cronograma 2026", icon: CalendarDays,    badge: null },
   { href: "/indicadores",   label: "Indicadores",     icon: BarChart3,       badge: null },
   { href: "/auditores",     label: "Auditores",       icon: Users,           badge: "6"  },
+  { href: "/formatos",      label: "Formatos Auditoría", icon: Files,        badge: null },
   { href: "/configuracion", label: "Configuración",   icon: Settings,        badge: null },
 ];
 
