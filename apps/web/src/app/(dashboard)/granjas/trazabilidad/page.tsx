@@ -10,6 +10,7 @@ import {
   SEGUIMIENTO_INDICADORES, SEG_SELECT_OPCIONES, DIAS,
   CHECKLIST_SECCIONES, ALISTAMIENTO_PREGUNTAS, CHECKLIST_TOTAL,
   calcularCumplimiento, semaforo,
+  useFotosLote, useCreateFotoLote, useDeleteFotoLote, comprimirImagen,
   type LoteData, type LoteItem, type EstadoLote,
   type FilaPreliminar, type FilaRecepcion, type SeguimientoDia,
   type PreguntaChecklist, type PreguntaAlistamiento,
@@ -17,7 +18,7 @@ import {
 import {
   Egg, Plus, Search, Trash2, X, Loader2, Pencil, AlertTriangle,
   CheckCircle2, Circle, TrendingUp, Bird, Calendar, ChevronRight,
-  ClipboardCheck, FileDown,
+  ClipboardCheck, FileDown, ImagePlus, Image as ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -565,7 +566,9 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
                   </tbody>
                 </table>
               </div>
-              <p className="text-[11px] text-[#475569] mt-3">Las evidencias fotográficas por día y galpón se habilitan en la siguiente fase.</p>
+              <div className="mt-5">
+                <EvidenciasFotograficas loteCodigo={data.codigo} granjaId={data.granjaId} esEdicion={esEdicion}/>
+              </div>
             </div>
           )}
 
@@ -787,6 +790,35 @@ async function generarPDFChecklist(
   doc.text(semLabel(cumplimientoGlobal), PW - M - 4, y + 10, { align: "right" });
   y += 22;
 
+  // Cuadro resumen: cumplimiento por fase (cada sección del checklist) con barra y semáforo
+  const seccionesResumen = Array.from(new Set(checklist.map(p => p.seccion)));
+  need(12 + seccionesResumen.length * 8 + 8);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(11); setText("#0D1526");
+  doc.text("Cumplimiento por Fase", M, y); y += 2;
+  setFill("#10B981"); doc.rect(M, y, 26, 0.7, "F"); y += 7;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+  seccionesResumen.forEach(sec => {
+    const filas = checklist.filter(p => p.seccion === sec);
+    const pct = cumpl(filas.map(f => f.resultado));
+    const c = semColor(pct);
+    const respondidasSec = filas.filter(f => f.resultado !== "").length;
+    setText("#334155"); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    // Nombre de la fase (truncado si es largo)
+    const nombre = sec.length > 42 ? sec.slice(0, 40) + "…" : sec;
+    doc.text(nombre, M, y + 3);
+    // Barra de progreso
+    const barX = M + 95, barW = CW - 95 - 24;
+    setFill("#E2E8F0"); doc.roundedRect(barX, y, barW, 4, 1, 1, "F");
+    setFill(c); doc.roundedRect(barX, y, Math.max(1, barW * pct / 100), 4, 1, 1, "F");
+    // % y conteo
+    setText(c); doc.setFont("helvetica", "bold"); doc.setFontSize(8.5);
+    doc.text(`${pct}%`, PW - M, y + 3, { align: "right" });
+    setText("#94A3B8"); doc.setFont("helvetica", "normal"); doc.setFontSize(6.5);
+    doc.text(`${respondidasSec}/${filas.length}`, barX + barW + 2, y + 3);
+    y += 8;
+  });
+  y += 6;
+
   // Secciones del checklist
   const secciones = Array.from(new Set(checklist.map(p => p.seccion)));
   secciones.forEach(sec => {
@@ -869,4 +901,115 @@ async function generarPDFChecklist(
   }
 
   doc.save(`Checklist-Descargue-${data.codigo || "lote"}.pdf`);
+}
+
+// ─── Evidencias fotográficas del lote (Fase 3b) ────────────────────────────────
+function EvidenciasFotograficas({ loteCodigo, granjaId, esEdicion }: { loteCodigo: string; granjaId: string; esEdicion: boolean }) {
+  const fotosQ = useFotosLote(loteCodigo || undefined);
+  const crearFoto = useCreateFotoLote();
+  const borrarFoto = useDeleteFotoLote();
+  const [dia, setDia] = useState("1");
+  const [galpon, setGalpon] = useState("1");
+  const [subiendo, setSubiendo] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [zoom, setZoom] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const fotos = fotosQ.data ?? [];
+
+  // Si el lote aún no se ha guardado (sin código), no se pueden asociar fotos
+  if (!esEdicion || !loteCodigo) {
+    return (
+      <div className="rounded-xl border border-[#1E2D4A] bg-[#0A111F] p-4 text-center">
+        <ImageIcon className="w-8 h-8 mx-auto mb-2 text-[#475569]"/>
+        <p className="text-xs text-[#94A3B8]">Guarda primero el lote (con su código) para poder adjuntar evidencias fotográficas por día y galpón.</p>
+      </div>
+    );
+  }
+
+  async function onArchivo(files: FileList | null) {
+    if (!files || !files.length) return;
+    setError(null); setSubiendo(true);
+    try {
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith("image/")) { setError("Solo se permiten imágenes"); continue; }
+        const comprimida = await comprimirImagen(file, 1280, 0.7);
+        await crearFoto.mutateAsync({
+          granjaId, loteCodigo, dia, galpon,
+          nombre: file.name, url: comprimida, size: comprimida.length,
+        });
+      }
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? e?.message ?? "Error al subir la imagen");
+    } finally {
+      setSubiendo(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-[#1E2D4A] overflow-hidden">
+      <div className="px-4 py-3 bg-[#0A111F] flex items-center gap-2">
+        <ImageIcon className="w-4 h-4 text-emerald-400"/>
+        <h4 className="text-sm font-bold text-white">Evidencias Fotográficas</h4>
+        <span className="text-[10px] text-[#94A3B8] ml-auto">{fotos.length} foto(s)</span>
+      </div>
+      <div className="p-4 bg-[#0D1526]">
+        {/* Controles de carga */}
+        <div className="flex flex-wrap items-end gap-3 mb-4">
+          <div>
+            <label className="text-[10px] text-[#94A3B8] mb-1 block">Día</label>
+            <select value={dia} onChange={e => setDia(e.target.value)} className="bg-[#0A111F] border border-[#1E2D4A] rounded-md px-2 py-1.5 text-xs text-white outline-none">
+              {DIAS.map(d => <option key={d} value={String(d)}>Día {d}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] text-[#94A3B8] mb-1 block">Galpón</label>
+            <select value={galpon} onChange={e => setGalpon(e.target.value)} className="bg-[#0A111F] border border-[#1E2D4A] rounded-md px-2 py-1.5 text-xs text-white outline-none">
+              {GALPONES.map(g => <option key={g} value={g}>Galpón {g}</option>)}
+            </select>
+          </div>
+          <button onClick={() => inputRef.current?.click()} disabled={subiendo}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-xs font-bold disabled:opacity-50">
+            {subiendo ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <ImagePlus className="w-3.5 h-3.5"/>}
+            {subiendo ? "Subiendo…" : "Adjuntar foto"}
+          </button>
+          <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => onArchivo(e.target.files)}/>
+          <p className="text-[10px] text-[#475569]">Se comprime automáticamente · se asocia a Día {dia} · Galpón {galpon}</p>
+        </div>
+        {error && <p className="text-[11px] text-red-400 mb-3 flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> {error}</p>}
+
+        {/* Galería */}
+        {fotosQ.isLoading ? (
+          <div className="flex items-center gap-2 text-[#94A3B8] text-xs py-6 justify-center"><Loader2 className="w-4 h-4 animate-spin"/> Cargando fotos…</div>
+        ) : fotos.length === 0 ? (
+          <p className="text-xs text-[#64748B] text-center py-6">Sin evidencias aún. Adjunta fotos del pollito, galpón, equipos, etc.</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {fotos.map(f => (
+              <div key={f.id} className="relative group rounded-lg overflow-hidden border border-[#1E2D4A] bg-[#0A111F]">
+                <img src={f.url} alt={f.nombre} className="w-full h-28 object-cover cursor-pointer" onClick={() => setZoom(f.url)}/>
+                <div className="px-2 py-1.5">
+                  <p className="text-[10px] text-emerald-300 font-semibold">Día {f.dia} · Galpón {f.galpon}</p>
+                  <p className="text-[9px] text-[#64748B] truncate">{f.nombre}</p>
+                </div>
+                <button onClick={async () => { if (confirm("¿Eliminar esta foto?")) await borrarFoto.mutateAsync(f.id); }}
+                  className="absolute top-1 right-1 p-1 rounded-md bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/80" title="Eliminar">
+                  <Trash2 className="w-3 h-3"/>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Zoom de foto */}
+      {zoom && (
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4" onClick={() => setZoom(null)}>
+          <img src={zoom} alt="Evidencia" className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain"/>
+          <button onClick={() => setZoom(null)} className="absolute top-4 right-4 text-white"><X className="w-6 h-6"/></button>
+        </div>
+      )}
+    </div>
+  );
 }
