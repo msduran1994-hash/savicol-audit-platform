@@ -157,7 +157,7 @@ function extraerEvidencias(auditorias: any[], cediId: string): { area: string; d
 function seccionTexto(num: number, titulo: string, contenido: string, generadaIA = false): string {
   return `<div style="margin-bottom:20px">
     <h2 style="font-size:15px;color:#0D1526;border-left:4px solid #10B981;padding-left:10px;margin:0 0 8px">
-      ${num}. ${titulo}${generadaIA ? ` <span style="font-size:9px;color:#10B981;font-weight:400">· IA</span>` : ""}
+      ${num}. ${titulo}
     </h2>
     <p style="font-size:11px;line-height:1.7;color:#334155;margin:0;text-align:justify">${(contenido || "—").replace(/\n/g, "<br>")}</p>
   </div>`;
@@ -223,7 +223,7 @@ function construirInformeEjecutivo(opts: {
       planes.map(p => `<div style="border:1px solid #e2e8f0;border-radius:6px;padding:10px;margin-bottom:8px">
         <div style="font-size:11px;font-weight:700;color:#0D1526">${p.titulo || "—"}</div>
         <div style="font-size:9px;color:#94a3b8;margin:3px 0">Responsable: ${p.responsable || "—"} · Estado: ${normEstado(p.estado)} · Compromiso: ${fmtFecha(p.fechaCompromiso)}</div>
-        ${p.recomendacionIA ? `<div style="font-size:9.5px;color:#166534;background:#f0fdf4;border-radius:5px;padding:7px;margin-top:4px"><strong>Recomendación IA:</strong> ${p.recomendacionIA.replace(/[#*]/g,"").slice(0,260)}</div>` : ""}
+        ${p.recomendacionIA ? `<div style="font-size:9.5px;color:#166534;background:#f0fdf4;border-radius:5px;padding:7px;margin-top:4px"><strong>Recomendación:</strong> ${p.recomendacionIA.replace(/[#*]/g,"").slice(0,260)}</div>` : ""}
       </div>`).join("")}
   </div>`;
 
@@ -397,7 +397,7 @@ export function InformeEjecutivoModal({ cedis, hallazgos, auditorias, usuario, o
           {error && <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs">{error}</div>}
 
           <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 px-3 py-2.5 text-[10px] text-[#94A3B8] leading-relaxed">
-            El informe consolida <strong className="text-emerald-400">Consolidado + Cumplimiento + Evidencias</strong> en 17 secciones, con análisis IA generado al momento. La generación puede tardar ~20-40 s.
+            El informe consolida <strong className="text-emerald-400">Consolidado + Cumplimiento + Evidencias</strong> en 17 secciones, con análisis generado al momento. La generación puede tardar ~20-40 s.
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1E2D4A]">
@@ -405,7 +405,7 @@ export function InformeEjecutivoModal({ cedis, hallazgos, auditorias, usuario, o
             <button onClick={exportar} disabled={generando || !cediId}
               className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-xs font-bold flex items-center gap-2 disabled:opacity-40">
               {generando ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Download className="w-3.5 h-3.5"/>}
-              {fase === "ia" ? "Generando análisis IA…" : fase === "pdf" ? "Construyendo PDF…" : "Exportar PDF"}
+              {fase === "ia" ? "Generando análisis…" : fase === "pdf" ? "Construyendo PDF…" : "Exportar PDF"}
             </button>
           </div>
         </div>
