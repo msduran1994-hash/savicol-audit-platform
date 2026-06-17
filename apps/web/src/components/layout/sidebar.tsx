@@ -7,7 +7,7 @@ import {
   Tractor, ClipboardCheck, AlertTriangle, Target, Trophy,
   Package, FileText, Activity, Files,
   Truck, Table2, CheckSquare, Camera, Sparkles,
-  Warehouse,
+  Warehouse, Egg,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
@@ -29,6 +29,7 @@ const GRANJAS_NAV = [
   { href: "/granjas/auditorias", label: "Auditorías",       icon: ClipboardCheck,   badge: null },
   { href: "/granjas/hallazgos",  label: "Hallazgos",        icon: AlertTriangle,    badge: null },
   { href: "/granjas/kpi",        label: "Cumplimiento KPI", icon: Target,           badge: null },
+  { href: "/granjas/trazabilidad", label: "Trazabilidad",   icon: Egg,              badge: null },
   { href: "/granjas/ranking",    label: "Ranking",          icon: Trophy,           badge: null },
   { href: "/granjas/inventario", label: "Inventario",       icon: Package,          badge: null },
   { href: "/granjas/reportes",   label: "Reportes",         icon: FileText,         badge: null },
