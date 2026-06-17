@@ -2,7 +2,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // Evidencias · CEDIS · conectado al API
 // ═══════════════════════════════════════════════════════════════════════════════
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import { useCedis } from "@/hooks/useCedis";
 import {
@@ -13,8 +13,8 @@ import { useAuthStore } from "@/store/auth.store";
 import { AUDITORS } from "@/lib/constants";
 import {
   Upload, FileText, FileSpreadsheet, Image as ImageIcon, Video, FolderOpen,
-  Search, Plus, ExternalLink, Trash2, X, AlertCircle, Loader2, Building2,
-  UploadCloud, Eye, FileCheck,
+  Search, Plus, Trash2, X, AlertCircle, Loader2, Building2,
+  UploadCloud, Eye, FileCheck, Download, Maximize2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -120,6 +120,34 @@ async function cargarXlsx(): Promise<any> {
   return (window as any).XLSX;
 }
 
+// Renderiza una página concreta de un PDF en un canvas (para el panel de vista previa)
+async function renderPDFCanvas(dataUrl: string, canvas: HTMLCanvasElement, pageNum: number): Promise<number> {
+  const pdfjsLib: any = (window as any).pdfjsLib || await cargarPdfJs();
+  const base64 = dataUrl.split(",")[1];
+  const raw = atob(base64);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+  const page = await pdf.getPage(Math.min(pageNum, pdf.numPages));
+  const viewport = page.getViewport({ scale: 1.3 });
+  canvas.width = viewport.width; canvas.height = viewport.height;
+  const ctx = canvas.getContext("2d");
+  if (ctx) await page.render({ canvasContext: ctx, viewport }).promise;
+  return pdf.numPages;
+}
+
+// Lee hasta 40 filas de la primera hoja de un XLSX (para el panel de vista previa)
+async function leerXLSXfull(dataUrl: string): Promise<{ hojas: string[]; filas: any[][] } | null> {
+  try {
+    const XLSX: any = (window as any).XLSX || await cargarXlsx();
+    const base64 = dataUrl.split(",")[1];
+    const wb = XLSX.read(base64, { type: "base64" });
+    const hojas: string[] = wb.SheetNames;
+    const filas: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[hojas[0]], { header: 1 }).slice(0, 40);
+    return { hojas, filas };
+  } catch { return null; }
+}
+
 // Quita el bloque [META]...[/META] del nombre para mostrarlo limpio en la lista
 function nombreLimpio(nombre: string): string {
   return (nombre ?? "").replace(/\s*\[META\][\s\S]*?\[\/META\]/, "").trim();
@@ -158,6 +186,7 @@ export default function EvidenciasCedisPage() {
 
   const createEv = useCreateEvidenciaCedi();
   const removeEv = useDeleteEvidenciaCedi();
+  const [seleccionado, setSeleccionado] = useState<any | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -227,7 +256,7 @@ export default function EvidenciasCedisPage() {
           ))}
         </div>
 
-        {/* Listado */}
+        {/* Listado con vista previa de dos paneles */}
         <div className="card-base">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-display font-bold text-white text-sm">Evidencias registradas</h3>
@@ -246,49 +275,56 @@ export default function EvidenciasCedisPage() {
               </p>
               <p className="text-[#475569] text-xs">
                 {selectedCedi
-                  ? "Click en \"Cargar evidencia\" para vincular un archivo desde repositorio externo"
+                  ? "Click en \"Cargar evidencia\" para subir un archivo PDF o XLSX"
                   : "Las evidencias se asocian a cada CEDI auditado"}
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {evid.map(e => {
-                const Icon = ICONO_TIPO[e.tipo] ?? FolderOpen;
-                const color = COLOR_TIPO[e.tipo] ?? "#94A3B8";
-                return (
-                  <div key={e.id} className="bg-[#1A2540] border border-[#2A3F6A] rounded-lg p-3 flex flex-col">
-                    <div className="flex items-start gap-3 mb-2">
-                      <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}18`, color }}>
-                        <Icon className="w-5 h-5"/>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white truncate" title={nombreLimpio(e.nombre)}>{nombreLimpio(e.nombre)}</p>
-                        <p className="text-[10px] text-[#94A3B8] mt-0.5">{e.categoria ?? "Sin categoría"}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-5">
+              {/* Panel izquierdo: lista */}
+              <div className="space-y-2">
+                {evid.map(e => {
+                  const Icon = ICONO_TIPO[e.tipo] ?? FolderOpen;
+                  const color = COLOR_TIPO[e.tipo] ?? "#94A3B8";
+                  const meta = leerMeta(e.nombre);
+                  const activo = seleccionado?.id === e.id;
+                  return (
+                    <div key={e.id} onClick={() => setSeleccionado(e)}
+                      className={cn("p-3 rounded-xl border cursor-pointer transition-colors",
+                        activo ? "bg-emerald-500/10 border-emerald-500/40" : "bg-[#1A2540] border-[#2A3F6A] hover:border-[#3A4F7A]")}>
+                      <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}18`, color }}>
+                          <Icon className="w-5 h-5"/>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white truncate" title={nombreLimpio(e.nombre)}>{nombreLimpio(e.nombre)}</p>
+                          <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-[#0D1526] text-emerald-300 mt-1">{e.categoria ?? "Sin categoría"}</span>
+                          <p className="text-[10px] text-[#475569] mt-1">{new Date(e.uploadedAt).toLocaleDateString("es-CO")} · {meta.auditor || e.uploadedBy} · {fmtSize(e.size)}</p>
+                        </div>
+                        <button onClick={async (ev) => {
+                            ev.stopPropagation();
+                            if (!confirm(`¿Eliminar evidencia "${nombreLimpio(e.nombre)}"?`)) return;
+                            try { await removeEv.mutateAsync(e.id); if (seleccionado?.id === e.id) setSeleccionado(null); }
+                            catch (err: any) { alert("Error: " + (err?.response?.data?.message ?? err?.message)); }
+                          }}
+                          className="p-1 text-[#64748B] hover:text-red-400 shrink-0" title="Eliminar">
+                          <Trash2 className="w-3.5 h-3.5"/>
+                        </button>
                       </div>
                     </div>
-                    <p className="text-[10px] text-[#475569] mb-3">
-                      {new Date(e.uploadedAt).toLocaleDateString("es-CO")} · {leerMeta(e.nombre).auditor || e.uploadedBy}
-                    </p>
-                    <div className="flex items-center gap-2 mt-auto">
-                      <a href={e.url} target="_blank" rel="noopener noreferrer"
-                        className="flex-1 px-2 py-1 rounded bg-[#0D1526] border border-[#1E2D4A] hover:border-emerald-500/40 text-emerald-300 hover:text-emerald-400 text-[10px] flex items-center justify-center gap-1.5">
-                        <ExternalLink className="w-3 h-3"/>Abrir
-                      </a>
-                      <button
-                        onClick={async () => {
-                          if (!confirm(`¿Eliminar evidencia "${e.nombre}"?`)) return;
-                          try { await removeEv.mutateAsync(e.id); }
-                          catch (err: any) { alert("Error: " + (err?.response?.data?.message ?? err?.message)); }
-                        }}
-                        className="px-2 py-1 rounded bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 text-red-300 hover:text-red-400"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="w-3 h-3"/>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+
+              {/* Panel derecho: vista previa */}
+              <div className="lg:sticky lg:top-4 h-fit">
+                {seleccionado
+                  ? <EvidenciaPreview ev={seleccionado} meta={leerMeta(seleccionado.nombre)}/>
+                  : <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl p-12 text-center text-[#64748B]">
+                      <Eye className="w-10 h-10 mx-auto mb-3 opacity-40"/>
+                      <p className="text-sm">Selecciona una evidencia de la lista para ver su vista previa, información y opciones de descarga.</p>
+                    </div>}
+              </div>
             </div>
           )}
         </div>
@@ -543,6 +579,166 @@ function EvidenciaCediModal({ cediId, cediNombre, error, onClose, onSave }: {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// ─── Panel derecho: vista previa de la evidencia (PDF/Excel) + info + descarga ──
+function EvidenciaPreview({ ev, meta }: { ev: any; meta: Record<string, string> }) {
+  const [pdfPage, setPdfPage] = useState(1);
+  const [pdfPages, setPdfPages] = useState(0);
+  const [xlsx, setXlsx] = useState<{ hojas: string[]; filas: any[][] } | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [errorPrev, setErrorPrev] = useState<string | null>(null);
+  const [ampliado, setAmpliado] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  async function cargarPreview(pagina: number) {
+    setErrorPrev(null);
+    if (!ev.url) { setErrorPrev("Sin archivo"); return; }
+    setCargando(true);
+    try {
+      if (ev.tipo === "PDF" && canvasRef.current) {
+        const n = await renderPDFCanvas(ev.url, canvasRef.current, pagina);
+        setPdfPages(n);
+      } else if (ev.tipo === "Excel") {
+        setXlsx(await leerXLSXfull(ev.url));
+      }
+    } catch {
+      setErrorPrev("No se pudo generar la vista previa. Usa descargar para abrir el archivo.");
+    } finally {
+      setCargando(false);
+    }
+  }
+  // Cargar la vista previa al montar (el componente se remonta por key={ev.id})
+  useEffect(() => {
+    const t = setTimeout(() => cargarPreview(1), 80);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function descargar() {
+    const a = document.createElement("a");
+    a.href = ev.url; a.download = nombreLimpio(ev.nombre) || "evidencia";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+  async function cambiarPagina(delta: number) {
+    const next = Math.min(Math.max(1, pdfPage + delta), pdfPages || 1);
+    setPdfPage(next);
+    await cargarPreview(next);
+  }
+
+  const Icon = ICONO_TIPO[ev.tipo] ?? FolderOpen;
+  const color = COLOR_TIPO[ev.tipo] ?? "#94A3B8";
+  return (
+    <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl overflow-hidden" key={ev.id}>
+      {/* Cabecera info */}
+      <div className="p-4 border-b border-[#1E2D4A]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}18`, color }}>
+              <Icon className="w-5 h-5"/>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-white truncate">{nombreLimpio(ev.nombre)}</p>
+              <p className="text-[11px] text-[#94A3B8]">{ev.tipo} · {fmtSize(ev.size)} · {new Date(ev.uploadedAt).toLocaleDateString("es-CO")}</p>
+            </div>
+          </div>
+          <button onClick={descargar} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold shrink-0 hover:bg-emerald-500/25">
+            <Download className="w-3.5 h-3.5"/> Descargar
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-3 text-[11px]">
+          <div className="text-[#64748B]">Categoría: <span className="text-emerald-300">{ev.categoria ?? "—"}</span></div>
+          <div className="text-[#64748B]">Auditor: <span className="text-[#94A3B8]">{meta.auditor || ev.uploadedBy}</span></div>
+          {meta.fechaVisita && <div className="text-[#64748B]">Fecha visita: <span className="text-[#94A3B8]">{meta.fechaVisita}</span></div>}
+          {meta.fechaInforme && <div className="text-[#64748B]">Fecha informe: <span className="text-[#94A3B8]">{meta.fechaInforme}</span></div>}
+        </div>
+      </div>
+
+      {/* Cuerpo de vista previa */}
+      <div className="p-4 bg-[#0A111F] min-h-[360px]">
+        {cargando && <div className="flex items-center justify-center gap-2 text-emerald-400 text-sm py-16"><Loader2 className="w-4 h-4 animate-spin"/> Generando vista previa…</div>}
+        {errorPrev && !cargando && <div className="flex items-center gap-2 text-amber-300 text-xs py-8 px-3 bg-amber-500/10 rounded-lg"><AlertCircle className="w-4 h-4 shrink-0"/> {errorPrev}</div>}
+
+        {!cargando && !errorPrev && ev.tipo === "PDF" && (
+          <div>
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <button onClick={() => cambiarPagina(-1)} disabled={pdfPage<=1} className="px-2 py-1 rounded bg-[#1A2540] text-white text-xs disabled:opacity-40">‹ Anterior</button>
+              <span className="text-xs text-[#94A3B8]">Página {pdfPage} de {pdfPages || "…"}</span>
+              <button onClick={() => cambiarPagina(1)} disabled={pdfPages>0 && pdfPage>=pdfPages} className="px-2 py-1 rounded bg-[#1A2540] text-white text-xs disabled:opacity-40">Siguiente ›</button>
+              <button onClick={() => setAmpliado(true)} title="Ampliar" className="px-2 py-1 rounded bg-[#1A2540] text-white text-xs flex items-center gap-1"><Maximize2 className="w-3 h-3"/></button>
+            </div>
+            <div className="overflow-auto max-h-[460px] flex justify-center bg-white rounded-lg">
+              <canvas ref={canvasRef} className="max-w-full"/>
+            </div>
+          </div>
+        )}
+
+        {!cargando && !errorPrev && ev.tipo === "Excel" && xlsx && (
+          <div>
+            <p className="text-[11px] text-[#94A3B8] mb-2">{xlsx.hojas.length} hoja(s): {xlsx.hojas.join(", ")}</p>
+            <div className="overflow-auto max-h-[460px] border border-[#1E2D4A] rounded-lg">
+              <table className="text-[11px] text-[#cbd5e1] border-collapse w-full">
+                <tbody>
+                  {xlsx.filas.map((fila, fi) => (
+                    <tr key={fi} className={fi===0 ? "bg-[#1A2540] font-semibold" : ""}>
+                      {(fila.length ? fila : [""]).map((c: any, ci) => <td key={ci} className="border border-[#1E2D4A] px-2 py-1 whitespace-nowrap">{String(c ?? "")}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {!cargando && !errorPrev && ev.tipo !== "PDF" && ev.tipo !== "Excel" && (
+          <div className="text-center py-12">
+            <Icon className="w-12 h-12 mx-auto mb-3" style={{ color }}/>
+            <p className="text-sm text-white font-semibold">{nombreLimpio(ev.nombre)}</p>
+            <p className="text-[11px] text-[#94A3B8] mt-1 mb-4">La vista previa integrada no está disponible para este tipo. Descarga el archivo para abrirlo.</p>
+            <button onClick={descargar} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold hover:bg-emerald-500/25">
+              <Download className="w-3.5 h-3.5"/> Descargar archivo
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Modal ampliado PDF */}
+      {ampliado && ev.tipo === "PDF" && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setAmpliado(false)}>
+          <div className="bg-white rounded-lg overflow-auto max-h-[92vh] max-w-[92vw]" onClick={e => e.stopPropagation()}>
+            <PdfAmpliadoEv url={ev.url}/>
+          </div>
+          <button onClick={() => setAmpliado(false)} className="absolute top-4 right-4 text-white"><X className="w-6 h-6"/></button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PdfAmpliadoEv({ url }: { url: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const [pg, setPg] = useState(1);
+  const [tot, setTot] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(async () => { if (ref.current) setTot(await renderPDFCanvas(url, ref.current, 1)); }, 60);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  async function ir(delta: number) {
+    const next = Math.min(Math.max(1, pg + delta), tot || 1);
+    setPg(next);
+    if (ref.current) await renderPDFCanvas(url, ref.current, next);
+  }
+  return (
+    <div className="p-2">
+      <div className="flex items-center justify-center gap-3 mb-2">
+        <button onClick={() => ir(-1)} disabled={pg<=1} className="px-2 py-1 rounded bg-gray-200 text-xs disabled:opacity-40">‹</button>
+        <span className="text-xs text-gray-600">Página {pg} de {tot || "…"}</span>
+        <button onClick={() => ir(1)} disabled={tot>0 && pg>=tot} className="px-2 py-1 rounded bg-gray-200 text-xs disabled:opacity-40">›</button>
+      </div>
+      <canvas ref={ref}/>
     </div>
   );
 }
