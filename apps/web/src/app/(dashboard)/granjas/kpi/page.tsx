@@ -1359,7 +1359,6 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
   const fecha    = new Date().toISOString().slice(0, 10);
   const filename = `Informe-Auditoria-Savicol-${fecha}.pdf`;
 
-  // Contenedor temporal en el documento principal (más fiable que iframe para html2canvas)
   let container: HTMLDivElement | null = null;
 
   try {
@@ -1368,50 +1367,60 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
       import("html2canvas"),
     ]);
 
-    // Extraer solo el contenido del <body> y los estilos del <style>
+    // Extraer el contenido del <body> y los estilos del <style> del HTML completo
     const bodyMatch  = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
     const styleMatch = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
-    const bodyContent = bodyMatch ? bodyMatch[1] : html;
-    const styleContent = styleMatch ? styleMatch[1] : "";
+    const bodyContent  = bodyMatch ? bodyMatch[1] : html;
+    let   styleContent = styleMatch ? styleMatch[1] : "";
+    // Reasignar reglas de `body {...}` a un wrapper, ya que el contenido irá en un div
+    styleContent = styleContent.replace(/(^|\})\s*body\s*\{/g, "$1 .pdf-root{");
 
-    // Crear contenedor visible (fuera de pantalla) en el documento real
+    // Contenedor visible en pantalla (no fuera de viewport) para que html2canvas
+    // renderice correctamente. Se oculta con opacity y se coloca al frente del flujo.
     container = document.createElement("div");
-    container.style.cssText = "position:absolute;top:0;left:-10000px;width:794px;background:#ffffff;z-index:-1;";
+    container.style.cssText = "position:fixed;top:0;left:0;width:900px;background:#ffffff;z-index:-9999;opacity:0;pointer-events:none;";
+
     const styleEl = document.createElement("style");
     styleEl.textContent = styleContent;
     container.appendChild(styleEl);
-    const contentEl = document.createElement("div");
-    contentEl.innerHTML = bodyContent;
-    container.appendChild(contentEl);
+
+    const root = document.createElement("div");
+    root.className = "pdf-root";
+    root.style.cssText = "width:900px;background:#ffffff;color:#1a202c;font-family:'Segoe UI',Arial,sans-serif;";
+    root.innerHTML = bodyContent;
+    container.appendChild(root);
     document.body.appendChild(container);
 
-    // Esperar a que el navegador renderice y las imágenes (data URI) carguen
-    await new Promise(r => setTimeout(r, 600));
+    // Esperar render + carga de imágenes (data URI / remotas)
+    await new Promise(r => setTimeout(r, 700));
     const imgs = Array.from(container.querySelectorAll("img"));
     await Promise.all(imgs.map(img => {
-      if (img.complete) return Promise.resolve();
-      return new Promise<void>(res => { img.onload = () => res(); img.onerror = () => res(); setTimeout(res, 1500); });
+      if (img.complete && img.naturalHeight > 0) return Promise.resolve();
+      return new Promise<void>(res => { img.onload = () => res(); img.onerror = () => res(); setTimeout(res, 2000); });
     }));
 
-    // Capturar el contenido completo como imagen de alta resolución
-    const canvas = await html2canvas(contentEl, {
+    // Capturar el ROOT (con su estilo aplicado) en alta resolución
+    const canvas = await html2canvas(root, {
       scale:            2,
       useCORS:          true,
       allowTaint:       true,
       backgroundColor:  "#ffffff",
       logging:          false,
-      windowWidth:      794,
+      width:            900,
+      windowWidth:      900,
     });
 
     document.body.removeChild(container);
     container = null;
 
-    // Crear PDF A4 multipágina con el canvas
+    if (!canvas.width || !canvas.height) {
+      throw new Error("El informe se renderizó vacío (canvas sin dimensiones)");
+    }
+
+    // PDF A4 multipágina
     const pdf      = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
     const pageW    = pdf.internal.pageSize.getWidth();
     const pageH    = pdf.internal.pageSize.getHeight();
-
-    // Paginación correcta: recortar el canvas por páginas (evita repetición)
     const pxPerMm  = canvas.width / pageW;
     const pageHpx  = Math.floor(pageH * pxPerMm);
     let renderedH  = 0;
@@ -1428,7 +1437,7 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
         ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
         ctx.drawImage(canvas, 0, renderedH, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
       }
-      const sliceData = pageCanvas.toDataURL("image/jpeg", 0.82);
+      const sliceData = pageCanvas.toDataURL("image/jpeg", 0.85);
       const sliceHmm  = (sliceH * pageW) / canvas.width;
       pdf.addImage(sliceData, "JPEG", 0, 0, pageW, sliceHmm, undefined, "FAST");
       renderedH += sliceH;
@@ -1436,6 +1445,9 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
     }
 
     const b64 = pdf.output("datauristring").split(",")[1];
+    if (!b64 || b64.length < 1000) {
+      throw new Error("El PDF generado está vacío");
+    }
     return { b64, filename };
 
   } catch (err) {
