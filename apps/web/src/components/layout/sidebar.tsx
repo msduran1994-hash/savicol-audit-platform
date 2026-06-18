@@ -6,6 +6,7 @@ import {
   Settings, Shield, ChevronLeft, ChevronRight, LogOut,
   Tractor, ClipboardCheck, AlertTriangle, Target, Trophy,
   Package, FileText, Activity, Files,
+  Gauge,
   Truck, Table2, CheckSquare, Camera, Sparkles,
   Warehouse, Egg,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { APP_NAME, APP_COMPANY } from "@/lib/constants";
 import { useState } from "react";
 
 const MAIN_NAV = [
+  { href: "/resumen-ejecutivo", label: "Resumen Ejecutivo", icon: Gauge,        badge: null },
   { href: "/",              label: "Dashboard",       icon: LayoutDashboard, badge: null },
   { href: "/cronograma",    label: "Cronograma 2026", icon: CalendarDays,    badge: null },
   { href: "/indicadores",   label: "Indicadores",     icon: BarChart3,       badge: null },
