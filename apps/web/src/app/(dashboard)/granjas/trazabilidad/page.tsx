@@ -3,6 +3,7 @@ import { useState, useMemo, useRef } from "react";
 import { Header } from "@/components/layout/header";
 import { useGranjas } from "@/hooks/useGranjas";
 import { useAuthStore } from "@/store/auth.store";
+import { ChecklistSection } from "./checklists-trazabilidad";
 import {
   useLotes, useCreateLote, useUpdateLote, useDeleteLote,
   loteVacio, avanceGlobal, GALPONES,
@@ -58,6 +59,7 @@ export default function TrazabilidadPage() {
   const [filterEstado, setFilterEstado] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<LoteItem | null>(null);
+  const [vista, setVista] = useState<"lotes" | "encacetamiento" | "trazabilidad7">("lotes");
 
   const lotes = lotesQ.data ?? [];
   const granjas = granjasQ.data ?? [];
@@ -90,6 +92,25 @@ export default function TrazabilidadPage() {
         subtitle={`${totalLotes} lote(s) · recepción, encasetamiento y desempeño 0–7 días`}
       />
       <div className="flex-1 p-6 space-y-5">
+        {/* Selector de vista */}
+        <div className="flex gap-1 bg-[#0A111F] border border-[#1E2D4A] rounded-xl p-1 w-fit">
+          {[
+            { id: "lotes" as const,          label: "Lotes" },
+            { id: "encacetamiento" as const, label: "Checklist Encacetamiento" },
+            { id: "trazabilidad7" as const,  label: "Checklist Trazabilidad 7 Días" },
+          ].map(v => (
+            <button key={v.id} onClick={() => setVista(v.id)}
+              className={cn("px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-colors",
+                vista === v.id ? "bg-emerald-500 text-[#0A111F] font-bold" : "text-[#94A3B8] hover:text-white")}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        {vista === "encacetamiento" && <ChecklistSection tipo="encacetamiento"/>}
+        {vista === "trazabilidad7" && <ChecklistSection tipo="trazabilidad7"/>}
+
+        {vista === "lotes" && <>
         {/* Indicadores */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
@@ -210,9 +231,10 @@ export default function TrazabilidadPage() {
             })}
           </div>
         )}
+        </>}
       </div>
 
-      {modalOpen && (
+      {modalOpen && vista === "lotes" && (
         <LoteModal
           item={editing}
           granjas={granjas}
