@@ -46,7 +46,27 @@ export async function POST(req: NextRequest) {
     ].filter(Boolean).join("\n");
 
     let promptText: string;
-    if (modo === "implementacion") {
+    if (modo === "informe-checklist") {
+      // Genera las secciones narrativas del PDF ejecutivo de un checklist de auditoría.
+      // `accion` trae un resumen estructurado del checklist (tipo, cumplimiento, hallazgos).
+      promptText = [
+        "Eres auditor avícola senior de Savicol con experiencia en producción y bioseguridad en granjas colombianas.",
+        "Con base en los resultados del siguiente checklist de auditoría, redacta las secciones de un informe ejecutivo profesional.",
+        "",
+        contexto,
+        "",
+        `Detalle de la evaluación:\n${accion.trim()}`,
+        "",
+        "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional ni markdown, con esta forma exacta:",
+        '{"resumenEjecutivo": "...", "conclusiones": "...", "planAccion": "..."}',
+        "",
+        "INSTRUCCIONES de redacción (en prosa profesional, español, redactado por un auditor humano):",
+        "- resumenEjecutivo: 2-3 frases que sinteticen el desempeño del checklist, el nivel de cumplimiento y los aspectos más relevantes.",
+        "- conclusiones: 2-3 frases con el dictamen del auditor sobre el estado evaluado y su impacto en el lote.",
+        "- planAccion: acciones correctivas concretas para los puntos no conformes o parciales; si todo cumple, indicar acciones de mantenimiento y seguimiento.",
+        "No menciones inteligencia artificial, modelos ni generación automática. Escribe como un auditor profesional. Sin introducciones ni despedidas.",
+      ].join("\n");
+    } else if (modo === "implementacion") {
       promptText = [
         "Eres auditor operacional senior de Savicol con experiencia en centros de distribución (CEDIS) avícolas en Colombia.",
         "Con base en el siguiente hallazgo, redacta un PLAN DE IMPLEMENTACIÓN accionable.",
@@ -112,7 +132,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: (modo === "implementacion" || modo === "recomendaciones") ? 320 : 250,
+        max_tokens: modo === "informe-checklist" ? 700 : (modo === "implementacion" || modo === "recomendaciones") ? 320 : 250,
         messages: [{ role: "user", content }],
       }),
     });
