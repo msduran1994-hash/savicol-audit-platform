@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { useGranjas } from "@/hooks/useGranjas";
 import { useCedis, useHallazgosCedi, useAuditoriasCedi } from "@/hooks/useCedis";
@@ -8,7 +8,7 @@ import {
   Gauge, ShieldCheck, AlertTriangle, ClipboardCheck, Tractor, Egg,
   TrendingUp, Activity, CheckCircle2, XCircle, Clock, Loader2,
   Package, Route, Warehouse, DollarSign, Megaphone, Users2, Info,
-  BarChart3, Trophy,
+  BarChart3, Trophy, FileDown,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -100,9 +100,33 @@ export default function ResumenEjecutivoPage() {
 
   const cargando = granjasQ.isLoading || hallazgosCediQ.isLoading || auditoriasCediQ.isLoading;
 
-  const ind = useMemo(() => {
+  // ── Filtros globales (Fase 3) ──
+  const [fRegion, setFRegion] = useState("");
+  const [fRiesgo, setFRiesgo] = useState("");
+  const [fSanitario, setFSanitario] = useState("");
+  const [fCriticidad, setFCriticidad] = useState("");
+  const filtrosActivos = !!(fRegion || fRiesgo || fSanitario || fCriticidad);
+  function limpiarFiltros() { setFRegion(""); setFRiesgo(""); setFSanitario(""); setFCriticidad(""); }
+
+  // Opciones de filtro derivadas de los datos reales
+  const opciones = useMemo(() => {
     const granjas = granjasQ.data ?? [];
-    const hallazgosCedi = hallazgosCediQ.data ?? [];
+    const regiones = Array.from(new Set(granjas.map((g: any) => g.region).filter(Boolean))).sort();
+    return { regiones };
+  }, [granjasQ.data]);
+
+  const ind = useMemo(() => {
+    // Aplicar filtros a granjas y hallazgos antes de calcular indicadores
+    const granjas = (granjasQ.data ?? []).filter((g: any) => {
+      if (fRegion && g.region !== fRegion) return false;
+      if (fRiesgo && (g.nivelRiesgo ?? "").toUpperCase() !== fRiesgo) return false;
+      if (fSanitario && (g.estadoSanitario ?? "").toUpperCase() !== fSanitario) return false;
+      return true;
+    });
+    const hallazgosCedi = (hallazgosCediQ.data ?? []).filter(h => {
+      if (fCriticidad && (h.criticidad ?? "").toUpperCase() !== fCriticidad) return false;
+      return true;
+    });
     const auditoriasCedi = auditoriasCediQ.data ?? [];
     const cedis = cedisQ.data ?? [];
     const lotes = lotesQ.data ?? [];
@@ -175,7 +199,7 @@ export default function ResumenEjecutivoPage() {
       totalHallazgos: hallAbiertos + hallCerrados + hallGranjas,
       topGranjas, distRiesgo, distSanitario, distCriticidadCedi, rankingCedis, distRegion,
     };
-  }, [granjasQ.data, hallazgosCediQ.data, auditoriasCediQ.data, cedisQ.data, lotesQ.data, chkEncQ.data, chkTrzQ.data]);
+  }, [granjasQ.data, hallazgosCediQ.data, auditoriasCediQ.data, cedisQ.data, lotesQ.data, chkEncQ.data, chkTrzQ.data, fRegion, fRiesgo, fSanitario, fCriticidad]);
 
   // Cumplimiento general corporativo (promedio de los cumplimientos con datos)
   const cumplimientoGeneral = Math.round(
@@ -186,6 +210,61 @@ export default function ResumenEjecutivoPage() {
     <div className="flex flex-col min-h-full">
       <Header title="Resumen Ejecutivo" subtitle="Portada corporativa · consolidado gerencial de auditoría" />
       <div className="flex-1 p-6 space-y-6">
+
+        {/* Barra de filtros globales + Generar Informe (Fase 3) */}
+        <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[130px]">
+              <label className="text-[10px] text-[#94A3B8] mb-1 block">Región</label>
+              <select value={fRegion} onChange={e => setFRegion(e.target.value)} className="w-full bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/50">
+                <option value="">Todas</option>
+                {opciones.regiones.map((r: string) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div className="flex-1 min-w-[130px]">
+              <label className="text-[10px] text-[#94A3B8] mb-1 block">Nivel de riesgo</label>
+              <select value={fRiesgo} onChange={e => setFRiesgo(e.target.value)} className="w-full bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/50">
+                <option value="">Todos</option>
+                <option value="ALTO">Alto</option>
+                <option value="MEDIO">Medio</option>
+                <option value="BAJO">Bajo</option>
+              </select>
+            </div>
+            <div className="flex-1 min-w-[130px]">
+              <label className="text-[10px] text-[#94A3B8] mb-1 block">Estado sanitario</label>
+              <select value={fSanitario} onChange={e => setFSanitario(e.target.value)} className="w-full bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/50">
+                <option value="">Todos</option>
+                <option value="OPTIMO">Óptimo</option>
+                <option value="ALERTA">Alerta</option>
+                <option value="CRITICO">Crítico</option>
+              </select>
+            </div>
+            <div className="flex-1 min-w-[130px]">
+              <label className="text-[10px] text-[#94A3B8] mb-1 block">Criticidad hallazgos</label>
+              <select value={fCriticidad} onChange={e => setFCriticidad(e.target.value)} className="w-full bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/50">
+                <option value="">Todas</option>
+                <option value="CRITICA">Crítica</option>
+                <option value="ALTA">Alta</option>
+                <option value="MEDIA">Media</option>
+                <option value="BAJA">Baja</option>
+              </select>
+            </div>
+            {filtrosActivos && (
+              <button onClick={limpiarFiltros} className="px-3 py-2 rounded-lg bg-[#1A2540] hover:bg-[#243150] text-[#94A3B8] text-xs font-semibold flex items-center gap-1.5">
+                <XCircle className="w-3.5 h-3.5"/> Limpiar
+              </button>
+            )}
+            <button onClick={() => generarInformeEjecutivo(ind, { fRegion, fRiesgo, fSanitario, fCriticidad })}
+              className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+              <FileDown className="w-4 h-4"/> Generar Informe
+            </button>
+          </div>
+          {filtrosActivos && (
+            <p className="text-[11px] text-emerald-400/80 mt-2.5 flex items-center gap-1.5">
+              <Info className="w-3 h-3"/> Filtros activos — los indicadores y gráficos reflejan el subconjunto seleccionado.
+            </p>
+          )}
+        </div>
 
         {cargando ? (
           <div className="flex items-center gap-2 text-[#94A3B8] text-sm p-12 justify-center">
@@ -435,4 +514,136 @@ export default function ResumenEjecutivoPage() {
       </div>
     </div>
   );
+}
+
+// ─── Informe Ejecutivo PDF (consolida los indicadores visibles) ────────────────
+const EMPRESA_RE = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.972-5" };
+
+async function generarInformeEjecutivo(ind: any, filtros: { fRegion: string; fRiesgo: string; fSanitario: string; fCriticidad: string }) {
+  const { default: jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+  const PW = doc.internal.pageSize.getWidth();
+  const PH = doc.internal.pageSize.getHeight();
+  const M = 15, CW = PW - M * 2;
+  let y = M;
+  const setFill = (hex: string) => { const n = parseInt(hex.replace("#",""),16); doc.setFillColor((n>>16)&255,(n>>8)&255,n&255); };
+  const setText = (hex: string) => { const n = parseInt(hex.replace("#",""),16); doc.setTextColor((n>>16)&255,(n>>8)&255,n&255); };
+  const need = (h: number) => { if (y + h > PH - M) { doc.addPage(); y = M; } };
+  const semCol = (p: number) => p >= 90 ? "#16A34A" : p >= 70 ? "#D97706" : "#DC2626";
+  const semLab = (p: number) => p >= 90 ? "ÓPTIMO" : p >= 70 ? "ACEPTABLE" : "CRÍTICO";
+
+  // Encabezado
+  setFill("#0D1526"); doc.rect(0, 0, PW, 36, "F");
+  setFill("#C41230"); doc.rect(0, 34, PW, 2, "F");
+  setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
+  doc.text(EMPRESA_RE.nombre, M, 13);
+  setText("#94A3B8"); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+  doc.text(`NIT ${EMPRESA_RE.nit}  ·  Auditoría Interna`, M, 19);
+  doc.text(`Generado: ${new Date().toLocaleDateString("es-CO", { day:"2-digit", month:"long", year:"numeric" })}`, M, 24);
+  setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+  doc.text("Informe Ejecutivo Corporativo", M, 31);
+  y = 44;
+
+  // Filtros aplicados
+  const filtrosTxt: string[] = [];
+  if (filtros.fRegion) filtrosTxt.push(`Región: ${filtros.fRegion}`);
+  if (filtros.fRiesgo) filtrosTxt.push(`Riesgo: ${filtros.fRiesgo}`);
+  if (filtros.fSanitario) filtrosTxt.push(`Sanitario: ${filtros.fSanitario}`);
+  if (filtros.fCriticidad) filtrosTxt.push(`Criticidad: ${filtros.fCriticidad}`);
+  if (filtrosTxt.length) {
+    setText("#475569"); doc.setFont("helvetica", "italic"); doc.setFontSize(8);
+    doc.text(`Filtros aplicados — ${filtrosTxt.join("  ·  ")}`, M, y); y += 6;
+  }
+
+  // Cumplimiento general
+  const cg = Math.round((ind.cumplimientoAud + ind.cumplimientoSanitario + (ind.cumplChecklists || ind.cumplimientoSanitario)) / 3);
+  need(20);
+  setFill("#F8FAFC"); doc.roundedRect(M, y, CW, 16, 2, 2, "F");
+  setText("#475569"); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+  doc.text("Cumplimiento General Corporativo", M + 4, y + 7);
+  setText(semCol(cg)); doc.setFontSize(18); doc.text(`${cg}%`, M + 4, y + 13.5);
+  setText(semCol(cg)); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+  doc.text(semLab(cg), PW - M - 4, y + 10, { align: "right" });
+  y += 22;
+
+  // Tabla de indicadores por área
+  const bloque = (titulo: string, filas: [string, string][]) => {
+    need(12 + filas.length * 6);
+    setFill("#0D1526"); doc.rect(M, y, CW, 8, "F");
+    setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+    doc.text(titulo, M + 3, y + 5.3); y += 8;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    filas.forEach((f, i) => {
+      if (i % 2 === 0) { setFill("#F8FAFC"); doc.rect(M, y, CW, 6, "F"); }
+      setText("#334155"); doc.text(f[0], M + 3, y + 4);
+      setText("#0D1526"); doc.setFont("helvetica", "bold"); doc.text(f[1], PW - M - 3, y + 4, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      y += 6;
+    });
+    y += 4;
+  };
+
+  bloque("Auditoría · CEDIS", [
+    ["Auditorías ejecutadas", String(ind.totalAuditorias)],
+    ["CEDIS evaluados", String(ind.totalCedis)],
+    ["Hallazgos abiertos", String(ind.hallAbiertos)],
+    ["Hallazgos cerrados", String(ind.hallCerrados)],
+    ["Riesgos críticos/altos", String(ind.riesgosCriticos)],
+    ["Cumplimiento (hallazgos cerrados)", `${ind.cumplimientoAud}%`],
+  ]);
+  bloque("Granjas", [
+    ["Total granjas", String(ind.totalGranjas)],
+    ["Hallazgos en granjas", String(ind.hallGranjas)],
+    ["KPIs registrados", String(ind.kpiGranjas)],
+    ["Granjas en riesgo alto", String(ind.riesgoAlto)],
+    ["Sanitario óptimo", String(ind.sanitarioOptimo)],
+    ["Sanitario crítico", String(ind.sanitarioCritico)],
+    ["Cumplimiento sanitario", `${ind.cumplimientoSanitario}%`],
+  ]);
+  bloque("Trazabilidad Avícola", [
+    ["Lotes registrados", String(ind.totalLotes)],
+    ["Checklists realizados", String(ind.totalChecklists)],
+    ["Cumplimiento promedio checklists", `${ind.cumplChecklists}%`],
+  ]);
+
+  // Ranking top granjas
+  if (ind.topGranjas?.length) {
+    need(12 + ind.topGranjas.length * 6);
+    setFill("#0D1526"); doc.rect(M, y, CW, 8, "F");
+    setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+    doc.text("Top Granjas por Hallazgos", M + 3, y + 5.3); y += 8;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    ind.topGranjas.forEach((g: any, i: number) => {
+      if (i % 2 === 0) { setFill("#F8FAFC"); doc.rect(M, y, CW, 6, "F"); }
+      setText("#334155"); doc.text(`${i + 1}. ${g.nombre}`, M + 3, y + 4);
+      setText("#DC2626"); doc.setFont("helvetica", "bold"); doc.text(`${g.hallazgos} hallazgos`, PW - M - 3, y + 4, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      y += 6;
+    });
+    y += 4;
+  }
+
+  // Conclusión calculada
+  need(30);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(11); setText("#0D1526");
+  doc.text("Conclusión Ejecutiva", M, y); y += 2;
+  setFill("#10B981"); doc.rect(M, y, 26, 0.7, "F"); y += 6;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); setText("#334155");
+  const concl = cg >= 90
+    ? `El estado corporativo consolidado es óptimo (${cg}%). Se recomienda mantener los controles y dar continuidad al seguimiento periódico de hallazgos abiertos.`
+    : cg >= 70
+    ? `El estado corporativo consolidado es aceptable (${cg}%), con oportunidades de mejora. Se recomienda priorizar el cierre de los ${ind.hallAbiertos} hallazgos abiertos en CEDIS y atender las ${ind.riesgoAlto} granjas en riesgo alto.`
+    : `El estado corporativo consolidado es crítico (${cg}%). Se requiere intervención prioritaria sobre los ${ind.riesgosCriticos} hallazgos críticos/altos en CEDIS y las ${ind.sanitarioCritico} granjas en estado sanitario crítico.`;
+  doc.splitTextToSize(concl, CW).forEach((ln: string) => { need(5); doc.text(ln, M, y); y += 4.6; });
+
+  // Pie
+  const pages = doc.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    setText("#94A3B8"); doc.setFont("helvetica", "normal"); doc.setFontSize(7);
+    doc.text(`${EMPRESA_RE.nombre} · Informe Ejecutivo · Documento confidencial`, M, PH - 8);
+    doc.text(`Página ${p} de ${pages}`, PW - M, PH - 8, { align: "right" });
+  }
+
+  doc.save(`Informe-Ejecutivo-Savicol-${new Date().toISOString().slice(0,10)}.pdf`);
 }
