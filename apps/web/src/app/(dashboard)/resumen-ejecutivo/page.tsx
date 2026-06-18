@@ -15,6 +15,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from "recharts";
 import { cn } from "@/lib/utils";
+import { SeccionDesempenoAuditores } from "./seccion-desempeno-auditores";
 
 // ─── Resumen Ejecutivo · portada corporativa · Fase 1 ──────────────────────────
 // Consolida indicadores REALES de Auditoría/CEDIS, Granjas y Trazabilidad.
@@ -481,6 +482,9 @@ export default function ResumenEjecutivoPage() {
             </div>
           </div>
         </div>
+
+        {/* Desempeño de Auditores (consolidado) */}
+        <SeccionDesempenoAuditores />
 
         {/* Áreas pendientes de integración (honestidad: sin datos inventados) */}
         <section>
