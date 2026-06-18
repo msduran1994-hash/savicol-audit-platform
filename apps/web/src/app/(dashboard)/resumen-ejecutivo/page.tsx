@@ -8,7 +8,12 @@ import {
   Gauge, ShieldCheck, AlertTriangle, ClipboardCheck, Tractor, Egg,
   TrendingUp, Activity, CheckCircle2, XCircle, Clock, Loader2,
   Package, Route, Warehouse, DollarSign, Megaphone, Users2, Info,
+  BarChart3, Trophy,
 } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+} from "recharts";
 import { cn } from "@/lib/utils";
 
 // ─── Resumen Ejecutivo · portada corporativa · Fase 1 ──────────────────────────
@@ -126,12 +131,49 @@ export default function ResumenEjecutivoPage() {
       ? Math.round(checklists.reduce((a, c) => a + calcularCumplimiento(c.data.preguntas.map((p: any) => p.resultado)), 0) / checklists.length)
       : 0;
 
+    // ── Datos para gráficos y rankings (Fase 2) ──
+    // Top granjas por hallazgos
+    const topGranjas = [...granjas]
+      .sort((a: any, b: any) => (b._count?.hallazgos ?? 0) - (a._count?.hallazgos ?? 0))
+      .slice(0, 6)
+      .map((g: any) => ({ nombre: (g.nombre ?? "—").length > 16 ? g.nombre.slice(0, 15) + "…" : (g.nombre ?? "—"), hallazgos: g._count?.hallazgos ?? 0, riesgo: g.nivelRiesgo }));
+
+    // Distribución de granjas por nivel de riesgo
+    const distRiesgo = ["ALTO", "MEDIO", "BAJO"].map(nivel => ({
+      nivel: nivel === "ALTO" ? "Alto" : nivel === "MEDIO" ? "Medio" : "Bajo",
+      valor: granjas.filter((g: any) => (g.nivelRiesgo ?? "").toUpperCase() === nivel).length,
+    }));
+
+    // Distribución por estado sanitario
+    const distSanitario = [
+      { estado: "Óptimo", valor: sanitarioOptimo, color: "#22C55E" },
+      { estado: "Alerta", valor: granjas.filter((g: any) => (g.estadoSanitario ?? "").toUpperCase() === "ALERTA").length, color: "#F59E0B" },
+      { estado: "Crítico", valor: sanitarioCritico, color: "#EF4444" },
+    ];
+
+    // Hallazgos CEDIS por criticidad
+    const distCriticidadCedi = ["CRITICA", "ALTA", "MEDIA", "BAJA"].map(c => ({
+      criticidad: c.charAt(0) + c.slice(1).toLowerCase(),
+      valor: hallazgosCedi.filter(h => (h.criticidad ?? "").toUpperCase() === c).length,
+    }));
+
+    // Ranking de CEDIS por hallazgos
+    const cediMap: Record<string, number> = {};
+    hallazgosCedi.forEach(h => { const n = (h as any).cedi?.nombre ?? "—"; cediMap[n] = (cediMap[n] ?? 0) + 1; });
+    const rankingCedis = Object.entries(cediMap).map(([nombre, hallazgos]) => ({ nombre, hallazgos })).sort((a, b) => b.hallazgos - a.hallazgos);
+
+    // Granjas por región
+    const regionMap: Record<string, number> = {};
+    granjas.forEach((g: any) => { const r = g.region ?? "—"; regionMap[r] = (regionMap[r] ?? 0) + 1; });
+    const distRegion = Object.entries(regionMap).map(([region, valor]) => ({ region, valor })).sort((a, b) => b.valor - a.valor);
+
     return {
       totalAuditorias, hallAbiertos, hallCerrados, riesgosCriticos, cumplimientoAud,
       totalGranjas, hallGranjas, kpiGranjas, riesgoAlto, sanitarioOptimo, sanitarioCritico, cumplimientoSanitario,
       totalLotes, totalChecklists, cumplChecklists,
       totalCedis: cedis.length,
       totalHallazgos: hallAbiertos + hallCerrados + hallGranjas,
+      topGranjas, distRiesgo, distSanitario, distCriticidadCedi, rankingCedis, distRegion,
     };
   }, [granjasQ.data, hallazgosCediQ.data, auditoriasCediQ.data, cedisQ.data, lotesQ.data, chkEncQ.data, chkTrzQ.data]);
 
@@ -218,6 +260,148 @@ export default function ResumenEjecutivoPage() {
             </div>
           </div>
         </section>
+
+        {/* ── Gráficos ejecutivos y rankings (Fase 2) ── */}
+        <div className="flex items-center gap-2.5 pt-2">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#4A7AFF]1A text-[#4A7AFF]" style={{ background: "#4A7AFF1A", color: "#4A7AFF" }}>
+            <BarChart3 className="w-4.5 h-4.5"/>
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-white">Analítica Ejecutiva</h2>
+            <p className="text-[11px] text-[#64748B]">Rankings, distribuciones y comparativos corporativos</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Top granjas por hallazgos */}
+          <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Trophy className="w-4 h-4 text-amber-400"/>
+              <h3 className="text-sm font-bold text-white">Top granjas por hallazgos</h3>
+            </div>
+            {ind.topGranjas.length === 0 ? (
+              <p className="text-xs text-[#64748B] py-8 text-center">Sin datos</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={ind.topGranjas} layout="vertical" margin={{ left: 10, right: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" horizontal={false}/>
+                  <XAxis type="number" stroke="#64748B" fontSize={11}/>
+                  <YAxis type="category" dataKey="nombre" stroke="#94A3B8" fontSize={10} width={100}/>
+                  <Tooltip contentStyle={{ background: "#0D1526", border: "1px solid #1E2D4A", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "#fff" }} cursor={{ fill: "#1E2D4A33" }}/>
+                  <Bar dataKey="hallazgos" radius={[0, 4, 4, 0]}>
+                    {ind.topGranjas.map((g: any, i: number) => (
+                      <Cell key={i} fill={g.riesgo === "ALTO" ? "#EF4444" : g.riesgo === "MEDIO" ? "#F59E0B" : "#22C55E"}/>
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* Estado sanitario de granjas (dona) */}
+          <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Activity className="w-4 h-4 text-emerald-400"/>
+              <h3 className="text-sm font-bold text-white">Estado sanitario de granjas</h3>
+            </div>
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie data={ind.distSanitario} dataKey="valor" nameKey="estado" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2}>
+                  {ind.distSanitario.map((d: any, i: number) => <Cell key={i} fill={d.color}/>)}
+                </Pie>
+                <Tooltip contentStyle={{ background: "#0D1526", border: "1px solid #1E2D4A", borderRadius: 8, fontSize: 12 }}/>
+                <Legend wrapperStyle={{ fontSize: 12 }}/>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Distribución de riesgo de granjas */}
+          <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <ShieldCheck className="w-4 h-4 text-red-400"/>
+              <h3 className="text-sm font-bold text-white">Granjas por nivel de riesgo</h3>
+            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={ind.distRiesgo} margin={{ left: -15, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false}/>
+                <XAxis dataKey="nivel" stroke="#94A3B8" fontSize={11}/>
+                <YAxis stroke="#64748B" fontSize={11}/>
+                <Tooltip contentStyle={{ background: "#0D1526", border: "1px solid #1E2D4A", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "#fff" }} cursor={{ fill: "#1E2D4A33" }}/>
+                <Bar dataKey="valor" radius={[4, 4, 0, 0]}>
+                  {ind.distRiesgo.map((d: any, i: number) => (
+                    <Cell key={i} fill={d.nivel === "Alto" ? "#EF4444" : d.nivel === "Medio" ? "#F59E0B" : "#22C55E"}/>
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Hallazgos CEDIS por criticidad */}
+          <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle className="w-4 h-4 text-amber-400"/>
+              <h3 className="text-sm font-bold text-white">Hallazgos CEDIS por criticidad</h3>
+            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={ind.distCriticidadCedi} margin={{ left: -15, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false}/>
+                <XAxis dataKey="criticidad" stroke="#94A3B8" fontSize={11}/>
+                <YAxis stroke="#64748B" fontSize={11} allowDecimals={false}/>
+                <Tooltip contentStyle={{ background: "#0D1526", border: "1px solid #1E2D4A", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "#fff" }} cursor={{ fill: "#1E2D4A33" }}/>
+                <Bar dataKey="valor" radius={[4, 4, 0, 0]}>
+                  {ind.distCriticidadCedi.map((d: any, i: number) => (
+                    <Cell key={i} fill={d.criticidad === "Critica" ? "#EF4444" : d.criticidad === "Alta" ? "#F97316" : d.criticidad === "Media" ? "#F59E0B" : "#22C55E"}/>
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Rankings en tablas */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Ranking CEDIS */}
+          <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Trophy className="w-4 h-4 text-[#4A7AFF]"/>
+              <h3 className="text-sm font-bold text-white">Ranking CEDIS por hallazgos</h3>
+            </div>
+            <div className="space-y-2">
+              {ind.rankingCedis.length === 0 ? <p className="text-xs text-[#64748B] py-4 text-center">Sin datos</p> :
+                ind.rankingCedis.map((c: any, i: number) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className="w-5 h-5 rounded-full bg-[#1A2540] text-[10px] font-bold text-white flex items-center justify-center shrink-0">{i + 1}</span>
+                    <span className="text-sm text-white flex-1">{c.nombre}</span>
+                    <span className="text-xs font-bold text-amber-400">{c.hallazgos} hallazgos</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          {/* Distribución por región */}
+          <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Tractor className="w-4 h-4 text-emerald-400"/>
+              <h3 className="text-sm font-bold text-white">Granjas por región</h3>
+            </div>
+            <div className="space-y-2.5">
+              {ind.distRegion.map((r: any, i: number) => {
+                const maxVal = Math.max(...ind.distRegion.map((x: any) => x.valor), 1);
+                return (
+                  <div key={i}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-[#cbd5e1]">{r.region}</span>
+                      <span className="text-xs font-bold text-white">{r.valor}</span>
+                    </div>
+                    <div className="h-1.5 bg-[#1E2D4A] rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(r.valor / maxVal) * 100}%` }}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
 
         {/* Áreas pendientes de integración (honestidad: sin datos inventados) */}
         <section>
