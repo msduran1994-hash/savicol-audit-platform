@@ -297,6 +297,216 @@ export function semaforo(pct: number): { label: string; color: string } {
   return { label: "Crítico", color: "#EF4444" };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// CHECKLISTS PROFESIONALES (Encacetamiento · Trazabilidad 7 Días)
+// Cada checklist se guarda como su propio documento en /documentos, con marcador
+// [CHK-ENC] o [CHK-TRZ7] en el nombre y el JSON envuelto en [CHK]...[/CHK].
+// Semaforización propia 90/70 (distinta del 85/60 del checklist de descargue).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Estructura de secciones (3 secciones × 5 preguntas = 15) para cada checklist
+export const ENCACETAMIENTO_SECCIONES: { seccion: string; preguntas: string[] }[] = [
+  {
+    seccion: "Alistamiento y Bioseguridad",
+    preguntas: [
+      "¿La cama se encuentra seca y homogénea para la recepción?",
+      "¿La temperatura de cama cumple el estándar establecido?",
+      "¿La temperatura ambiente es adecuada para la recepción?",
+      "¿Las cortinas están instaladas y operativas?",
+      "¿Los protocolos de bioseguridad fueron ejecutados antes del ingreso?",
+    ],
+  },
+  {
+    seccion: "Equipos y Preparación",
+    preguntas: [
+      "¿Los bebederos están instalados y funcionando?",
+      "¿Los comederos están disponibles y correctamente distribuidos?",
+      "¿Los sistemas de ventilación funcionan correctamente?",
+      "¿Los extractores están operativos?",
+      "¿Existe disponibilidad inmediata de agua potable?",
+    ],
+  },
+  {
+    seccion: "Recepción del Pollito",
+    preguntas: [
+      "¿La documentación sanitaria del lote está completa?",
+      "¿El tiempo de transporte se encuentra dentro del rango permitido?",
+      "¿La temperatura del vehículo fue adecuada durante el transporte?",
+      "¿El descargue se realizó bajo condiciones controladas?",
+      "¿El estado general del pollito fue satisfactorio al ingreso?",
+    ],
+  },
+];
+
+export const TRAZABILIDAD7_SECCIONES: { seccion: string; preguntas: string[] }[] = [
+  {
+    seccion: "Productiva",
+    preguntas: [
+      "¿La mortalidad diaria se encuentra dentro del estándar?",
+      "¿La mortalidad acumulada es aceptable?",
+      "¿El peso promedio corresponde al objetivo del lote?",
+      "¿La uniformidad es adecuada?",
+      "¿El consumo de alimento cumple la meta establecida?",
+    ],
+  },
+  {
+    seccion: "Sanitaria",
+    preguntas: [
+      "¿El estado sanitario del lote es satisfactorio?",
+      "¿Existen aves descartadas por condiciones sanitarias?",
+      "¿Se registran signos clínicos relevantes?",
+      "¿Los protocolos de bioseguridad continúan activos?",
+      "¿Se realiza disposición adecuada de mortalidad?",
+    ],
+  },
+  {
+    seccion: "Ambiental y Operativa",
+    preguntas: [
+      "¿La temperatura ambiente es adecuada?",
+      "¿La temperatura bajo criadora cumple parámetros?",
+      "¿La ventilación es adecuada?",
+      "¿El compostaje se realiza correctamente?",
+      "¿La logística operativa mantiene las condiciones del lote?",
+    ],
+  },
+];
+
+export type ChecklistTipo = "encacetamiento" | "trazabilidad7";
+
+export interface PreguntaChk {
+  seccion: string;
+  pregunta: string;
+  resultado: string;     // cumple | no_cumple | parcial | na | ""
+  observacion: string;
+  evidencia: string;     // data URI (foto comprimida) o URL
+}
+
+export interface ChecklistData {
+  tipo: ChecklistTipo;
+  auditor: string;
+  fechaVisita: string;
+  granjaId: string;
+  granjaNombre?: string;
+  lote: string;
+  galpon: string;
+  // Campos específicos
+  tecnicoVeterinario?: string;     // encacetamiento
+  responsableRecepcion?: string;   // encacetamiento
+  diaEvaluado?: string;            // trazabilidad7
+  // Preguntas (15)
+  preguntas: PreguntaChk[];
+  // Cierre
+  observacionGeneral?: string;
+  planAccion?: string;
+}
+
+export interface ChecklistItem {
+  id: string;
+  data: ChecklistData;
+  uploadedAt: string;
+  uploadedBy: string;
+}
+
+const MARCADOR_CHK: Record<ChecklistTipo, string> = {
+  encacetamiento: "[CHK-ENC]",
+  trazabilidad7:  "[CHK-TRZ7]",
+};
+
+export const CHECKLIST_META: Record<ChecklistTipo, { titulo: string; secciones: { seccion: string; preguntas: string[] }[]; objetivo: string; enfoque: string }> = {
+  encacetamiento: {
+    titulo: "Checklist Encacetamiento",
+    secciones: ENCACETAMIENTO_SECCIONES,
+    objetivo: "Verificar las condiciones de alistamiento, bioseguridad, equipos y recepción del pollito al momento del encasetamiento del lote, asegurando un inicio óptimo del ciclo productivo.",
+    enfoque: "Auditoría de cumplimiento sobre las condiciones previas y durante la recepción del lote, evaluando preparación de instalaciones, funcionamiento de equipos y calidad del pollito recibido.",
+  },
+  trazabilidad7: {
+    titulo: "Checklist Trazabilidad 7 Días",
+    secciones: TRAZABILIDAD7_SECCIONES,
+    objetivo: "Evaluar el desempeño productivo, sanitario y ambiental del lote durante los primeros siete días, garantizando la trazabilidad del proceso de seguimiento inicial.",
+    enfoque: "Auditoría de seguimiento sobre los indicadores productivos, condiciones sanitarias y variables ambientales y operativas del lote en su primera semana de vida.",
+  },
+};
+
+// Construye un checklist vacío con sus 15 preguntas según el tipo
+export function checklistVacio(tipo: ChecklistTipo, granjaId = "", auditor = ""): ChecklistData {
+  const secciones = CHECKLIST_META[tipo].secciones;
+  const preguntas: PreguntaChk[] = [];
+  secciones.forEach(s => s.preguntas.forEach(p => preguntas.push({ seccion: s.seccion, pregunta: p, resultado: "", observacion: "", evidencia: "" })));
+  return {
+    tipo, auditor, fechaVisita: new Date().toISOString().slice(0, 10),
+    granjaId, lote: "", galpon: "",
+    tecnicoVeterinario: "", responsableRecepcion: "", diaEvaluado: "",
+    preguntas, observacionGeneral: "", planAccion: "",
+  };
+}
+
+// Semáforo propio de estos checklists: Verde ≥90, Naranja 70–89, Rojo <70
+export function semaforo90(pct: number): { label: string; color: string } {
+  if (pct >= 90) return { label: "Óptimo",    color: "#22C55E" };
+  if (pct >= 70) return { label: "Aceptable", color: "#F59E0B" };
+  return { label: "Crítico", color: "#EF4444" };
+}
+
+function parseChecklist(doc: DocRaw): ChecklistItem | null {
+  const m = (doc.ocrTexto ?? "").match(/\[CHK\]([\s\S]*?)\[\/CHK\]/);
+  if (!m) return null;
+  try {
+    return { id: doc.id, data: JSON.parse(m[1]) as ChecklistData, uploadedAt: doc.uploadedAt, uploadedBy: doc.uploadedBy };
+  } catch { return null; }
+}
+
+function construirPayloadChk(data: ChecklistData) {
+  const marcador = MARCADOR_CHK[data.tipo];
+  const json = JSON.stringify(data);
+  const ocr = `[CHK]${json}[/CHK]`;
+  return {
+    granjaId: data.granjaId,
+    nombre: `CHECKLIST ${data.lote || "sin-lote"} G${data.galpon || "-"} ${marcador}`,
+    tipo: "Otro", categoria: "Otro",
+    size: ocr.length, url: "data:text/plain;base64,Q0hL", ocrTexto: ocr,
+  };
+}
+
+export function useChecklists(tipo: ChecklistTipo) {
+  const marcador = MARCADOR_CHK[tipo];
+  return useQuery({
+    queryKey: ["checklists", tipo],
+    queryFn: async () => {
+      const docs = await apiGet<DocRaw[]>(`/documentos`);
+      return (docs ?? [])
+        .filter(d => (d.nombre ?? "").includes(marcador))
+        .map(parseChecklist)
+        .filter((x): x is ChecklistItem => x !== null)
+        .sort((a, b) => (b.uploadedAt || "").localeCompare(a.uploadedAt || ""));
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateChecklist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ChecklistData) => apiPost<DocRaw>("/documentos", construirPayloadChk(data)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["checklists"] }),
+  });
+}
+
+export function useUpdateChecklist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: ChecklistData }) => apiPatch<DocRaw>(`/documentos/${id}`, construirPayloadChk(data)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["checklists"] }),
+  });
+}
+
+export function useDeleteChecklist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete<{ message: string }>(`/documentos/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["checklists"] }),
+  });
+}
+
 export function loteVacio(granjaId: string, granjaNombre?: string): LoteData {
   return {
     codigo: "", tipoProduccion: "engorde", raza: "", proveedor: "",
