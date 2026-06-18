@@ -146,6 +146,7 @@ function ChecklistModal({ tipo, item, granjas, usuario, onClose, onCreate, onUpd
   const [data, setData] = useState<ChecklistData>(() => item ? { ...item.data } : checklistVacio(tipo, "", usuario));
   const [error, setError] = useState<string | null>(null);
   const [subiendoIdx, setSubiendoIdx] = useState<number | null>(null);
+  const [generandoPDF, setGenerandoPDF] = useState(false);
   const fileRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   function set<K extends keyof ChecklistData>(k: K, v: ChecklistData[K]) { setData(d => ({ ...d, [k]: v })); }
@@ -171,6 +172,17 @@ function ChecklistModal({ tipo, item, granjas, usuario, onClose, onCreate, onUpd
   const semG = semaforo90(cumplimientoGlobal);
   const respondidas = data.preguntas.filter(p => p.resultado !== "").length;
   const secciones = Array.from(new Set(data.preguntas.map(p => p.seccion)));
+
+  async function handlePDF() {
+    setGenerandoPDF(true);
+    try {
+      // Enriquece el PDF con redacción profesional; si no hay respuesta, usa las calculadas
+      const ia = await obtenerSeccionesIA(tipo, data, cumplimientoGlobal);
+      await generarPDFChecklistPro(tipo, data, cumplimientoGlobal, ia ?? undefined);
+    } finally {
+      setGenerandoPDF(false);
+    }
+  }
 
   async function submit() {
     setError(null);
@@ -300,9 +312,10 @@ function ChecklistModal({ tipo, item, granjas, usuario, onClose, onCreate, onUpd
           </div>
 
           <div className="flex justify-end">
-            <button onClick={() => generarPDFChecklistPro(tipo, data, cumplimientoGlobal)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1A2540] hover:bg-[#243150] text-emerald-300 text-sm font-semibold">
-              <FileDown className="w-4 h-4"/> Descargar PDF
+            <button onClick={handlePDF} disabled={generandoPDF}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1A2540] hover:bg-[#243150] text-emerald-300 text-sm font-semibold disabled:opacity-60">
+              {generandoPDF ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileDown className="w-4 h-4"/>}
+              {generandoPDF ? "Generando informe…" : "Descargar PDF"}
             </button>
           </div>
         </div>
@@ -329,7 +342,68 @@ function ChecklistModal({ tipo, item, granjas, usuario, onClose, onCreate, onUpd
 // ═══ PDF ejecutivo nativo del checklist (jsPDF) ═══════════════════════════════
 const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.972-5" };
 
-async function generarPDFChecklistPro(tipo: ChecklistTipo, data: ChecklistData, cumplimientoGlobal: number) {
+// Secciones narrativas del informe (redactadas por el endpoint de IA, sin mencionarla)
+interface SeccionesIA { resumenEjecutivo?: string; conclusiones?: string; planAccion?: string; }
+
+// Llama al endpoint de IA existente (modo informe-checklist) para obtener las
+// secciones narrativas. Si falla, devuelve null y el PDF usa las calculadas.
+async function obtenerSeccionesIA(tipo: ChecklistTipo, data: ChecklistData, cumplimientoGlobal: number): Promise<SeccionesIA | null> {
+  try {
+    const meta = CHECKLIST_META[tipo];
+    const cumpl = (rs: string[]) => {
+      const v = rs.filter(r => r === "cumple" || r === "no_cumple" || r === "parcial");
+      if (!v.length) return 0;
+      return Math.round(v.reduce((a, r) => a + (r === "cumple" ? 100 : r === "parcial" ? 50 : 0), 0) / v.length);
+    };
+    const secciones = Array.from(new Set(data.preguntas.map(p => p.seccion)));
+    // Resumen estructurado del checklist como texto para el prompt
+    const detalle = [
+      `Cumplimiento global: ${cumplimientoGlobal}%.`,
+      ...secciones.map(s => {
+        const fs = data.preguntas.filter(p => p.seccion === s);
+        return `Sección "${s}": ${cumpl(fs.map(f => f.resultado))}% de cumplimiento.`;
+      }),
+      "",
+      "Puntos no conformes o parciales:",
+      ...data.preguntas.filter(p => p.resultado === "no_cumple" || p.resultado === "parcial")
+        .map(p => `- (${p.resultado === "no_cumple" ? "No cumple" : "Parcial"}) ${p.pregunta}${p.observacion ? ` — Obs: ${p.observacion}` : ""}`),
+    ].filter(Boolean).join("\n");
+    const noConformes = data.preguntas.filter(p => p.resultado === "no_cumple" || p.resultado === "parcial").length;
+    if (noConformes === 0) {
+      // si todo cumple, igual pedimos redacción pero el detalle lo refleja
+    }
+
+    const res = await fetch("/api/ai/generar-plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        modo: "informe-checklist",
+        accion: detalle,
+        areaAuditada: meta.titulo,
+        nombreGranja: data.granjaNombre,
+        auditor: data.auditor,
+        criticidad: cumplimientoGlobal >= 90 ? "Baja" : cumplimientoGlobal >= 70 ? "Media" : "Alta",
+      }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const txt = (json?.plan ?? "").trim();
+    if (!txt) return null;
+    // El endpoint devuelve el texto en `plan`; aquí esperamos un JSON con las 3 secciones
+    const limpio = txt.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(limpio);
+    return {
+      resumenEjecutivo: parsed.resumenEjecutivo,
+      conclusiones: parsed.conclusiones,
+      planAccion: parsed.planAccion,
+    };
+  } catch {
+    return null;
+  }
+}
+
+
+async function generarPDFChecklistPro(tipo: ChecklistTipo, data: ChecklistData, cumplimientoGlobal: number, ia?: SeccionesIA) {
   const { default: jsPDF } = await import("jspdf");
   const meta = CHECKLIST_META[tipo];
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
@@ -450,25 +524,29 @@ async function generarPDFChecklistPro(tipo: ChecklistTipo, data: ChecklistData, 
     y += 4;
   });
 
-  // Secciones automáticas (calculadas de los datos)
+  // Secciones automáticas: usa las redactadas (IA) si llegaron; si no, calcula de los datos
   const noCumple = data.preguntas.filter(p => p.resultado === "no_cumple");
   const parciales = data.preguntas.filter(p => p.resultado === "parcial");
-  const resumen = `La evaluación de ${meta.titulo.toLowerCase()} para el lote ${data.lote || "—"} (galpón ${data.galpon || "—"}) alcanzó un cumplimiento global del ${cumplimientoGlobal}%, clasificado como ${semLabel(cumplimientoGlobal).toLowerCase()}. Se evaluaron ${data.preguntas.length} criterios distribuidos en ${secciones.length} secciones, de los cuales ${data.preguntas.filter(p=>p.resultado==="cumple").length} cumplen, ${parciales.length} presentan cumplimiento parcial y ${noCumple.length} no cumplen.`;
-  const conclusiones = cumplimientoGlobal >= 90
+  const resumenCalc = `La evaluación de ${meta.titulo.toLowerCase()} para el lote ${data.lote || "—"} (galpón ${data.galpon || "—"}) alcanzó un cumplimiento global del ${cumplimientoGlobal}%, clasificado como ${semLabel(cumplimientoGlobal).toLowerCase()}. Se evaluaron ${data.preguntas.length} criterios distribuidos en ${secciones.length} secciones, de los cuales ${data.preguntas.filter(p=>p.resultado==="cumple").length} cumplen, ${parciales.length} presentan cumplimiento parcial y ${noCumple.length} no cumplen.`;
+  const conclusionesCalc = cumplimientoGlobal >= 90
     ? "El proceso evaluado se encuentra dentro de los estándares esperados. Se recomienda mantener las prácticas actuales y dar continuidad al seguimiento periódico."
     : cumplimientoGlobal >= 70
     ? "El proceso evaluado presenta un cumplimiento aceptable con oportunidades de mejora. Se recomienda atender los puntos parciales y no conformes para elevar el desempeño."
     : "El proceso evaluado presenta un cumplimiento crítico. Se requiere intervención inmediata sobre los hallazgos no conformes para mitigar riesgos sobre el lote.";
-  const planAuto = noCumple.length || parciales.length
+  const planCalc = noCumple.length || parciales.length
     ? [...noCumple, ...parciales].map((p, i) => `${i+1}. ${p.pregunta}${p.observacion ? ` — ${p.observacion}` : ""}`).join("\n")
     : "No se identificaron no conformidades que requieran acción correctiva inmediata.";
+
+  const resumen = ia?.resumenEjecutivo?.trim() || resumenCalc;
+  const conclusiones = ia?.conclusiones?.trim() || conclusionesCalc;
+  const planTexto = (data.planAccion?.trim() ? data.planAccion + "\n\n" : "") + (ia?.planAccion?.trim() || planCalc);
 
   const bloques: { titulo: string; texto: string }[] = [
     { titulo: "Objetivo del Checklist", texto: meta.objetivo },
     { titulo: "Enfoque de la Auditoría", texto: meta.enfoque },
     { titulo: "Resumen Ejecutivo", texto: resumen },
     { titulo: "Conclusiones", texto: conclusiones },
-    { titulo: "Plan de Acción Correctivo", texto: (data.planAccion?.trim() ? data.planAccion + "\n\n" : "") + planAuto },
+    { titulo: "Plan de Acción Correctivo", texto: planTexto },
   ];
   if (data.observacionGeneral?.trim()) {
     bloques.splice(3, 0, { titulo: "Observación General", texto: data.observacionGeneral });
