@@ -1,20 +1,14 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// HOOKS · Desempeño de Auditores (Opción A)
-// Persistencia: se reutiliza el endpoint /documentos. Cada actividad de auditor se
-// guarda como JSON dentro de `ocrTexto` envuelto en [AACT]...[/AACT], con el marcador
-// [AUDITOR-ACT] en el nombre. No toca el backend ni contamina los documentos normales.
-// De estas actividades registradas se calcula el desempeño (cumplimiento) por auditor.
+// HOOKS · Desempeño de Auditores (consolidación automática de fuentes reales)
+// Lee el desempeño desde las hojas que YA tienen datos por auditor en el backend:
+//   - Cronograma 2026 (/cronograma): actividades planificadas y completadas
+//   - Rutas (/rutas/dashboard): acompañamientos en ruta
+//   - CEDIS (/cedis/auditorias/list): auditorías de centros de distribución
+// No usa registro manual; cada fuente se muestra por separado (sin promediar).
+// Granjas no expone auditor por hallazgo en el backend, por eso no se atribuye.
 // ═══════════════════════════════════════════════════════════════════════════════
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
-
-interface DocRaw {
-  id: string;
-  nombre: string;
-  ocrTexto?: string;
-  uploadedAt: string;
-  uploadedBy: string;
-}
+import { useQuery } from "@tanstack/react-query";
+import { apiGet } from "@/lib/api";
 
 // ── Catálogo oficial de auditores (los seis del equipo) ──
 export const AUDITORES = [
@@ -26,165 +20,154 @@ export const AUDITORES = [
   "Ivan Bonilla",
 ] as const;
 
-export const AMBITOS = [
-  { id: "granja", label: "Granja" },
-  { id: "ruta", label: "Ruta" },
-  { id: "cedis", label: "CEDIS" },
-  { id: "mensual", label: "Actividad mensual" },
-] as const;
-
-export const ESTADOS_ACT = [
-  { id: "planificada", label: "Planificada", color: "#64748B" },
-  { id: "ejecutada", label: "Ejecutada", color: "#4A7AFF" },
-  { id: "cumplida", label: "Cumplida", color: "#22C55E" },
-  { id: "incumplida", label: "Incumplida", color: "#EF4444" },
-] as const;
-
-export type AmbitoAct = "granja" | "ruta" | "cedis" | "mensual";
-export type EstadoAct = "planificada" | "ejecutada" | "cumplida" | "incumplida";
-
-export interface ActividadAuditor {
-  auditor: string;
-  ambito: AmbitoAct;
-  mes: string;            // formato YYYY-MM
-  estado: EstadoAct;
-  hallazgos: number;      // hallazgos detectados en la actividad
-  objetivo: string;       // granja/ruta/CEDIS específico
-  fecha: string;          // YYYY-MM-DD
-  observacion: string;
-}
-
-export interface ActividadItem {
-  id: string;
-  data: ActividadAuditor;
-  uploadedAt: string;
-  uploadedBy: string;
-}
-
-const MARCADOR = "[AUDITOR-ACT]";
-
-export function actividadVacia(auditor = ""): ActividadAuditor {
-  const hoy = new Date();
-  return {
-    auditor,
-    ambito: "granja",
-    mes: hoy.toISOString().slice(0, 7),
-    estado: "planificada",
-    hallazgos: 0,
-    objetivo: "",
-    fecha: hoy.toISOString().slice(0, 10),
-    observacion: "",
+// Normaliza variantes de nombres entre fuentes (acentos, apellidos con s/z)
+export function normalizarAuditor(nombre?: string | null): string | null {
+  if (!nombre) return null;
+  const limpio = nombre.trim()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const mapa: Record<string, string> = {
+    "michael duran": "Michael Duran",
+    "kerling hernandez": "Kerling Hernandez",
+    "hilary basto": "Hilary Basto",
+    "jaider gonzalez": "Jaider Gonzalez",
+    "jaider gonzales": "Jaider Gonzalez",
+    "alexander tellez": "Alexander Tellez",
+    "ivan bonilla": "Ivan Bonilla",
   };
+  if (mapa[limpio]) return mapa[limpio];
+  for (const a of AUDITORES) {
+    const an = a.toLowerCase();
+    if (limpio.includes(an) || an.includes(limpio)) return a;
+    const [n1, ap1] = an.split(" ");
+    if (limpio.includes(n1) && ap1 && limpio.includes(ap1)) return a;
+  }
+  return null;
 }
 
-function parseActividad(doc: DocRaw): ActividadItem | null {
-  const m = (doc.ocrTexto ?? "").match(/\[AACT\]([\s\S]*?)\[\/AACT\]/);
-  if (!m) return null;
-  try {
-    return { id: doc.id, data: JSON.parse(m[1]) as ActividadAuditor, uploadedAt: doc.uploadedAt, uploadedBy: doc.uploadedBy };
-  } catch { return null; }
+interface CronogramaItem {
+  id: string; area: string; auditorName: string; activity: string;
+  activityType: string; status: string; startDate: string; endDate: string;
+}
+interface Acompanamiento {
+  id: string; auditorNombre: string; estado: string; criticidad?: string;
+  motivo?: string; fecha: string;
+}
+interface AuditoriaCedi {
+  id: string; auditorNombre?: string; estado?: string; fecha?: string;
 }
 
-function construirPayload(data: ActividadAuditor) {
-  const json = JSON.stringify(data);
-  const ocr = `[AACT]${json}[/AACT]`;
-  return {
-    nombre: `ACTIVIDAD ${data.auditor} ${data.ambito} ${MARCADOR}`,
-    tipo: "Otro", categoria: "Otro",
-    size: ocr.length, url: "data:text/plain;base64,QUFDVA==", ocrTexto: ocr,
-  };
+export interface DesempenoFuente {
+  total: number;
+  completadas: number;
+  enProgreso: number;
+  pendientes: number;
+  vencidas: number;
+  cumplimiento: number;
 }
-
-export function useActividadesAuditor() {
-  return useQuery({
-    queryKey: ["auditor-actividades"],
-    queryFn: async () => {
-      const docs = await apiGet<DocRaw[]>(`/documentos`);
-      return (docs ?? [])
-        .filter(d => (d.nombre ?? "").includes(MARCADOR))
-        .map(parseActividad)
-        .filter((x): x is ActividadItem => x !== null)
-        .sort((a, b) => (b.uploadedAt || "").localeCompare(a.uploadedAt || ""));
-    },
-    staleTime: 30_000,
-  });
-}
-
-// Las actividades requieren un granjaId válido para el endpoint /documentos.
-// Se inyecta desde el componente (se usa cualquier granja como contenedor;
-// el dato real del ámbito va en el JSON, no depende de esa granja).
-export function useCreateActividad() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ data, granjaId }: { data: ActividadAuditor; granjaId: string }) =>
-      apiPost<DocRaw>("/documentos", { granjaId, ...construirPayload(data) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["auditor-actividades"] }),
-  });
-}
-
-export function useUpdateActividad() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data, granjaId }: { id: string; data: ActividadAuditor; granjaId: string }) =>
-      apiPatch<DocRaw>(`/documentos/${id}`, { granjaId, ...construirPayload(data) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["auditor-actividades"] }),
-  });
-}
-
-export function useDeleteActividad() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => apiDelete<{ message: string }>(`/documentos/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["auditor-actividades"] }),
-  });
-}
-
-// ── Cálculo de desempeño por auditor ──
 export interface DesempenoAuditor {
   auditor: string;
-  total: number;
-  planificadas: number;
-  ejecutadas: number;
-  cumplidas: number;
-  incumplidas: number;
-  hallazgos: number;
-  cumplimiento: number;   // % = (cumplidas + ejecutadas) / planificadas-base
-  porAmbito: Record<AmbitoAct, number>;
+  cronograma: DesempenoFuente;
+  rutas: DesempenoFuente;
+  cedis: DesempenoFuente;
+  totalActividades: number;
 }
 
-// Calcula el desempeño de cada auditor a partir de sus actividades.
-// Cumplimiento = (cumplidas + ejecutadas) / total de actividades asignadas * 100.
-// Una actividad "incumplida" cuenta en el total pero no como lograda.
-export function calcularDesempeno(items: ActividadItem[]): DesempenoAuditor[] {
+function fuenteVacia(): DesempenoFuente {
+  return { total: 0, completadas: 0, enProgreso: 0, pendientes: 0, vencidas: 0, cumplimiento: 0 };
+}
+function pct(comp: number, total: number) { return total ? Math.round((comp / total) * 100) : 0; }
+
+export function useDesempenoAuditores() {
+  const cronogramaQ = useQuery({
+    queryKey: ["desempeno-cronograma"],
+    queryFn: () => apiGet<CronogramaItem[]>("/cronograma"),
+    staleTime: 60_000,
+  });
+  const rutasQ = useQuery({
+    queryKey: ["desempeno-rutas"],
+    queryFn: () => apiGet<{ acompanamientos: Acompanamiento[] }>("/rutas/dashboard"),
+    staleTime: 60_000,
+  });
+  const cedisQ = useQuery({
+    queryKey: ["desempeno-cedis-aud"],
+    queryFn: () => apiGet<AuditoriaCedi[]>("/cedis/auditorias/list"),
+    staleTime: 60_000,
+  });
+
+  const isLoading = cronogramaQ.isLoading || rutasQ.isLoading || cedisQ.isLoading;
+  const cronograma = cronogramaQ.data ?? [];
+  const acompanamientos = rutasQ.data?.acompanamientos ?? [];
+  const auditoriasCedi = cedisQ.data ?? [];
+
   const porAuditor: Record<string, DesempenoAuditor> = {};
   for (const a of AUDITORES) {
     porAuditor[a] = {
-      auditor: a, total: 0, planificadas: 0, ejecutadas: 0, cumplidas: 0, incumplidas: 0,
-      hallazgos: 0, cumplimiento: 0,
-      porAmbito: { granja: 0, ruta: 0, cedis: 0, mensual: 0 },
+      auditor: a, cronograma: fuenteVacia(), rutas: fuenteVacia(), cedis: fuenteVacia(),
+      totalActividades: 0,
     };
   }
-  for (const it of items) {
-    const d = it.data;
-    if (!porAuditor[d.auditor]) {
-      porAuditor[d.auditor] = {
-        auditor: d.auditor, total: 0, planificadas: 0, ejecutadas: 0, cumplidas: 0, incumplidas: 0,
-        hallazgos: 0, cumplimiento: 0,
-        porAmbito: { granja: 0, ruta: 0, cedis: 0, mensual: 0 },
-      };
-    }
-    const reg = porAuditor[d.auditor];
-    reg.total += 1;
-    reg.hallazgos += Number(d.hallazgos) || 0;
-    if (d.estado === "planificada") reg.planificadas += 1;
-    else if (d.estado === "ejecutada") reg.ejecutadas += 1;
-    else if (d.estado === "cumplida") reg.cumplidas += 1;
-    else if (d.estado === "incumplida") reg.incumplidas += 1;
-    if (reg.porAmbito[d.ambito] !== undefined) reg.porAmbito[d.ambito] += 1;
+
+  // 1) Cronograma 2026
+  for (const c of cronograma) {
+    const a = normalizarAuditor(c.auditorName);
+    if (!a || !porAuditor[a]) continue;
+    const f = porAuditor[a].cronograma;
+    f.total += 1;
+    const st = (c.status ?? "").toUpperCase();
+    if (st === "COMPLETED") f.completadas += 1;
+    else if (st === "IN_PROGRESS") f.enProgreso += 1;
+    else if (st === "OVERDUE") f.vencidas += 1;
+    else f.pendientes += 1;
   }
-  // Cumplimiento: logradas (cumplidas + ejecutadas) sobre total
-  Object.values(porAuditor).forEach(r => {
-    r.cumplimiento = r.total ? Math.round(((r.cumplidas + r.ejecutadas) / r.total) * 100) : 0;
+
+  // 2) Rutas
+  for (const ac of acompanamientos) {
+    const a = normalizarAuditor(ac.auditorNombre);
+    if (!a || !porAuditor[a]) continue;
+    const f = porAuditor[a].rutas;
+    f.total += 1;
+    const st = (ac.estado ?? "").toUpperCase();
+    if (st === "COMPLETADO" || st === "COMPLETED" || st === "CERRADO") f.completadas += 1;
+    else if (st === "EN_PROGRESO" || st === "IN_PROGRESS") f.enProgreso += 1;
+    else f.pendientes += 1;
+  }
+
+  // 3) CEDIS
+  for (const au of auditoriasCedi) {
+    const nombre = au.auditorNombre ?? "";
+    const asignados = AUDITORES.filter(a => {
+      const an = a.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const nm = nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const [n1, ap1] = an.split(" ");
+      return nm.includes(an) || (nm.includes(n1) && !!ap1 && nm.includes(ap1));
+    });
+    for (const a of asignados) {
+      const f = porAuditor[a].cedis;
+      f.total += 1;
+      const st = (au.estado ?? "").toUpperCase();
+      if (st === "COMPLETADA" || st === "COMPLETED" || st === "CERRADA" || st === "") f.completadas += 1;
+      else f.pendientes += 1;
+    }
+  }
+
+  const desempeno: DesempenoAuditor[] = Object.values(porAuditor).map(d => {
+    d.cronograma.cumplimiento = pct(d.cronograma.completadas, d.cronograma.total);
+    d.rutas.cumplimiento = pct(d.rutas.completadas, d.rutas.total);
+    d.cedis.cumplimiento = pct(d.cedis.completadas, d.cedis.total);
+    d.totalActividades = d.cronograma.total + d.rutas.total + d.cedis.total;
+    return d;
   });
-  return Object.values(porAuditor);
+
+  const totales = {
+    cronograma: cronograma.length,
+    rutas: acompanamientos.length,
+    cedis: auditoriasCedi.length,
+    cumplimientoCronograma: pct(
+      cronograma.filter(c => (c.status ?? "").toUpperCase() === "COMPLETED").length,
+      cronograma.length
+    ),
+  };
+
+  return { desempeno, totales, isLoading };
 }
