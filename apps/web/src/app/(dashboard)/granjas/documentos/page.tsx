@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AUDITORS } from "@/lib/constants";
+import { documentosDeHoja, conEtiquetaHoja, nombreLimpio } from "@/lib/docHojas";
 
 // ── Metadata de auditoría embebida en ocrTexto ───────────────────────────────
 // Como el modelo Documento no tiene columnas para auditor/fechas, se guardan
@@ -125,7 +126,10 @@ export default function DocumentosPage() {
   const updateDoc = useUpdateDocumento();
   const removeDoc = useDeleteDocumento();
 
-  const docsRaw = docsQ.data ?? [];
+  // Solo los documentos que pertenecen a la hoja de Granjas. Se excluyen los
+  // artefactos funcionales de otros módulos (formatos, checklists, fotos, lotes)
+  // y los documentos etiquetados para otras hojas.
+  const docsRaw = documentosDeHoja(docsQ.data ?? [], "granjas");
 
   // Filtros adicionales aplicados en frontend (el modelo no tiene estos campos
   // estructurados): Auditor (uploadedBy), Fecha visita (de OCR), Fecha informe (uploadedAt).
@@ -281,7 +285,7 @@ export default function DocumentosPage() {
                         <td className="p-2 pl-4">
                           <div className="flex items-center gap-2">
                             <Icon className="w-4 h-4 shrink-0" style={{ color }}/>
-                            <span className="text-white text-xs truncate max-w-xs">{d.nombre}</span>
+                            <span className="text-white text-xs truncate max-w-xs">{nombreLimpio(d.nombre)}</span>
                           </div>
                         </td>
                         <td className="p-2 text-[#94A3B8] text-xs">{d.granja?.nombre ?? "—"}</td>
@@ -314,7 +318,7 @@ export default function DocumentosPage() {
                             </button>
                             <button
                               onClick={async () => {
-                                if (!confirm(`¿Eliminar registro de "${d.nombre}"?\n(No borra el archivo en su ubicación original)`)) return;
+                                if (!confirm(`¿Eliminar registro de "${nombreLimpio(d.nombre)}"?\n(No borra el archivo en su ubicación original)`)) return;
                                 try { await removeDoc.mutateAsync(d.id); }
                                 catch (e: any) { alert("Error: " + (e?.response?.data?.message ?? e?.message)); }
                               }}
@@ -346,9 +350,11 @@ export default function DocumentosPage() {
           onClose={() => { setModalOpen(false); setSaveError(null); }}
           onSave={async (dto) => {
             setSaveError(null);
+            // Marca el documento como perteneciente a la hoja de Granjas
+            const dtoConHoja = { ...dto, nombre: conEtiquetaHoja(dto.nombre, "granjas") };
             try {
-              if (editing) await updateDoc.mutateAsync({ id: editing.id, patch: dto });
-              else         await createDoc.mutateAsync(dto);
+              if (editing) await updateDoc.mutateAsync({ id: editing.id, patch: dtoConHoja });
+              else         await createDoc.mutateAsync(dtoConHoja);
               setModalOpen(false);
             } catch (e: any) {
               const raw = e?.response?.data;
@@ -376,7 +382,7 @@ function DocumentoModal({ item, granjas, error, onClose, onSave }: {
   const metaInicial = leerMeta(item?.ocrTexto);
   const [form, setForm] = useState<DocumentoPayload>({
     granjaId:  item?.granjaId ?? granjas[0]?.id ?? "",
-    nombre:    item?.nombre ?? "",
+    nombre:    nombreLimpio(item?.nombre ?? ""),
     tipo:      item?.tipo ?? "PDF",
     categoria: item?.categoria ?? "Cumplimiento",
     size:      item?.size ?? 0,
@@ -529,7 +535,7 @@ function PreviewModal({ doc, onClose }: { doc: DocumentoItem; onClose: () => voi
         {/* Header */}
         <div className="flex items-start justify-between px-5 py-4 border-b border-[#1E2D4A] shrink-0">
           <div className="min-w-0">
-            <h3 className="font-display font-semibold text-white text-sm truncate">{doc.nombre}</h3>
+            <h3 className="font-display font-semibold text-white text-sm truncate">{nombreLimpio(doc.nombre)}</h3>
             <p className="text-xs text-[#94A3B8] mt-0.5">
               {doc.granja?.nombre ?? "—"} · {doc.tipo} · {doc.categoria}
               {meta.auditor ? ` · ${meta.auditor}` : ""}
@@ -557,7 +563,7 @@ function PreviewModal({ doc, onClose }: { doc: DocumentoItem; onClose: () => voi
           {tipo === "img" && (
             <div className="flex items-center justify-center min-h-full p-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={src} alt={doc.nombre} className="max-w-full max-h-full object-contain rounded"
+              <img src={src} alt={nombreLimpio(doc.nombre)} className="max-w-full max-h-full object-contain rounded"
                 onLoad={() => setCargando(false)} onError={() => { setCargando(false); setErrorEmbed(true); }}/>
             </div>
           )}
@@ -570,7 +576,7 @@ function PreviewModal({ doc, onClose }: { doc: DocumentoItem; onClose: () => voi
                   <p className="text-xs text-[#94A3B8]">Cargando vista previa…</p>
                 </div>
               )}
-              <iframe src={src} title={doc.nombre} className="w-full h-full border-0"
+              <iframe src={src} title={nombreLimpio(doc.nombre)} className="w-full h-full border-0"
                 onLoad={() => setCargando(false)}
                 allow="autoplay" referrerPolicy="no-referrer-when-downgrade"/>
             </>
