@@ -56,6 +56,13 @@ interface Acompanamiento {
 interface AuditoriaCedi {
   id: string; auditorNombre?: string; estado?: string; fecha?: string;
 }
+interface HallazgoGranja {
+  id: string; auditorNombre?: string; auditorId?: string; estado?: string;
+  criticidad?: string; granjaId?: string;
+}
+interface KpiGranja {
+  id: string; hallazgoId?: string; estado?: string; porcentajeAvance?: number;
+}
 
 export interface DesempenoFuente {
   total: number;
@@ -65,16 +72,31 @@ export interface DesempenoFuente {
   vencidas: number;
   cumplimiento: number;
 }
+// Granjas tiene métricas propias: hallazgos detectados (volumen) y % cerrados,
+// más KPIs de cumplimiento atribuibles vía el hallazgo de origen.
+export interface DesempenoGranjas {
+  hallazgos: number;        // total de hallazgos detectados por el auditor
+  cerrados: number;         // hallazgos cerrados
+  criticos: number;         // hallazgos críticos/altos
+  pctCerrados: number;      // % cerrados sobre el total
+  kpis: number;             // KPIs atribuibles (vía hallazgo)
+  kpisCompletados: number;  // KPIs completados
+  avanceKpi: number;        // % avance promedio de sus KPIs
+}
 export interface DesempenoAuditor {
   auditor: string;
   cronograma: DesempenoFuente;
   rutas: DesempenoFuente;
   cedis: DesempenoFuente;
+  granjas: DesempenoGranjas;
   totalActividades: number;
 }
 
 function fuenteVacia(): DesempenoFuente {
   return { total: 0, completadas: 0, enProgreso: 0, pendientes: 0, vencidas: 0, cumplimiento: 0 };
+}
+function granjasVacia(): DesempenoGranjas {
+  return { hallazgos: 0, cerrados: 0, criticos: 0, pctCerrados: 0, kpis: 0, kpisCompletados: 0, avanceKpi: 0 };
 }
 function pct(comp: number, total: number) { return total ? Math.round((comp / total) * 100) : 0; }
 
@@ -94,16 +116,30 @@ export function useDesempenoAuditores() {
     queryFn: () => apiGet<AuditoriaCedi[]>("/cedis/auditorias/list"),
     staleTime: 60_000,
   });
+  const hallazgosGranjaQ = useQuery({
+    queryKey: ["desempeno-granjas-hallazgos"],
+    queryFn: () => apiGet<HallazgoGranja[]>("/granjas/hallazgos/list"),
+    staleTime: 60_000,
+  });
+  const kpisGranjaQ = useQuery({
+    queryKey: ["desempeno-granjas-kpis"],
+    queryFn: () => apiGet<KpiGranja[]>("/granjas/kpis/list"),
+    staleTime: 60_000,
+  });
 
-  const isLoading = cronogramaQ.isLoading || rutasQ.isLoading || cedisQ.isLoading;
+  const isLoading = cronogramaQ.isLoading || rutasQ.isLoading || cedisQ.isLoading
+    || hallazgosGranjaQ.isLoading || kpisGranjaQ.isLoading;
   const cronograma = cronogramaQ.data ?? [];
   const acompanamientos = rutasQ.data?.acompanamientos ?? [];
   const auditoriasCedi = cedisQ.data ?? [];
+  const hallazgosGranja = hallazgosGranjaQ.data ?? [];
+  const kpisGranja = kpisGranjaQ.data ?? [];
 
   const porAuditor: Record<string, DesempenoAuditor> = {};
   for (const a of AUDITORES) {
     porAuditor[a] = {
       auditor: a, cronograma: fuenteVacia(), rutas: fuenteVacia(), cedis: fuenteVacia(),
+      granjas: granjasVacia(),
       totalActividades: 0,
     };
   }
@@ -151,18 +187,54 @@ export function useDesempenoAuditores() {
     }
   }
 
+  // 4) Granjas: hallazgos detectados por auditor (volumen + % cerrados)
+  const hallazgoAuditor: Record<string, string> = {}; // hallazgoId -> auditor (para vincular KPIs)
+  for (const h of hallazgosGranja) {
+    const a = normalizarAuditor(h.auditorNombre);
+    if (h.id && a) hallazgoAuditor[h.id] = a;
+    if (!a || !porAuditor[a]) continue;
+    const g = porAuditor[a].granjas;
+    g.hallazgos += 1;
+    const st = (h.estado ?? "").toUpperCase();
+    if (st === "CERRADO" || st === "CERRADA" || st === "RESUELTO") g.cerrados += 1;
+    const cr = (h.criticidad ?? "").toUpperCase();
+    if (cr === "CRITICA" || cr === "ALTA") g.criticos += 1;
+  }
+
+  // 5) KPIs de granjas: atribuibles al auditor vía el hallazgo de origen
+  const avanceAcum: Record<string, number> = {};
+  for (const k of kpisGranja) {
+    const a = k.hallazgoId ? hallazgoAuditor[k.hallazgoId] : undefined;
+    if (!a || !porAuditor[a]) continue; // 87 de 100 quedan sin atribuir (no contaminan)
+    const g = porAuditor[a].granjas;
+    g.kpis += 1;
+    const av = Number(k.porcentajeAvance) || 0;
+    avanceAcum[a] = (avanceAcum[a] ?? 0) + av;
+    const st = (k.estado ?? "").toUpperCase();
+    if (st === "COMPLETADO" || st === "CUMPLIDO" || st === "CERRADO" || av >= 100) g.kpisCompletados += 1;
+  }
+
   const desempeno: DesempenoAuditor[] = Object.values(porAuditor).map(d => {
     d.cronograma.cumplimiento = pct(d.cronograma.completadas, d.cronograma.total);
     d.rutas.cumplimiento = pct(d.rutas.completadas, d.rutas.total);
     d.cedis.cumplimiento = pct(d.cedis.completadas, d.cedis.total);
-    d.totalActividades = d.cronograma.total + d.rutas.total + d.cedis.total;
+    d.granjas.pctCerrados = pct(d.granjas.cerrados, d.granjas.hallazgos);
+    d.granjas.avanceKpi = d.granjas.kpis ? Math.round((avanceAcum[d.auditor] ?? 0) / d.granjas.kpis) : 0;
+    d.totalActividades = d.cronograma.total + d.rutas.total + d.cedis.total + d.granjas.hallazgos;
     return d;
   });
+
+  // KPIs no atribuibles a ningún auditor (no se inventan: se reportan aparte)
+  const kpisAtribuidos = Object.values(porAuditor).reduce((a, d) => a + d.granjas.kpis, 0);
 
   const totales = {
     cronograma: cronograma.length,
     rutas: acompanamientos.length,
     cedis: auditoriasCedi.length,
+    hallazgosGranja: hallazgosGranja.length,
+    kpisGranja: kpisGranja.length,
+    kpisAtribuidos,
+    kpisSinAtribuir: kpisGranja.length - kpisAtribuidos,
     cumplimientoCronograma: pct(
       cronograma.filter(c => (c.status ?? "").toUpperCase() === "COMPLETED").length,
       cronograma.length
