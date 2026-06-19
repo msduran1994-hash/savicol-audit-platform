@@ -2,7 +2,7 @@
 import { useMemo } from "react";
 import {
   useDesempenoAuditores, AUDITORES,
-  type DesempenoAuditor, type DesempenoFuente,
+  type DesempenoAuditor, type DesempenoFuente, type DesempenoGranjas,
 } from "@/hooks/useAuditorActividades";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend,
@@ -35,6 +35,27 @@ function FuenteBar({ f }: { f: DesempenoFuente }) {
   );
 }
 
+// Celda de Granjas: muestra hallazgos detectados (volumen) y % cerrados, más KPIs
+function GranjasCell({ g }: { g: DesempenoGranjas }) {
+  if (g.hallazgos === 0) return <span className="text-[10px] text-[#475569]">Sin hallazgos</span>;
+  const c = semColor(g.pctCerrados);
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-0.5">
+        <span className="text-[10px] text-[#94A3B8]">{g.hallazgos} detect.</span>
+        <span className="text-[11px] font-bold" style={{ color: c }}>{g.pctCerrados}% cerr.</span>
+      </div>
+      <div className="h-1 bg-[#1E2D4A] rounded-full overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${g.pctCerrados}%`, background: c }}/>
+      </div>
+      <div className="flex gap-2 mt-1 text-[9px] text-[#64748B]">
+        <span title="Hallazgos críticos/altos">{g.criticos} críticos</span>
+        {g.kpis > 0 && <span title="KPIs de cumplimiento atribuibles">· {g.kpisCompletados}/{g.kpis} KPI ({g.avanceKpi}%)</span>}
+      </div>
+    </div>
+  );
+}
+
 export function SeccionDesempenoAuditores() {
   const { desempeno, totales, isLoading } = useDesempenoAuditores();
 
@@ -45,6 +66,7 @@ export function SeccionDesempenoAuditores() {
       Cronograma: d.cronograma.total ? d.cronograma.cumplimiento : null,
       Rutas: d.rutas.total ? d.rutas.cumplimiento : null,
       CEDIS: d.cedis.total ? d.cedis.cumplimiento : null,
+      "Granjas (% cerr.)": d.granjas.hallazgos ? d.granjas.pctCerrados : null,
     })), [desempeno]);
 
   const activos = desempeno.filter(d => d.totalActividades > 0).length;
@@ -67,7 +89,7 @@ export function SeccionDesempenoAuditores() {
       ) : (
       <>
       {/* KPIs por fuente */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="bg-[#0D1526] rounded-xl p-3 border border-[#1E2D4A]">
           <div className="flex items-center gap-1.5 mb-1"><CalendarDays className="w-3.5 h-3.5 text-[#4A7AFF]"/><p className="text-[10px] text-[#94A3B8]">Cronograma 2026</p></div>
           <p className="text-2xl font-bold text-white">{totales.cronograma}</p>
@@ -82,6 +104,11 @@ export function SeccionDesempenoAuditores() {
           <div className="flex items-center gap-1.5 mb-1"><Warehouse className="w-3.5 h-3.5 text-amber-400"/><p className="text-[10px] text-[#94A3B8]">CEDIS</p></div>
           <p className="text-2xl font-bold text-white">{totales.cedis}</p>
           <p className="text-[10px] text-[#64748B]">auditorías</p>
+        </div>
+        <div className="bg-[#0D1526] rounded-xl p-3 border border-[#1E2D4A]">
+          <div className="flex items-center gap-1.5 mb-1"><Tractor className="w-3.5 h-3.5 text-[#34D399]"/><p className="text-[10px] text-[#94A3B8]">Granjas</p></div>
+          <p className="text-2xl font-bold text-white">{totales.hallazgosGranja}</p>
+          <p className="text-[10px] text-[#64748B]">hallazgos · {totales.kpisAtribuidos} KPI atribuidos</p>
         </div>
         <div className="bg-[#0D1526] rounded-xl p-3 border border-[#1E2D4A]">
           <div className="flex items-center gap-1.5 mb-1"><Users2 className="w-3.5 h-3.5 text-[#A855F7]"/><p className="text-[10px] text-[#94A3B8]">Auditores activos</p></div>
@@ -105,6 +132,7 @@ export function SeccionDesempenoAuditores() {
               <Bar dataKey="Cronograma" fill="#4A7AFF" radius={[3, 3, 0, 0]}/>
               <Bar dataKey="Rutas" fill="#22C55E" radius={[3, 3, 0, 0]}/>
               <Bar dataKey="CEDIS" fill="#F59E0B" radius={[3, 3, 0, 0]}/>
+              <Bar dataKey="Granjas (% cerr.)" fill="#34D399" radius={[3, 3, 0, 0]}/>
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -119,6 +147,7 @@ export function SeccionDesempenoAuditores() {
               <th className="text-left px-4 py-3 font-semibold"><span className="flex items-center gap-1"><CalendarDays className="w-3 h-3 text-[#4A7AFF]"/> Cronograma</span></th>
               <th className="text-left px-4 py-3 font-semibold"><span className="flex items-center gap-1"><Route className="w-3 h-3 text-emerald-400"/> Rutas</span></th>
               <th className="text-left px-4 py-3 font-semibold"><span className="flex items-center gap-1"><Warehouse className="w-3 h-3 text-amber-400"/> CEDIS</span></th>
+              <th className="text-left px-4 py-3 font-semibold"><span className="flex items-center gap-1"><Tractor className="w-3 h-3 text-[#34D399]"/> Granjas</span></th>
               <th className="text-center px-4 py-3 font-semibold">Total act.</th>
             </tr>
           </thead>
@@ -129,6 +158,7 @@ export function SeccionDesempenoAuditores() {
                 <td className="px-4 py-3 w-40"><FuenteBar f={d.cronograma}/></td>
                 <td className="px-4 py-3 w-40"><FuenteBar f={d.rutas}/></td>
                 <td className="px-4 py-3 w-40"><FuenteBar f={d.cedis}/></td>
+                <td className="px-4 py-3 w-48"><GranjasCell g={d.granjas}/></td>
                 <td className="px-4 py-3 text-center text-white font-bold">{d.totalActividades}</td>
               </tr>
             ))}
@@ -136,16 +166,16 @@ export function SeccionDesempenoAuditores() {
         </table>
       </div>
 
-      {/* Nota de Granjas (honestidad: sin auditor por hallazgo) */}
+      {/* Nota de Granjas: métricas y KPIs no atribuibles (honestidad) */}
       <div className="flex items-start gap-2 bg-[#0A111F] border border-dashed border-[#1E2D4A] rounded-xl p-3">
-        <Tractor className="w-4 h-4 text-[#475569] mt-0.5 shrink-0"/>
+        <Tractor className="w-4 h-4 text-[#34D399] mt-0.5 shrink-0"/>
         <p className="text-[11px] text-[#64748B]">
-          <span className="text-[#94A3B8] font-semibold">Granjas:</span> el consolidado de hallazgos y KPIs de granjas no tiene auditor asignado por registro en el origen de datos, por lo que no se atribuye desempeño individual desde esa hoja. Los indicadores de granjas se muestran en su propio bloque del Resumen Ejecutivo.
+          <span className="text-[#94A3B8] font-semibold">Granjas:</span> se muestran los hallazgos detectados por cada auditor (volumen) y el % cerrado sobre su total. Los KPIs de cumplimiento se atribuyen al auditor mediante el hallazgo de origen: {totales.kpisAtribuidos} de {totales.kpisGranja} KPIs son atribuibles; los {totales.kpisSinAtribuir} restantes no tienen vínculo con un auditor en el origen y no se imputan a nadie.
         </p>
       </div>
 
       <p className="text-[11px] text-[#64748B] flex items-center gap-1.5">
-        <Info className="w-3.5 h-3.5"/> Cada fuente se muestra por separado y refleja datos reales del backend. El cumplimiento es (actividades completadas / total) en cada hoja.
+        <Info className="w-3.5 h-3.5"/> Cada fuente se muestra por separado con datos reales del backend. Cronograma, Rutas y CEDIS usan (completadas / total); Granjas usa hallazgos detectados y % cerrados.
       </p>
       </>
       )}
