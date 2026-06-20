@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState } from "react";
 import {
   Shield, User, Bell, Palette, Database, Key, ChevronRight, CheckCircle2,
@@ -1140,9 +1140,7 @@ const ROLES_CATALOG = [
   { id: "ADMIN",      label: "Administrador", desc: "Acceso total · gestiona usuarios, datos y configuración",     color: "#EF4444" },
   { id: "AUDITOR",    label: "Auditor",       desc: "Crear · Editar · Guardar · Actualizar registros operativos",  color: "#3B82F6" },
   { id: "SUPERVISOR", label: "Supervisor",    desc: "Supervisa auditores · Aprueba hallazgos",                     color: "#F59E0B" },
-  { id: "AUDITEE",    label: "Auditeo",       desc: "Usuario auditado · Lectura limitada a sus registros",         color: "#06B6D4" },
   { id: "VIEWER",     label: "Visualizador",  desc: "Solo consulta · no puede modificar registros",                color: "#94A3B8" },
-  { id: "AI_AGENT",   label: "Agente IA",     desc: "Agente automatizado · permisos restringidos",                 color: "#8B5CF6" },
 ];
 
 const roleColor = (role: string) =>
@@ -1911,7 +1909,7 @@ function InviteModal({ onClose, onSubmit }: {
           <div>
             <label className="text-xs text-[#94A3B8] mb-1.5 block">Rol</label>
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="input-base">
-              {ROLES_CATALOG.filter(r => r.id !== "AI_AGENT").map(r => (
+              {ROLES_CATALOG.map(r => (
                 <option key={r.id} value={r.id}>{r.label} · {r.id}</option>
               ))}
             </select>
