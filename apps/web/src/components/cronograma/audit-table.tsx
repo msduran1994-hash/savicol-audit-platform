@@ -3,8 +3,13 @@ import { AUDITORS, AUDIT_STATUS } from "@/lib/constants";
 import { formatDate, getDaysRemaining, getEffectiveStatus, cn } from "@/lib/utils";
 import { useAuditStore, type AuditActivity } from "@/store/audit.store";
 import { Pencil, Trash2, AlertTriangle, Clock, CheckCircle2, Circle } from "lucide-react";
+import { Can } from "@/components/system/can";
 
-interface Props { activities: AuditActivity[]; onEdit: (a: AuditActivity) => void; }
+interface Props {
+  activities: AuditActivity[];
+  onEdit?: (a: AuditActivity) => void;
+  canEditStatus?: boolean;
+}
 
 function StatusBadge({ status }: { status: AuditActivity["status"] }) {
   const s = AUDIT_STATUS[status];
@@ -34,7 +39,7 @@ function DaysRemaining({ endDate, status }: { endDate: string; status: AuditActi
   return <span className="text-[#94A3B8] text-xs">{days}d</span>;
 }
 
-export function AuditTable({ activities, onEdit }: Props) {
+export function AuditTable({ activities, onEdit, canEditStatus = false }: Props) {
   const removeActivity = useAuditStore(s => s.removeActivity);
 
   if (activities.length === 0) {
@@ -116,20 +121,32 @@ export function AuditTable({ activities, onEdit }: Props) {
                 {/* Actions */}
                 <td className="px-4 py-3 whitespace-nowrap">
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => onEdit(a)}
-                      className="w-7 h-7 rounded-lg bg-[#1A2540] flex items-center justify-center text-[#94A3B8] hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                    >
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm("¿Eliminar esta actividad?")) removeActivity(a.id);
-                      }}
-                      className="w-7 h-7 rounded-lg bg-[#1A2540] flex items-center justify-center text-[#94A3B8] hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                    {/* Editar/cambiar estado: solo Admin y Supervisor (Auditor no) */}
+                    {canEditStatus && onEdit && (
+                      <button
+                        onClick={() => onEdit(a)}
+                        className="w-7 h-7 rounded-lg bg-[#1A2540] flex items-center justify-center text-[#94A3B8] hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                        title="Editar actividad y estado"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    )}
+                    {/* Eliminar: solo Admin */}
+                    <Can permiso="eliminar">
+                      <button
+                        onClick={() => {
+                          if (confirm("¿Eliminar esta actividad?")) removeActivity(a.id);
+                        }}
+                        className="w-7 h-7 rounded-lg bg-[#1A2540] flex items-center justify-center text-[#94A3B8] hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        title="Eliminar actividad"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </Can>
+                    {/* Sin permisos de acción: indicador de solo lectura */}
+                    {!canEditStatus && (
+                      <span className="text-[10px] text-[#475569] px-1">Solo lectura</span>
+                    )}
                   </div>
                 </td>
               </tr>
