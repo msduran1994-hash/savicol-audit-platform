@@ -9,11 +9,12 @@ import {
   Gauge,
   Truck, Table2, CheckSquare, Camera, Sparkles,
   Warehouse, Egg,
+  Menu, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
 import { APP_NAME, APP_COMPANY } from "@/lib/constants";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const MAIN_NAV = [
   { href: "/resumen-ejecutivo", label: "Resumen Ejecutivo", icon: Gauge,        badge: null },
@@ -89,27 +90,64 @@ export function Sidebar() {
   const pathname  = usePathname();
   const { user, logout } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const workspace = detectWorkspace(pathname);
   const meta      = META[workspace];
   const a         = ACCENT[meta.accent];
   const LogoIcon  = meta.logoIcon;
 
+  // En móvil, el sidebar se cierra automáticamente al cambiar de ruta
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+
   return (
+    <>
+      {/* Botón hamburguesa flotante — solo móvil */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="lg:hidden fixed top-3 left-3 z-40 w-10 h-10 rounded-xl flex items-center justify-center shadow-lg"
+        style={{ background: "#1A3A8F", color: "#fff", border: "1px solid rgba(255,255,255,0.2)" }}
+        aria-label="Abrir menú"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
+
+      {/* Backdrop oscuro — solo móvil, cuando el menú está abierto */}
+      {mobileOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
     <aside
       className={cn(
-        "relative flex flex-col h-screen transition-all duration-300 ease-in-out",
-        "sidebar-corporate",
-        collapsed ? "w-[68px]" : "w-[240px]"
+        "flex flex-col h-screen transition-all duration-300 ease-in-out sidebar-corporate",
+        // Escritorio: relativo, con colapso. Móvil: drawer deslizante fijo.
+        "max-lg:fixed max-lg:top-0 max-lg:left-0 max-lg:z-50 max-lg:w-[260px]",
+        mobileOpen ? "max-lg:translate-x-0" : "max-lg:-translate-x-full",
+        "lg:relative lg:translate-x-0",
+        collapsed ? "lg:w-[68px]" : "lg:w-[240px]"
       )}
     >
+      {/* Botón cerrar — solo móvil */}
+      <button
+        onClick={() => setMobileOpen(false)}
+        className="lg:hidden absolute right-3 top-4 z-20 w-8 h-8 rounded-lg flex items-center justify-center"
+        style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.8)" }}
+        aria-label="Cerrar menú"
+      >
+        <X className="w-4 h-4" />
+      </button>
+
       {/* SAVICOL red top stripe */}
       <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "#C41230" }} />
 
-      {/* Toggle button */}
+      {/* Toggle button — solo escritorio */}
       <button
         onClick={() => setCollapsed(v => !v)}
-        className="absolute -right-3.5 top-6 z-20 w-7 h-7 rounded-full flex items-center justify-center
+        className="hidden lg:flex absolute -right-3.5 top-6 z-20 w-7 h-7 rounded-full items-center justify-center
                    transition-all shadow-lg"
         style={{
           background: "#1A3A8F",
@@ -256,5 +294,6 @@ export function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   );
 }
