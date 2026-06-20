@@ -7,6 +7,7 @@ import { CATEGORIA_HALLAZGO, CRITICIDAD, TIPO_RIESGO, TIPO_GRANJA, TIPO_OPERATIV
 import { AUDITORS } from "@/lib/constants";
 import type { Hallazgo } from "@/lib/granjas.types";
 import { AlertTriangle, Filter, Plus, Sparkles, Image, Paperclip, X, Edit2, Trash2 } from "lucide-react";
+import { Can } from "@/components/system/can";
 
 export default function HallazgosPage() {
   const hallazgos      = useGranjasStore(useShallow((s) => s.hallazgos));
@@ -82,9 +83,11 @@ export default function HallazgosPage() {
             <option value="">Todos los tipos</option>
             {TIPO_OPERATIVO.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary text-xs ml-auto bg-amber-500 hover:bg-amber-600">
-            <Plus className="w-3.5 h-3.5"/>Nuevo Hallazgo
-          </button>
+          <Can permiso="crear">
+            <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary text-xs ml-auto bg-amber-500 hover:bg-amber-600">
+              <Plus className="w-3.5 h-3.5"/>Nuevo Hallazgo
+            </button>
+          </Can>
         </div>
 
         {filtered.length === 0 ? (
@@ -128,20 +131,24 @@ export default function HallazgosPage() {
                       <p className="text-xs text-[#94A3B8] mt-1">{h.granjaNombre} · {h.auditorNombre} · {h.fechaVisita}</p>
                     </div>
                     <div className="flex gap-1">
-                      <button onClick={() => { setEditing(h); setModalOpen(true); }} className="p-1.5 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar">
-                        <Edit2 className="w-3.5 h-3.5"/>
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (!confirm(`¿Eliminar hallazgo "${h.titulo}"?\nEsta acción no se puede deshacer.`)) return;
-                          try { await removeHallazgo(h.id); }
-                          catch (e: any) { alert("Error al eliminar: " + (e?.response?.data?.message ?? e?.message ?? "desconocido")); }
-                        }}
-                        className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="w-3.5 h-3.5"/>
-                      </button>
+                      <Can permiso="editar">
+                        <button onClick={() => { setEditing(h); setModalOpen(true); }} className="p-1.5 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar">
+                          <Edit2 className="w-3.5 h-3.5"/>
+                        </button>
+                      </Can>
+                      <Can permiso="eliminar">
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`¿Eliminar hallazgo "${h.titulo}"?\nEsta acción no se puede deshacer.`)) return;
+                            try { await removeHallazgo(h.id); }
+                            catch (e: any) { alert("Error al eliminar: " + (e?.response?.data?.message ?? e?.message ?? "desconocido")); }
+                          }}
+                          className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-3.5 h-3.5"/>
+                        </button>
+                      </Can>
                     </div>
                   </div>
                   <p className="text-sm text-[#94A3B8] mb-3 leading-relaxed">{h.descripcion}</p>
