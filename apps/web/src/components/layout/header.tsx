@@ -28,7 +28,7 @@ export function Header({ title, subtitle }: HeaderProps) {
 
   return (
     <header
-      className="h-14 flex items-center justify-between px-6 sticky top-0 z-10 backdrop-blur-sm"
+      className="h-14 flex items-center justify-between px-6 max-lg:pl-16 sticky top-0 z-10 backdrop-blur-sm"
       style={{
         borderBottom: "1px solid var(--border-subtle)",
         background: "var(--header-bg)",
