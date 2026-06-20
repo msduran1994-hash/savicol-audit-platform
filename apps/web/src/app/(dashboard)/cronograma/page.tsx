@@ -8,6 +8,7 @@ import { useAuditStore, selectFilteredActivities, type AuditActivity } from "@/s
 import { useShallow } from "zustand/react/shallow";
 import { Plus, Download, Upload, RefreshCw } from "lucide-react";
 import { calculateCompletionRate } from "@/lib/utils";
+import { Can, usePermiso } from "@/components/system/can";
 
 export default function CronogramaPage() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -17,6 +18,10 @@ export default function CronogramaPage() {
   const filtered     = useAuditStore(useShallow(selectFilteredActivities));
   const resetFilters = useAuditStore((s) => s.resetFilters);
   const rate         = calculateCompletionRate(activities);
+  const { puede }    = usePermiso();
+  // Caso especial Cronograma 2026: el Auditor puede crear actividades pero NO
+  // cambiar estados (eso es exclusivo de Admin y Supervisor).
+  const puedeEditarEstados = puede("cambiarEstados");
 
   function openCreate() { setEditingActivity(null); setModalOpen(true); }
   function openEdit(a: AuditActivity) { setEditingActivity(a); setModalOpen(true); }
@@ -54,14 +59,16 @@ export default function CronogramaPage() {
             >
               <Upload className="w-3.5 h-3.5" /> Importar
             </button>
-            <button onClick={openCreate} className="btn-primary text-xs">
-              <Plus className="w-3.5 h-3.5" /> Nueva Actividad
-            </button>
+            <Can permiso="crear">
+              <button onClick={openCreate} className="btn-primary text-xs">
+                <Plus className="w-3.5 h-3.5" /> Nueva Actividad
+              </button>
+            </Can>
           </div>
         </div>
 
         {/* Table */}
-        <AuditTable activities={filtered} onEdit={openEdit} />
+        <AuditTable activities={filtered} onEdit={puedeEditarEstados ? openEdit : undefined} canEditStatus={puedeEditarEstados} />
       </div>
 
       {/* Modal */}
