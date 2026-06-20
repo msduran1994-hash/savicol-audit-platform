@@ -4,6 +4,7 @@ import { useRutasStore } from "@/store/rutas.store";
 import { useShallow } from "zustand/react/shallow";
 import { ESTADO_CUMPLIMIENTO } from "@/lib/rutas.constants";
 import { CheckSquare, AlertCircle, Clock, RefreshCw, CheckCircle2, XCircle, Filter, Plus } from "lucide-react";
+import { GeneradorInformesRutas } from "./informe-rutas";
 
 export default function CumplimientoPage() {
   const acciones = useRutasStore(useShallow((s) => s.cumplimiento));
@@ -35,7 +36,7 @@ export default function CumplimientoPage() {
             <option value="">Todos los estados</option>
             {ESTADO_CUMPLIMIENTO.map(e => <option key={e}>{e}</option>)}
           </select>
-          <button className="btn-primary text-xs ml-auto"><Plus className="w-3.5 h-3.5"/>Nuevo plan</button>
+          <div className="ml-auto flex items-center gap-2"><GeneradorInformesRutas /><button className="btn-primary text-xs"><Plus className="w-3.5 h-3.5"/>Nuevo plan</button></div>
         </div>
 
         {/* KPIs */}
