@@ -2,6 +2,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth.store";
+import MobileLogin from "@/components/auth/MobileLogin";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 // ─────────────────────────────────────────────────────────────
 // AP Audit Platform Software — Login Page v2
@@ -42,6 +44,9 @@ export default function LoginPage() {
   const [showPwd,  setShowPwd]  = useState(false);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
+  const isMobile = useIsMobile();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Animación CSS inyectada una vez
   useEffect(() => {
@@ -218,6 +223,9 @@ export default function LoginPage() {
                transition:"transform .15s,box-shadow .15s",
                position:"relative" as const, overflow:"hidden" },
   };
+
+  // Móvil: login nativo (Fase 2). Escritorio: diseño v2 sin cambios.
+  if (mounted && isMobile) return <MobileLogin logoSrc={LOGO_URI} />;
 
   return (
     <div style={S.root}>
