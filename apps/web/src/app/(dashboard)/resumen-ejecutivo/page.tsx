@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { SeccionDesempenoAuditores } from "./seccion-desempeno-auditores";
+import { SeccionDiagnosticoRutas } from "./seccion-diagnostico-rutas";
 
 // ─── Resumen Ejecutivo · portada corporativa · Fase 1 ──────────────────────────
 // Consolida indicadores REALES de Auditoría/CEDIS, Granjas y Trazabilidad.
@@ -482,6 +483,9 @@ export default function ResumenEjecutivoPage() {
             </div>
           </div>
         </div>
+
+        {/* Diagnóstico Ejecutivo de Rutas (FASE 1) */}
+        <SeccionDiagnosticoRutas />
 
         {/* Desempeño de Auditores (consolidado) */}
         <SeccionDesempenoAuditores />
