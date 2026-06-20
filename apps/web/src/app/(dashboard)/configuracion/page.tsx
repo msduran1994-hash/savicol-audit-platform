@@ -8,6 +8,7 @@ import {
 import { SavicolLogo } from "@/components/ui/savicol-logo";
 import { useAppearanceStore } from "@/store/appearance.store";
 import { useAuthStore } from "@/store/auth.store";
+import { MATRIZ_UI, ROLES_MATRIZ, ROL_LABEL, can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import {
   useUsers, useCreateUser, useUpdateUser, useUpdateUserRole,
@@ -1231,6 +1232,47 @@ function UsuariosSection({ user }: { user: any }) {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Matriz de permisos (Fase 7) — qué puede hacer cada rol */}
+      <div>
+        <p className="text-xs uppercase tracking-wider text-[#94A3B8] font-semibold mb-3">Matriz de permisos</p>
+        <div className="card-base p-0 overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
+            <thead>
+              <tr className="border-b border-[#1E2D4A]">
+                <th className="text-left px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-[#475569]">Función</th>
+                {ROLES_MATRIZ.map(rol => (
+                  <th key={rol} className="text-center px-3 py-3 text-[10px] font-semibold uppercase tracking-wider text-[#475569] whitespace-nowrap">
+                    {ROL_LABEL[rol]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#1E2D4A]">
+              {MATRIZ_UI.map(({ funcion, permiso }) => (
+                <tr key={permiso} className="table-row-hover">
+                  <td className="px-4 py-2.5 text-xs text-[#E2E8F0] whitespace-nowrap">{funcion}</td>
+                  {ROLES_MATRIZ.map(rol => {
+                    const permitido = can(rol, permiso);
+                    return (
+                      <td key={rol} className="text-center px-3 py-2.5">
+                        {permitido ? (
+                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-400 text-xs" title="Permitido">✓</span>
+                        ) : (
+                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#1A2540] text-[#475569] text-xs" title="No permitido">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[11px] text-[#64748B] mt-2">
+          Esta matriz controla la visibilidad de acciones en la interfaz. La validación de seguridad definitiva se realiza en el servidor.
+        </p>
       </div>
 
       {/* Barra de búsqueda */}
