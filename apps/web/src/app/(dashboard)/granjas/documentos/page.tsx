@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { AUDITORS } from "@/lib/constants";
 import { documentosDeHoja, conEtiquetaHoja, nombreLimpio } from "@/lib/docHojas";
+import { Can } from "@/components/system/can";
 
 // ── Metadata de auditoría embebida en ocrTexto ───────────────────────────────
 // Como el modelo Documento no tiene columnas para auditor/fechas, se guardan
@@ -215,12 +216,14 @@ export default function DocumentosPage() {
           <button onClick={() => docsQ.refetch()} className="p-1.5 rounded bg-[#1A2540] border border-[#2A3F6A] text-[#94A3B8] hover:text-white" title="Refrescar">
             <RefreshCw className={cn("w-3.5 h-3.5", docsQ.isFetching && "animate-spin")}/>
           </button>
-          <button
-            onClick={() => { setEditing(null); setSaveError(null); setModalOpen(true); }}
-            className="btn-primary text-xs ml-auto bg-amber-500 hover:bg-amber-600 flex items-center gap-1.5"
-          >
-            <Plus className="w-3.5 h-3.5"/> Cargar Documento
-          </button>
+          <Can permiso="cargarEvidencias">
+            <button
+              onClick={() => { setEditing(null); setSaveError(null); setModalOpen(true); }}
+              className="btn-primary text-xs ml-auto bg-amber-500 hover:bg-amber-600 flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5"/> Cargar Documento
+            </button>
+          </Can>
         </div>
 
         {statsQ.data && statsQ.data.porTipo.length > 0 && (
@@ -312,20 +315,24 @@ export default function DocumentosPage() {
                               title="Abrir/Descargar">
                               <ExternalLink className="w-3 h-3"/>
                             </a>
-                            <button onClick={() => { setEditing(d); setSaveError(null); setModalOpen(true); }}
-                              className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar">
-                              <Edit2 className="w-3 h-3"/>
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (!confirm(`¿Eliminar registro de "${nombreLimpio(d.nombre)}"?\n(No borra el archivo en su ubicación original)`)) return;
-                                try { await removeDoc.mutateAsync(d.id); }
-                                catch (e: any) { alert("Error: " + (e?.response?.data?.message ?? e?.message)); }
-                              }}
-                              className="p-1 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400"
-                              title="Eliminar registro">
-                              <Trash2 className="w-3 h-3"/>
-                            </button>
+                            <Can permiso="editar">
+                              <button onClick={() => { setEditing(d); setSaveError(null); setModalOpen(true); }}
+                                className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar">
+                                <Edit2 className="w-3 h-3"/>
+                              </button>
+                            </Can>
+                            <Can permiso="eliminar">
+                              <button
+                                onClick={async () => {
+                                  if (!confirm(`¿Eliminar registro de "${nombreLimpio(d.nombre)}"?\n(No borra el archivo en su ubicación original)`)) return;
+                                  try { await removeDoc.mutateAsync(d.id); }
+                                  catch (e: any) { alert("Error: " + (e?.response?.data?.message ?? e?.message)); }
+                                }}
+                                className="p-1 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400"
+                                title="Eliminar registro">
+                                <Trash2 className="w-3 h-3"/>
+                              </button>
+                            </Can>
                           </div>
                         </td>
                       </tr>
