@@ -1,13 +1,16 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// SESSION POLICY · Política de inactividad y cierre automático de sesión por rol
+// SESSION POLICY · Política de inactividad y cierre automático de sesión
 // ═══════════════════════════════════════════════════════════════════════════════
 // Fuente única de verdad consumida por useIdleTimeout + SeguridadSection UI.
 // Valores en MINUTOS. Si el warning >= timeout no se muestra modal.
 //
-// Política corporativa (acordada con el área de seguridad):
-//   ADMIN              · advertencia 25', cierre 30'
-//   AUDITOR/SUPERVISOR · advertencia 35', cierre 45'
-//   VIEWER/AUDITEE     · advertencia 15', cierre 20'
+// Política corporativa unificada:
+//   La sesión se cierra ÚNICAMENTE tras 30 minutos de inactividad real
+//   (mouse, teclado, scroll, guardados, navegación). Igual para todos los roles.
+//   Se muestra una advertencia 2 minutos antes del cierre para permitir continuar.
+//
+// Roles vigentes: ADMIN · SUPERVISOR · AUDITOR · VIEWER
+// (Los roles "AUDITEE/Auditeo" y "AI_AGENT/Agente IA" fueron eliminados.)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface RoleSessionPolicy {
@@ -17,42 +20,34 @@ export interface RoleSessionPolicy {
   description: string;
 }
 
+// Inactividad uniforme: 30 minutos de cierre, advertencia a los 28 (2 min antes).
+const TIMEOUT_MINUTES = 30;
+const WARNING_MINUTES = 28;
+
 export const SESSION_POLICIES: Record<string, RoleSessionPolicy> = {
   ADMIN: {
-    warningMinutes: 25,
-    timeoutMinutes: 30,
+    warningMinutes: WARNING_MINUTES,
+    timeoutMinutes: TIMEOUT_MINUTES,
     label: "Administrador",
-    description: "Acceso privilegiado · ventana corta por sensibilidad de operaciones",
-  },
-  AUDITOR: {
-    warningMinutes: 35,
-    timeoutMinutes: 45,
-    label: "Auditor",
-    description: "Trabajo intensivo en campo · ventana extendida",
+    description: "Acceso total · cierre tras 30 min de inactividad real",
   },
   SUPERVISOR: {
-    warningMinutes: 35,
-    timeoutMinutes: 45,
+    warningMinutes: WARNING_MINUTES,
+    timeoutMinutes: TIMEOUT_MINUTES,
     label: "Supervisor",
-    description: "Coordinación de equipos · ventana extendida",
+    description: "Acceso operativo y aprobaciones · cierre tras 30 min de inactividad real",
   },
-  AUDITEE: {
-    warningMinutes: 15,
-    timeoutMinutes: 20,
-    label: "Auditeo",
-    description: "Consulta limitada a sus registros · ventana corta",
+  AUDITOR: {
+    warningMinutes: WARNING_MINUTES,
+    timeoutMinutes: TIMEOUT_MINUTES,
+    label: "Auditor",
+    description: "Registro y evidencias · cierre tras 30 min de inactividad real",
   },
   VIEWER: {
-    warningMinutes: 15,
-    timeoutMinutes: 20,
+    warningMinutes: WARNING_MINUTES,
+    timeoutMinutes: TIMEOUT_MINUTES,
     label: "Visualizador",
-    description: "Solo lectura · ventana corta",
-  },
-  AI_AGENT: {
-    warningMinutes: 0,
-    timeoutMinutes: 0,
-    label: "Agente IA",
-    description: "Sin idle timeout · sesiones de servicio (no humanas)",
+    description: "Solo lectura · cierre tras 30 min de inactividad real",
   },
 };
 
@@ -65,7 +60,7 @@ export function getPolicy(role?: string): RoleSessionPolicy {
 }
 
 /**
- * ¿Esta política tiene auto-logout? (AI_AGENT = 0 = nunca expira)
+ * ¿Esta política tiene auto-logout? (siempre true: todos cierran a los 30 min)
  */
 export function hasIdleTimeout(policy: RoleSessionPolicy): boolean {
   return policy.timeoutMinutes > 0;
