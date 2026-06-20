@@ -31,9 +31,14 @@ export class AuditActivitiesService {
     area?: string;
     search?: string;
   }) {
-    const { year = 2026, auditorId, status, area, search } = filters;
+    // FIX: no forzar year=2026. Si no se pide un año explícito, se devuelven
+    // TODAS las actividades (incluye registros importados con otro año o sin año),
+    // tal como se ve en la plataforma original. El filtro por año sigue
+    // disponible cuando el cliente lo envía (?year=2026).
+    const { year, auditorId, status, area, search } = filters;
 
-    const where: any = { year };
+    const where: any = {};
+    if (year)      where.year      = year;
     if (auditorId) where.auditorId = auditorId;
     if (status)    where.status    = status;
     if (area)      where.area      = area;
