@@ -13,12 +13,13 @@
  *  - NO registra Service Worker: <PwaRegister /> ya lo hace en tu layout raíz.
  *  - Iconos con lucide-react (ya está en tus dependencias).
  *
- * Ajusta los `href` de NAV_ITEMS / DRAWER_ITEMS a tus rutas reales.
+ * NAV_ITEMS / DRAWER_ITEMS ya apuntan a rutas reales del (dashboard).
  */
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/auth.store";
 import {
   Home,
   ClipboardCheck,
@@ -36,17 +37,17 @@ import {
 
 const NAV_ITEMS = [
   { href: "/", label: "Inicio", Icon: Home },
-  { href: "/auditoria", label: "Auditoría", Icon: ClipboardCheck },
+  { href: "/cronograma", label: "Auditoría", Icon: ClipboardCheck },
   { href: "/granjas", label: "Granjas", Icon: Egg },
   { href: "/cedis", label: "CEDIS", Icon: Warehouse },
   { href: "/rutas", label: "Rutas", Icon: RouteIcon },
-  { href: "/reportes", label: "Reportes", Icon: BarChart3 },
+  { href: "/indicadores", label: "Reportes", Icon: BarChart3 },
 ];
 
 const DRAWER_ITEMS = [
   { href: "/configuracion", label: "Configuración", Icon: Settings },
-  { href: "/perfil", label: "Perfil", Icon: User },
-  { href: "/notificaciones", label: "Notificaciones", Icon: Bell },
+  { href: "/configuracion", label: "Perfil", Icon: User },
+  { href: "/configuracion", label: "Notificaciones", Icon: Bell },
 ];
 
 function useIsMobile(breakpoint = 768) {
@@ -63,6 +64,8 @@ function useIsMobile(breakpoint = 768) {
 
 export default function MobileShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/";
+  const router = useRouter();
+  const logout = useAuthStore((st) => st.logout);
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -107,7 +110,7 @@ export default function MobileShell({ children }: { children: React.ReactNode })
         </div>
 
         <Link
-          href="/notificaciones"
+          href="/configuracion"
           aria-label="Notificaciones"
           className="relative grid place-items-center w-10 h-10 rounded-xl text-text-secondary
                      active:bg-bg-elevated transition-colors"
@@ -208,8 +211,9 @@ export default function MobileShell({ children }: { children: React.ReactNode })
         <div className="border-t border-[var(--sidebar-border)] pt-3.5">
           <button
             onClick={() => {
-              /* TODO: conecta con tu logout real (JWT / NestJS). */
-              window.location.href = "/logout";
+              setDrawerOpen(false);
+              logout();              // limpia sesión (store auth); AuthGuard redirige
+              router.replace("/login");
             }}
             className="flex items-center gap-3.5 w-full px-3 py-3 rounded-xl text-[15px]
                        text-red-300 active:bg-red-500/10 transition-colors"
