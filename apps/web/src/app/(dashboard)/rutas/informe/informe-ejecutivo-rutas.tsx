@@ -558,15 +558,16 @@ export function InformeEjecutivoRutasModal({ acompanamientos, cumplimiento, usua
       evidenciasScope.filter(e => e.tipo !== "Foto").forEach(e => evRefs.push(refDe(e)));
       const CAP = 12; // tope de fotos incrustadas para mantener el PDF manejable
       for (const e of fotosEv.slice(0, CAP)) {
+        const ac = acompById[e.acompanamientoId];
+        const pushFoto = (dataUrl: string) => fotos.push({ dataUrl, motivo: ac?.motivo ?? e.nombre, cliente: ac?.clienteNombre ?? "", ruta: ac?.rutaNombre ?? "", fecha: e.uploadedAt, categoria: e.categoria ?? "", nombre: e.nombre });
+        // Subida directa a la plataforma: la url ya es base64 → incrustar sin proxy
+        if (/^data:image\//i.test(e.url)) { pushFoto(e.url); continue; }
+        // Enlace externo (legado): descargar vía proxy server-side
         try {
           const r = await fetch("/api/evidencia-img?url=" + encodeURIComponent(e.url));
           const d = r.ok ? await r.json() : null;
-          if (d?.dataUrl) {
-            const ac = acompById[e.acompanamientoId];
-            fotos.push({ dataUrl: d.dataUrl, motivo: ac?.motivo ?? e.nombre, cliente: ac?.clienteNombre ?? "", ruta: ac?.rutaNombre ?? "", fecha: e.uploadedAt, categoria: e.categoria ?? "", nombre: e.nombre });
-          } else {
-            evRefs.push(refDe(e)); // no incrustable (privada / no es imagen) → referencia
-          }
+          if (d?.dataUrl) pushFoto(d.dataUrl);
+          else evRefs.push(refDe(e)); // no incrustable (privada / no es imagen) → referencia
         } catch { evRefs.push(refDe(e)); }
       }
       fotosEv.slice(CAP).forEach(e => evRefs.push(refDe(e))); // exceso del tope → referencia

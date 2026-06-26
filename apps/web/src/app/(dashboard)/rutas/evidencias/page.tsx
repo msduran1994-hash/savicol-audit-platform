@@ -1,8 +1,9 @@
 "use client";
 // ═══════════════════════════════════════════════════════════════════════════════
 // Evidencias · Acompañamientos Rutas · conectado al API
+// Subida directa de archivos a la plataforma (base64) con vista previa.
 // ═══════════════════════════════════════════════════════════════════════════════
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Header } from "@/components/layout/header";
 import { useAcompanamientos } from "@/hooks/useRutas";
 import {
@@ -11,7 +12,7 @@ import {
 } from "@/hooks/useEvidencias";
 import {
   Camera, FileText, FileSpreadsheet, Image as ImageIcon, Video, FolderOpen,
-  Plus, ExternalLink, Trash2, X, AlertCircle, Loader2, Search,
+  Plus, ExternalLink, Trash2, X, AlertCircle, Loader2, Search, UploadCloud, Download, Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,11 +29,60 @@ const COLOR_TIPO: Record<string, string> = {
   Foto: "#3B82F6", PDF: "#EF4444", Excel: "#10B981", Video: "#8B5CF6", Otro: "#94A3B8",
 };
 
+const esImagen = (e: { tipo: string; url: string }) =>
+  e.tipo === "Foto" || /^data:image\//i.test(e.url) || /\.(png|jpe?g|webp|gif)(\?|$)/i.test(e.url);
+const fmtSize = (b: number) => b > 1_048_576 ? `${(b / 1_048_576).toFixed(1)} MB` : b > 1024 ? `${Math.round(b / 1024)} KB` : `${b} B`;
+
+// ── Procesamiento de archivos en el navegador ──────────────────────────────────
+function readAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as string);
+    r.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    r.readAsDataURL(file);
+  });
+}
+function resizeImage(file: File, maxDim = 1280, quality = 0.72): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const r = Math.min(maxDim / width, maxDim / height);
+        width = Math.round(width * r); height = Math.round(height * r);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return reject(new Error("Canvas no disponible"));
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => reject(new Error("Imagen inválida"));
+    readAsDataURL(file).then(d => { img.src = d; }).catch(reject);
+  });
+}
+const estimarBytes = (dataUrl: string) => Math.round((dataUrl.length - (dataUrl.indexOf(",") + 1)) * 0.75);
+
+async function procesarArchivo(file: File): Promise<{ dataUrl: string; size: number; tipo: string }> {
+  if (file.type.startsWith("image/")) {
+    const dataUrl = await resizeImage(file);
+    return { dataUrl, size: estimarBytes(dataUrl), tipo: "Foto" };
+  }
+  if (file.size > 10 * 1024 * 1024) throw new Error("El archivo supera 10 MB. Usa 'Pegar enlace' para archivos grandes (videos, etc.).");
+  const dataUrl = await readAsDataURL(file);
+  const tipo = file.type.includes("pdf") ? "PDF"
+    : /sheet|excel|csv|spreadsheet/.test(file.type) ? "Excel"
+    : file.type.startsWith("video/") ? "Video" : "Otro";
+  return { dataUrl, size: file.size, tipo };
+}
+
 export default function EvidenciasRutasPage() {
   const acompQ = useAcompanamientos();
   const acomp  = acompQ.data ?? [];
   const [selectedId, setSelectedId] = useState<string>("");
   const [search, setSearch] = useState("");
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   const evidQ = useEvidenciasRuta(selectedId);
   const evid  = evidQ.data ?? [];
@@ -132,34 +182,54 @@ export default function EvidenciasRutasPage() {
                   <div className="py-12 text-center">
                     <FolderOpen className="w-10 h-10 text-[#1E2D4A] mx-auto mb-4"/>
                     <p className="text-white text-sm font-semibold mb-2">Sin evidencias registradas</p>
-                    <p className="text-[#475569] text-xs">Click en "Cargar Evidencia" para vincular un archivo</p>
+                    <p className="text-[#475569] text-xs">Click en "Cargar Evidencia" para subir una foto o archivo</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {evid.map(e => {
                       const Icon = ICONO_TIPO[e.tipo] ?? FolderOpen;
                       const color = COLOR_TIPO[e.tipo] ?? "#94A3B8";
+                      const img = esImagen(e);
                       return (
-                        <div key={e.id} className="bg-[#1A2540] border border-[#2A3F6A] rounded-lg p-3 flex items-center gap-3">
-                          <Icon className="w-5 h-5 shrink-0" style={{ color }}/>
+                        <div key={e.id} className="bg-[#1A2540] border border-[#2A3F6A] rounded-lg p-2.5 flex items-center gap-3">
+                          {img ? (
+                            <button onClick={() => setLightbox(e.url)} className="shrink-0" title="Ver imagen">
+                              <img src={e.url} alt={e.nombre} className="w-12 h-12 object-cover rounded-md border border-[#2A3F6A]"/>
+                            </button>
+                          ) : (
+                            <div className="w-12 h-12 rounded-md bg-[#0D1526] border border-[#2A3F6A] flex items-center justify-center shrink-0">
+                              <Icon className="w-5 h-5" style={{ color }}/>
+                            </div>
+                          )}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-white truncate">{e.nombre}</p>
-                            <p className="text-[10px] text-[#94A3B8] mt-0.5">
-                              {e.tipo} · {e.categoria ?? "—"} · {new Date(e.uploadedAt).toLocaleDateString("es-CO")} · {e.uploadedBy}
+                            <p className="text-[10px] text-[#94A3B8] mt-0.5 truncate">
+                              {e.tipo} · {e.categoria ?? "—"} · {new Date(e.uploadedAt).toLocaleDateString("es-CO")}
                             </p>
                           </div>
-                          <a href={e.url} target="_blank" rel="noopener noreferrer"
-                            className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400"
-                            title="Abrir">
-                            <ExternalLink className="w-3.5 h-3.5"/>
-                          </a>
+                          {img ? (
+                            <button onClick={() => setLightbox(e.url)}
+                              className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400 shrink-0" title="Ver">
+                              <ImageIcon className="w-3.5 h-3.5"/>
+                            </button>
+                          ) : /^data:/i.test(e.url) ? (
+                            <a href={e.url} download={e.nombre}
+                              className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400 shrink-0" title="Descargar">
+                              <Download className="w-3.5 h-3.5"/>
+                            </a>
+                          ) : (
+                            <a href={e.url} target="_blank" rel="noopener noreferrer"
+                              className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400 shrink-0" title="Abrir">
+                              <ExternalLink className="w-3.5 h-3.5"/>
+                            </a>
+                          )}
                           <button
                             onClick={async () => {
                               if (!confirm(`¿Eliminar evidencia "${e.nombre}"?`)) return;
                               try { await removeEv.mutateAsync(e.id); }
                               catch (err: any) { alert("Error: " + (err?.response?.data?.message ?? err?.message)); }
                             }}
-                            className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400"
+                            className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400 shrink-0"
                             title="Eliminar"
                           >
                             <Trash2 className="w-3.5 h-3.5"/>
@@ -197,6 +267,16 @@ export default function EvidenciasRutasPage() {
           }}
         />
       )}
+
+      {/* Lightbox / vista previa ampliada */}
+      {lightbox && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[60] flex items-center justify-center p-6" onClick={() => setLightbox(null)}>
+          <button className="absolute top-4 right-4 text-white/80 hover:text-white" onClick={() => setLightbox(null)}>
+            <X className="w-7 h-7"/>
+          </button>
+          <img src={lightbox} alt="Evidencia" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={e => e.stopPropagation()}/>
+        </div>
+      )}
     </div>
   );
 }
@@ -207,6 +287,7 @@ function EvidenciaModal({ acompanamientoId, error, onClose, onSave }: {
   onClose: () => void;
   onSave: (dto: EvidenciaRutaPayload) => Promise<void>;
 }) {
+  const [modo, setModo] = useState<"subir" | "enlace">("subir");
   const [form, setForm] = useState<EvidenciaRutaPayload>({
     acompanamientoId,
     tipo:      "Foto",
@@ -215,14 +296,34 @@ function EvidenciaModal({ acompanamientoId, error, onClose, onSave }: {
     size:      0,
     categoria: "Foto del producto",
   });
+  const [preview, setPreview] = useState<string | null>(null); // dataURL de imagen para vista previa
+  const [procesando, setProcesando] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function onPick(file?: File) {
+    if (!file) return;
+    setValidationError(null);
+    setProcesando(true);
+    try {
+      const { dataUrl, size, tipo } = await procesarArchivo(file);
+      setForm(f => ({ ...f, url: dataUrl, size, tipo, nombre: f.nombre || file.name }));
+      setPreview(dataUrl.startsWith("data:image/") ? dataUrl : null);
+    } catch (e: any) {
+      setValidationError(e?.message ?? "No se pudo procesar el archivo");
+      setPreview(null);
+      setForm(f => ({ ...f, url: "", size: 0 }));
+    } finally {
+      setProcesando(false);
+    }
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError(null);
-    if (!form.nombre?.trim()) { setValidationError("Nombre del archivo es obligatorio"); return; }
-    if (!form.url?.trim())    { setValidationError("URL del archivo es obligatoria"); return; }
+    if (!form.nombre?.trim()) { setValidationError("El nombre es obligatorio"); return; }
+    if (!form.url?.trim())    { setValidationError(modo === "subir" ? "Selecciona un archivo para subir" : "La URL es obligatoria"); return; }
 
     setSubmitting(true);
     try { await onSave({ ...form, nombre: form.nombre.trim(), url: form.url.trim() }); }
@@ -230,26 +331,79 @@ function EvidenciaModal({ acompanamientoId, error, onClose, onSave }: {
     finally { setSubmitting(false); }
   };
 
+  const cambiarModo = (m: "subir" | "enlace") => {
+    setModo(m); setValidationError(null); setPreview(null);
+    setForm(f => ({ ...f, url: "", size: 0 }));
+  };
+
+  const TAB = (m: "subir" | "enlace", label: string, Icon: any) => (
+    <button type="button" onClick={() => cambiarModo(m)}
+      className={cn("flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition-colors",
+        modo === m ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300" : "bg-[#0D1526] border-[#1E2D4A] text-[#94A3B8] hover:text-white")}>
+      <Icon className="w-3.5 h-3.5"/> {label}
+    </button>
+  );
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-lg overflow-hidden shadow-card">
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-lg overflow-hidden shadow-card max-h-[92vh] overflow-y-auto">
         <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
           <div>
             <h2 className="font-display font-bold text-white text-lg">Cargar Evidencia</h2>
-            <p className="text-xs text-[#94A3B8] mt-0.5">Pega la URL del archivo (Drive · OneDrive · SharePoint · etc)</p>
+            <p className="text-xs text-[#94A3B8] mt-0.5">Sube la foto o archivo directamente a la plataforma</p>
           </div>
           <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
         </header>
         <form onSubmit={submit} className="px-6 py-4 space-y-3">
+          <div className="flex gap-2">
+            {TAB("subir", "Subir archivo", UploadCloud)}
+            {TAB("enlace", "Pegar enlace", Link2)}
+          </div>
+
+          {modo === "subir" ? (
+            <div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*,application/pdf,.xlsx,.xls,.csv,video/*"
+                className="hidden"
+                onChange={e => onPick(e.target.files?.[0])}
+              />
+              {preview ? (
+                <div className="relative">
+                  <img src={preview} alt="Vista previa" className="w-full max-h-56 object-contain rounded-lg border border-[#1E2D4A] bg-[#0A111F]"/>
+                  <button type="button" onClick={() => fileRef.current?.click()}
+                    className="absolute bottom-2 right-2 text-[11px] bg-[#0D1526]/90 border border-[#1E2D4A] rounded-md px-2 py-1 text-cyan-300 hover:text-cyan-200">
+                    Cambiar
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => fileRef.current?.click()} disabled={procesando}
+                  className="w-full border-2 border-dashed border-[#1E2D4A] hover:border-cyan-500/50 rounded-lg py-8 flex flex-col items-center gap-2 text-[#94A3B8] hover:text-cyan-300 transition-colors">
+                  {procesando ? <Loader2 className="w-7 h-7 animate-spin"/> : <UploadCloud className="w-7 h-7"/>}
+                  <span className="text-sm font-medium">{procesando ? "Procesando…" : "Haz clic para seleccionar un archivo"}</span>
+                  <span className="text-[10px]">Imágenes (se optimizan), PDF, Excel · máx. 10 MB</span>
+                </button>
+              )}
+              {form.url && !procesando && (
+                <p className="text-[10px] text-emerald-400 mt-1.5 flex items-center gap-1">
+                  Archivo listo · {form.tipo} · {fmtSize(form.size)}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div>
+              <label className="text-xs text-[#94A3B8] mb-1.5 block">URL del archivo *</label>
+              <input type="url" value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="https://drive.google.com/..." className="input-base"/>
+              <p className="text-[10px] text-[#475569] mt-1">Para que aparezca como foto en el informe, el enlace debe ser público.</p>
+            </div>
+          )}
+
           <div>
             <label className="text-xs text-[#94A3B8] mb-1.5 block">Nombre *</label>
-            <input type="text" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder="Ej. Foto temperatura.jpg" className="input-base"/>
+            <input type="text" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder="Ej. Temperatura cadena de frío" className="input-base"/>
           </div>
-          <div>
-            <label className="text-xs text-[#94A3B8] mb-1.5 block">URL del archivo *</label>
-            <input type="url" value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="https://drive.google.com/..." className="input-base"/>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-[#94A3B8] mb-1.5 block">Tipo</label>
               <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })} className="input-base">
@@ -262,10 +416,6 @@ function EvidenciaModal({ acompanamientoId, error, onClose, onSave }: {
                 {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
-            <div>
-              <label className="text-xs text-[#94A3B8] mb-1.5 block">Tamaño (bytes)</label>
-              <input type="number" value={form.size} onChange={e => setForm({ ...form, size: parseInt(e.target.value, 10) || 0 })} className="input-base"/>
-            </div>
           </div>
 
           {(validationError || error) && (
@@ -277,7 +427,7 @@ function EvidenciaModal({ acompanamientoId, error, onClose, onSave }: {
 
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="btn-ghost text-xs" disabled={submitting}>Cancelar</button>
-            <button type="submit" disabled={submitting}
+            <button type="submit" disabled={submitting || procesando}
               className="btn-primary text-xs bg-cyan-500 hover:bg-cyan-600 flex items-center gap-2 disabled:opacity-50">
               {submitting && <Loader2 className="w-3 h-3 animate-spin"/>}
               {submitting ? "Guardando..." : "Cargar"}
