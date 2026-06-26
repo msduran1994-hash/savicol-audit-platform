@@ -37,6 +37,8 @@ export function ChecklistSection({ tipo }: { tipo: ChecklistTipo }) {
   const borrar = useDeleteChecklist();
 
   const [search, setSearch] = useState("");
+  const [filterGranja, setFilterGranja] = useState(() => (typeof window !== "undefined" ? sessionStorage.getItem(`chk-f-granja-${tipo}`) ?? "" : ""));
+  useEffect(() => { try { sessionStorage.setItem(`chk-f-granja-${tipo}`, filterGranja); } catch { /* SSR */ } }, [filterGranja, tipo]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ChecklistItem | null>(null);
 
@@ -44,12 +46,15 @@ export function ChecklistSection({ tipo }: { tipo: ChecklistTipo }) {
   const granjas = granjasQ.data ?? [];
 
   const filtrados = useMemo(() => items.filter(it => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (it.data.lote ?? "").toLowerCase().includes(q)
-      || (it.data.granjaNombre ?? "").toLowerCase().includes(q)
-      || (it.data.auditor ?? "").toLowerCase().includes(q);
-  }), [items, search]);
+    if (filterGranja && it.data.granjaId !== filterGranja) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (!(it.data.lote ?? "").toLowerCase().includes(q)
+        && !(it.data.granjaNombre ?? "").toLowerCase().includes(q)
+        && !(it.data.auditor ?? "").toLowerCase().includes(q)) return false;
+    }
+    return true;
+  }), [items, search, filterGranja]);
 
   async function handleDelete(it: ChecklistItem) {
     if (!confirm(`¿Eliminar el checklist del lote "${it.data.lote}"? Esta acción no se puede deshacer.`)) return;
@@ -64,6 +69,11 @@ export function ChecklistSection({ tipo }: { tipo: ChecklistTipo }) {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por lote, granja o auditor…"
             className="w-full bg-[#0A111F] border border-[#1E2D4A] rounded-lg pl-9 pr-3 py-2 text-sm text-white outline-none focus:border-emerald-500/50"/>
         </div>
+        <select value={filterGranja} onChange={e => setFilterGranja(e.target.value)}
+          className="bg-[#0A111F] border border-[#1E2D4A] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/50">
+          <option value="">Todas las granjas</option>
+          {granjas.map((g: any) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+        </select>
         <button onClick={() => { setEditing(null); setModalOpen(true); }}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-sm font-bold whitespace-nowrap">
           <Plus className="w-4 h-4"/> Nuevo Checklist
@@ -88,9 +98,21 @@ export function ChecklistSection({ tipo }: { tipo: ChecklistTipo }) {
               <div key={it.id} className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl p-4 hover:border-[#2A3F6A] transition-colors">
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="min-w-0">
-                    <h3 className="text-base font-bold text-white truncate">Lote {it.data.lote || "—"} · {galponLabel(it.data.galpon)}</h3>
-                    <p className="text-xs text-[#94A3B8] mt-0.5">{it.data.granjaNombre || "Sin granja"} · {fFecha(it.data.fechaVisita)}{it.data.diaEvaluado ? ` · Día ${it.data.diaEvaluado}` : ""}</p>
-                    <p className="text-[11px] text-[#64748B] mt-0.5">Auditor: {it.data.auditor || "—"}</p>
+                    {/* Primer nivel: Granja + Galpón (mayor jerarquía, como en Lotes) */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-lg font-bold text-white truncate">{it.data.granjaNombre || "Sin granja"}</h3>
+                      {it.data.galpon && (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">{galponLabel(it.data.galpon)}</span>
+                      )}
+                    </div>
+                    {/* Segundo nivel: Lote · Fecha · Día · Auditor */}
+                    <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap mt-1 text-[11px] text-[#94A3B8]">
+                      <span className="font-semibold text-[#CBD5E1]">Lote {it.data.lote || "—"}</span>
+                      <span className="text-[#475569]">·</span>
+                      <span>{fFecha(it.data.fechaVisita)}</span>
+                      {it.data.diaEvaluado && (<><span className="text-[#475569]">·</span><span>Día {it.data.diaEvaluado}</span></>)}
+                      {it.data.auditor && (<><span className="text-[#475569]">·</span><span>Auditor: {it.data.auditor}</span></>)}
+                    </div>
                   </div>
                   <div className="flex gap-1 shrink-0">
                     <button onClick={() => { setEditing(it); setModalOpen(true); }} title="Editar" className="p-1.5 text-[#64748B] hover:text-emerald-400"><Pencil className="w-4 h-4"/></button>
