@@ -329,6 +329,29 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seguim, pobInicial]);
 
+  // Promedio por indicador (fila), sobre los días con datos
+  const promedioFila = (ind: { clave: string; tipo: string }): string => {
+    if (ind.tipo !== "num") return "—";
+    let suma = 0, count = 0;
+    DIAS.forEach((_, i) => {
+      let v = NaN;
+      if (ind.clave === "mortDiaria")          v = pobInicial > 0 && i <= mort.ultimo ? mort.diaria[i] : NaN;
+      else if (ind.clave === "mortAcumulada")  v = pobInicial > 0 && i <= mort.ultimo ? mort.acumulada[i] : NaN;
+      else { const raw = (seguim[i]?.[ind.clave] ?? "").toString().trim(); v = raw === "" ? NaN : numSeg(raw); }
+      if (!isNaN(v)) { suma += v; count++; }
+    });
+    if (count === 0) return "—";
+    const avg = suma / count;
+    return (ind.clave === "mortDiaria" || ind.clave === "mortAcumulada")
+      ? `${avg.toFixed(2)}%`
+      : avg.toLocaleString("es-CO", { maximumFractionDigits: 2 });
+  };
+
+  // Validación del rango de mortalidad acumulada al día 7 (broiler · primera semana)
+  const MORT_RANGO_D7 = 0.7; // % acumulado máximo para "cumple" (configurable)
+  const tieneD7 = pobInicial > 0 && mort.ultimo >= 6;
+  const cumpleD7 = tieneD7 && mort.general <= MORT_RANGO_D7;
+
   // Checklist de Descargue: 30 preguntas aplanadas (sección + pregunta + resultado/obs/evidencia)
   const [checklist, setChecklistState] = useState<PreguntaChecklist[]>(() => {
     const guardado = item?.data.checklist ?? [];
@@ -604,6 +627,7 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
                       {DIAS.map(d => (
                         <th key={d} className="text-center font-semibold px-2 py-2.5 text-emerald-300 text-xs" style={{ minWidth: "80px" }}>Día {d}</th>
                       ))}
+                      <th className="text-center font-semibold px-2 py-2.5 text-cyan-300 text-xs" style={{ minWidth: "90px" }}>Promedio</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -633,6 +657,9 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
                             )}
                           </td>
                         ))}
+                        <td className="px-1 py-1">
+                          <div className="w-full bg-cyan-500/5 border border-cyan-500/20 rounded-md px-1.5 py-1 text-xs text-cyan-200 text-center font-medium" title="Promedio de los días con datos">{promedioFila(ind)}</div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -657,6 +684,23 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
                       <p className="text-base font-bold mt-0.5" style={{ color: col }}>{val}</p>
                     </div>
                   ))}
+                </div>
+                <div className="px-4 pb-4">
+                  <div className="rounded-lg px-3 py-2.5 border flex items-start gap-2 text-xs"
+                    style={{ background: `${cumpleD7 ? "#22C55E" : tieneD7 ? "#EF4444" : "#64748B"}10`, borderColor: `${cumpleD7 ? "#22C55E" : tieneD7 ? "#EF4444" : "#64748B"}40` }}>
+                    <span className="font-bold mt-0.5 shrink-0" style={{ color: cumpleD7 ? "#22C55E" : tieneD7 ? "#EF4444" : "#94A3B8" }}>
+                      {!tieneD7 ? "PARCIAL" : cumpleD7 ? "✓ CUMPLE" : "✗ FUERA DE RANGO"}
+                    </span>
+                    <span className="text-[#94A3B8] leading-relaxed">
+                      {pobInicial <= 0
+                        ? "Ingresa los datos de mortalidad para evaluar el cumplimiento."
+                        : !tieneD7
+                        ? `Mortalidad acumulada parcial de ${mort.general.toFixed(2)}% (registra hasta el Día 7 para evaluar el cumplimiento al séptimo día).`
+                        : cumpleD7
+                        ? `El galpón CUMPLE: la mortalidad acumulada al día 7 es ${mort.general.toFixed(2)}%, dentro del rango estipulado (≤ ${MORT_RANGO_D7}%).`
+                        : `El galpón está FUERA DE RANGO: la mortalidad acumulada al día 7 es ${mort.general.toFixed(2)}%, supera el máximo estipulado (≤ ${MORT_RANGO_D7}%). Revisar causas y reforzar el plan de acción.`}
+                    </span>
+                  </div>
                 </div>
               </div>
 
