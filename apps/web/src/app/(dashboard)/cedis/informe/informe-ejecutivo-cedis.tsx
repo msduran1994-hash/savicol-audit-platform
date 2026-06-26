@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react";
 import { X, FileText, Download, Loader2, Sparkles, Building2, Filter, Calendar } from "lucide-react";
 import { LOGO_SAVICOL } from "../cumplimiento/savicol-logo";
+import { evidenciasGridHTML } from "@/lib/pdf-evidencias";
 
 /* ════════════════════════════════════════════════════════════════════════════
    INFORME EJECUTIVO CEDIS — Exportar PDF (17 secciones)
@@ -244,10 +245,7 @@ function construirInformeEjecutivo(opts: {
   // Sección 16: Evidencias fotográficas (de Consolidado)
   const evidenciasHtml = evidencias.length === 0 ? "" : `<div style="margin-bottom:20px">
     <h2 style="font-size:15px;color:#0D1526;border-left:4px solid #10B981;padding-left:10px;margin:0 0 8px">16. Evidencias Fotográficas</h2>
-    <div>${evidencias.slice(0,9).map(ev => `<div style="display:inline-block;width:120px;margin:4px;vertical-align:top">
-      <img src="${ev.d}" style="width:120px;height:120px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0"/>
-      <p style="font-size:8px;color:#94a3b8;margin:2px 0 0;text-align:center">${ev.area} · ${fmtFecha(ev.f)}</p>
-    </div>`).join("")}</div>
+    ${evidenciasGridHTML(evidencias.map(ev => ({ src: ev.d, titulo: ev.area, pie: fmtFecha(ev.f) })), { max: 12 })}
   </div>`;
 
   const pie = `<div style="margin-top:24px;padding-top:14px;border-top:1px solid #e2e8f0;font-size:9px;color:#94a3b8;text-align:center">

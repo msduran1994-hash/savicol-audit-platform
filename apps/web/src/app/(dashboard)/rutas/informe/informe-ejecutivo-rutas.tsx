@@ -5,6 +5,7 @@ import { LOGO_SAVICOL } from "../../cedis/cumplimiento/savicol-logo";
 import { formatCOP, formatKg, TIPO_RIESGO_RUTA } from "@/lib/rutas.constants";
 import type { Acompanamiento, AccionCumplimiento } from "@/lib/rutas.types";
 import { apiGet } from "@/lib/api";
+import { evidenciasGridHTML } from "@/lib/pdf-evidencias";
 
 // Evidencia tal como la entrega el API (/evidencias/ruta)
 interface EvidenciaApi {
@@ -348,12 +349,11 @@ function construirInforme(opts: {
   </div>`;
 
   // 7. Evidencias — fotos reales del módulo Evidencias incrustadas + referencias
-  const fotosHtml = fotos.length === 0 ? "" : `<div style="margin-bottom:10px">
-    ${fotos.map(f => `<div style="display:inline-block;width:150px;margin:5px;vertical-align:top">
-      <img src="${f.dataUrl}" style="width:150px;height:150px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0"/>
-      <p style="font-size:8px;color:#475569;margin:3px 0 0;text-align:center;line-height:1.35"><strong>${f.motivo}</strong><br>${[f.cliente, f.ruta].filter(Boolean).join(" · ")}<br><span style="color:#94a3b8">${f.categoria || "Evidencia"} · ${fmtFecha(f.fecha)}</span></p>
-    </div>`).join("")}
-  </div>`;
+  const fotosHtml = evidenciasGridHTML(fotos.map(f => ({
+    src: f.dataUrl,
+    titulo: f.motivo,
+    pie: `${[f.cliente, f.ruta].filter(Boolean).join(" · ")}${f.categoria ? " · " + f.categoria : ""} · ${fmtFecha(f.fecha)}`,
+  })));
   const refsHtml = evRefs.length === 0 ? "" : `<table style="width:100%;border-collapse:collapse;font-size:9px;margin-top:8px">
     <thead><tr style="background:#f8fafc">
       <th style="text-align:left;padding:5px;border-bottom:2px solid #e2e8f0">Evidencia</th>

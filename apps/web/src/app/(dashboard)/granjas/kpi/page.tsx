@@ -7,6 +7,7 @@ import { useShallow } from "zustand/react/shallow";
 import { ESTADO_KPI, TIPO_RIESGO } from "@/lib/granjas.constants";
 import { AUDITORS } from "@/lib/constants";
 import type { KPI } from "@/lib/granjas.types";
+import { evidenciasGridHTML } from "@/lib/pdf-evidencias";
 import {
   Target, Plus, Filter, X, Trash2, Edit2, AlertCircle,
   Loader2, CheckCircle2, Sparkles, FileText, TrendingUp, Bell, ChevronDown,
@@ -691,12 +692,7 @@ function seccionTrazabilidadKPI(
     const galeria = evs.length > 0 ? `
       <div style="margin-top:10px">
         <div style="font-size:10px;font-weight:700;color:#475569;margin-bottom:6px">Evidencias Fotográficas (${evs.length})</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">
-          ${evs.map((ev: any) => `
-            <div style="width:90px;height:90px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;background:#f8fafc">
-              <img src="${ev.url}" alt="${ev.nombre || "evidencia"}" style="width:100%;height:100%;object-fit:cover"/>
-            </div>`).join("")}
-        </div>
+        ${evidenciasGridHTML(evs.map((ev: any) => ({ src: ev.url, titulo: ev.nombre || undefined, pie: ev.categoria || undefined })))}
       </div>` : `<div style="margin-top:8px;font-size:10px;color:#94a3b8">Sin evidencias fotográficas asociadas.</div>`;
 
     return `

@@ -5,6 +5,7 @@ import {
   TrendingUp, Building2, FileSearch, Filter, FileSpreadsheet, BarChart3, Mail,
 } from "lucide-react";
 import { LOGO_SAVICOL } from "./savicol-logo";
+import { evidenciasGridHTML } from "@/lib/pdf-evidencias";
 
 /* ════════════════════════════════════════════════════════════════════════════
    GENERADOR DE INFORMES EJECUTIVOS — CEDIS → Cumplimiento
@@ -443,13 +444,10 @@ export function extraerEvidencias(auditorias: any[], cediIds: Set<string>): { ce
 function seccionEvidencias(evidencias: { cedi: string; fecha: string; fotos: any[] }[], cedisMap: Record<string,string>): string {
   if (evidencias.length === 0) return "";
   const bloques = evidencias.map(ev => {
-    const imgs = ev.fotos.slice(0, 6).map(f => `<div style="display:inline-block;width:108px;margin:4px;vertical-align:top">
-      <img src="${f.d}" style="width:108px;height:108px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0"/>
-      <p style="font-size:8px;color:#94a3b8;margin:2px 0 0;text-align:center">${f.area || "—"}</p>
-    </div>`).join("");
+    const imgs = evidenciasGridHTML(ev.fotos.map((f: any) => ({ src: f.d, titulo: f.area || undefined })), { max: 6 });
     return `<div style="margin-bottom:14px">
       <p style="font-size:11px;font-weight:600;color:#0D1526;margin:0 0 4px">${cedisMap[ev.cedi] || "—"} · Visita ${fmtFecha(ev.fecha)} · ${ev.fotos.length} evidencia(s)</p>
-      <div>${imgs}</div>
+      ${imgs}
     </div>`;
   }).join("");
   return `<h2 style="font-size:16px;border-left:4px solid #10B981;padding-left:10px;margin:18px 0 16px">Evidencias Fotográficas</h2>
