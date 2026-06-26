@@ -23,6 +23,8 @@ const RESULTADO_LABEL: Record<string, string> = {
   cumple: "Cumple", no_cumple: "No cumple", parcial: "Parcial", na: "N/A", "": "—",
 };
 const fFecha = (d?: string) => d ? new Date(d + "T00:00:00").toLocaleDateString("es-CO", { day:"2-digit", month:"short", year:"numeric" }) : "—";
+const GALPON_TODOS = "TODOS";
+const galponLabel = (g?: string) => !g ? "—" : g === GALPON_TODOS ? "Todos los galpones" : `Galpón ${g}`;
 
 // ═══ Página de un checklist (lista + modal) ═══════════════════════════════════
 export function ChecklistSection({ tipo }: { tipo: ChecklistTipo }) {
@@ -86,7 +88,7 @@ export function ChecklistSection({ tipo }: { tipo: ChecklistTipo }) {
               <div key={it.id} className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl p-4 hover:border-[#2A3F6A] transition-colors">
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="min-w-0">
-                    <h3 className="text-base font-bold text-white truncate">Lote {it.data.lote || "—"} · Galpón {it.data.galpon || "—"}</h3>
+                    <h3 className="text-base font-bold text-white truncate">Lote {it.data.lote || "—"} · {galponLabel(it.data.galpon)}</h3>
                     <p className="text-xs text-[#94A3B8] mt-0.5">{it.data.granjaNombre || "Sin granja"} · {fFecha(it.data.fechaVisita)}{it.data.diaEvaluado ? ` · Día ${it.data.diaEvaluado}` : ""}</p>
                     <p className="text-[11px] text-[#64748B] mt-0.5">Auditor: {it.data.auditor || "—"}</p>
                   </div>
@@ -258,6 +260,7 @@ function ChecklistModal({ tipo, item, granjas, usuario, onClose, onCreate, onUpd
             <div><label className={LBL}>Galpón *</label>
               <select value={data.galpon} onChange={e => set("galpon", e.target.value)} className={IN}>
                 <option value="">Seleccionar…</option>
+                <option value={GALPON_TODOS}>Todos los Galpones</option>
                 {GALPONES.map(g => <option key={g} value={g}>Galpón {g}</option>)}
               </select>
             </div>
@@ -405,11 +408,14 @@ function MuestreosTab({ data, setData, tipo }: {
 }) {
   const muestreos = data.muestreos ?? [];
   const info = data.muestreoInfo ?? {};
+  const esTodos = data.galpon === GALPON_TODOS;
+  // Galpón por defecto de cada pesaje: el del checklist si es específico; vacío si es "Todos"
+  const dgDefault = data.galpon && !esTodos ? data.galpon : "";
 
   // Semilla: 5 filas vacías la primera vez que se abre la pestaña
   useEffect(() => {
     if ((data.muestreos?.length ?? 0) === 0) {
-      setData(d => ({ ...d, muestreos: Array.from({ length: 5 }, (_, i) => ({ n: i + 1, cantidad: 0, pesoTotal: 0, obs: "" })) }));
+      setData(d => ({ ...d, muestreos: Array.from({ length: 5 }, (_, i) => ({ n: i + 1, cantidad: 0, pesoTotal: 0, obs: "", galpon: dgDefault })) }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -419,7 +425,7 @@ function MuestreosTab({ data, setData, tipo }: {
     setData(d => ({ ...d, muestreoInfo: { ...(d.muestreoInfo ?? {}), ...patch } }));
   const updateRow = (i: number, field: keyof Muestreo, val: number | string) =>
     setMuestreos(muestreos.map((r, idx) => idx === i ? { ...r, [field]: val } : r));
-  const addRow = () => { if (muestreos.length >= 40) return; setMuestreos([...muestreos, { n: muestreos.length + 1, cantidad: 0, pesoTotal: 0, obs: "" }]); };
+  const addRow = () => { if (muestreos.length >= 40) return; setMuestreos([...muestreos, { n: muestreos.length + 1, cantidad: 0, pesoTotal: 0, obs: "", galpon: dgDefault }]); };
   const removeRow = (i: number) => setMuestreos(muestreos.filter((_, idx) => idx !== i).map((r, idx) => ({ ...r, n: idx + 1 })));
 
   const st = useMemo(() => calcMuestreoStats(muestreos), [muestreos]);
@@ -437,7 +443,7 @@ function MuestreosTab({ data, setData, tipo }: {
         <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           <Dato label="Lote" value={data.lote || "—"}/>
           <Dato label="Granja" value={data.granjaNombre || "—"}/>
-          <Dato label="Galpón" value={data.galpon ? `Galpón ${data.galpon}` : "—"}/>
+          <Dato label="Galpón" value={galponLabel(data.galpon)}/>
           {tipo === "trazabilidad7" && <Dato label="Día evaluado" value={data.diaEvaluado ? `Día ${data.diaEvaluado}` : "—"}/>}
           <Dato label="Auditor" value={data.auditor || "—"}/>
           <Dato label="Fecha" value={data.fechaVisita || "—"}/>
@@ -461,7 +467,7 @@ function MuestreosTab({ data, setData, tipo }: {
       {/* FASE 4 · Tabla de muestreos */}
       <div className="rounded-xl border border-[#1E2D4A] overflow-hidden">
         <div className="flex items-center justify-between px-4 py-2.5 bg-[#0A111F]">
-          <h4 className="text-sm font-bold text-white">Tabla de Muestreos <span className="text-[10px] text-[#64748B] font-normal">· pesos en kg</span></h4>
+          <h4 className="text-sm font-bold text-white">Tabla de Muestreos <span className="text-[10px] text-[#64748B] font-normal">· pesos en kg{esTodos ? " · indica el galpón de cada pesaje" : ""}</span></h4>
           <span className="text-[10px] text-[#94A3B8]">{muestreos.length} fila(s)</span>
         </div>
         <div className="overflow-x-auto">
@@ -471,6 +477,7 @@ function MuestreosTab({ data, setData, tipo }: {
               <th className="text-left px-3 py-2">Pollitos pesados</th>
               <th className="text-left px-3 py-2">Peso total (kg)</th>
               <th className="text-left px-3 py-2">Observaciones</th>
+              <th className="text-left px-3 py-2 w-28">Galpón</th>
               <th className="px-2 py-2 w-8"></th>
             </tr></thead>
             <tbody>
@@ -482,6 +489,13 @@ function MuestreosTab({ data, setData, tipo }: {
                     <td className="px-3 py-1.5"><input type="number" min={0} value={numv(m.cantidad)} onChange={e => updateRow(i, "cantidad", parseInt(e.target.value) || 0)} placeholder="0" className={cn(cellIn, "w-24")}/></td>
                     <td className="px-3 py-1.5"><input type="number" min={0} step="0.001" value={m.pesoTotal === 0 ? "" : String(m.pesoTotal)} onChange={e => updateRow(i, "pesoTotal", parseFloat(e.target.value) || 0)} placeholder="0.000" className={cn(cellIn, "w-28")}/>{u > 0 && <span className="ml-2 text-[10px] text-[#64748B]">{kg(u)} c/u</span>}</td>
                     <td className="px-3 py-1.5"><input value={m.obs ?? ""} onChange={e => updateRow(i, "obs", e.target.value)} placeholder="Observación…" className={cn(cellIn, "w-full")}/></td>
+                    <td className="px-3 py-1.5">
+                      <select value={m.galpon ?? ""} onChange={e => updateRow(i, "galpon", e.target.value)}
+                        className={cn(cellIn, "w-24", esTodos && !m.galpon && (m.cantidad > 0 || m.pesoTotal > 0) && "border-amber-500/60")}>
+                        <option value="">—</option>
+                        {GALPONES.map(g => <option key={g} value={g}>G{g}</option>)}
+                      </select>
+                    </td>
                     <td className="px-2 py-1.5 text-center"><button type="button" onClick={() => removeRow(i)} className="text-[#64748B] hover:text-red-400" title="Quitar fila"><Trash2 className="w-3.5 h-3.5"/></button></td>
                   </tr>
                 );

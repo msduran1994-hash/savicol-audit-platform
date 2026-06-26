@@ -387,6 +387,7 @@ export interface Muestreo {
   cantidad: number;   // cantidad de pollitos pesados
   pesoTotal: number;  // peso total del muestreo (kg)
   obs?: string;       // observaciones
+  galpon?: string;    // galpón al que corresponde el pesaje (útil con "Todos los Galpones")
 }
 export interface MuestreoInfo {
   genero?: "" | "Macho" | "Hembra";
