@@ -1,8 +1,11 @@
 "use client";
+import { useState } from "react";
 import { Header } from "@/components/layout/header";
 import { useRutasStore } from "@/store/rutas.store";
+import { useAuthStore } from "@/store/auth.store";
 import { useShallow } from "zustand/react/shallow";
 import { formatCOP, formatKg, TIPO_RIESGO_RUTA } from "@/lib/rutas.constants";
+import { InformeEjecutivoRutasModal } from "./informe-ejecutivo-rutas";
 import {
   Sparkles, AlertTriangle, DollarSign, Building2, MapPin, Target,
   TrendingUp, FileText, Award, Download,
@@ -13,7 +16,11 @@ import {
  * los datos consolidados de acompañamientos. Calculado en cliente.
  */
 export default function InformeEjecutivoPage() {
-  const acomp = useRutasStore(useShallow((s) => s.acompanamientos));
+  const acomp        = useRutasStore(useShallow((s) => s.acompanamientos));
+  const cumplimiento = useRutasStore(useShallow((s) => s.cumplimiento));
+  const evidencias   = useRutasStore(useShallow((s) => s.evidencias));
+  const usuario      = useAuthStore((s) => s.user?.name ?? "Auditor de Rutas");
+  const [exportOpen, setExportOpen] = useState(false);
 
   const total = acomp.length;
   const valorTotal = acomp.reduce((s,a)=>s+a.valorDevueltoCOP, 0);
@@ -73,7 +80,7 @@ export default function InformeEjecutivoPage() {
                   : `Se ejecutaron ${total} acompañamientos auditados. Se detectaron ${conHallazgos.length} acompañamientos con hallazgos (${criticos.length} críticos, ${altos.length} altos). El impacto financiero acumulado es de ${formatCOP(valorTotal)} con ${formatKg(kgTotal)} de mercancía devuelta.`}
               </p>
             </div>
-            <button disabled className="btn-secondary text-xs opacity-60 cursor-not-allowed shrink-0">
+            <button onClick={() => setExportOpen(true)} className="btn-secondary text-xs shrink-0 hover:bg-cyan-500/10 hover:border-cyan-500/30 hover:text-cyan-400">
               <Download className="w-3.5 h-3.5"/> Exportar PDF
             </button>
           </div>
@@ -225,6 +232,16 @@ export default function InformeEjecutivoPage() {
           </p>
         </div>
       </div>
+
+      {exportOpen && (
+        <InformeEjecutivoRutasModal
+          acompanamientos={acomp}
+          cumplimiento={cumplimiento}
+          evidencias={evidencias}
+          usuario={usuario}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
     </div>
   );
 }
