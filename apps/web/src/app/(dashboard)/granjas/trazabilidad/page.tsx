@@ -367,14 +367,17 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
 
   // ── Mortalidad auto-calculada (sobre población inicial = "Total recibido (aves)") ──
   const numSeg = (v: any) => { const n = parseFloat((v ?? "").toString().replace(",", ".")); return isFinite(n) ? n : 0; };
+  // Conteos de aves = enteros. Ignora separadores de miles ("13.100" o "13,100" → 13100).
+  const numEntero = (v: any) => { const n = parseInt((v ?? "").toString().replace(/[^\d]/g, ""), 10); return isFinite(n) ? n : 0; };
+  const ES_CONTEO = (clave: string) => clave === "muestra" || clave === "avesVivas" || clave === "avesMuertas";
   const CAMPOS_MANUALES_SEG = ["muestra", "avesVivas", "avesMuertas", "consumoAgua", "consumoAlimento", "peso", "tempAmbiente", "tempCriadora", "tempCloacal", "bioseguridad", "comportamiento"];
   // Población inicial: "Total recibido (aves)" de Recepción; si no está definido,
   // se infiere de las Aves vivas del primer día con datos (población al inicio del seguimiento).
   const pobBase = useMemo(() => {
-    const recibido = numSeg(recep.find(f => /total\s+recibido/i.test(f.parametro))?.valor);
+    const recibido = numEntero(recep.find(f => /total\s+recibido/i.test(f.parametro))?.valor);
     if (recibido > 0) return { val: recibido, fuente: "Total recibido (Recepción)" };
     for (let i = 0; i < DIAS.length; i++) {
-      const v = numSeg(seguim[i]?.avesVivas);
+      const v = numEntero(seguim[i]?.avesVivas);
       if (v > 0) return { val: v, fuente: `Aves vivas Día ${i + 1}` };
     }
     return { val: 0, fuente: "" };
@@ -384,8 +387,8 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
     let acum = 0;
     const diaria: number[] = [], acumulada: number[] = [];
     DIAS.forEach((_, i) => {
-      acum += numSeg(seguim[i]?.avesMuertas);
-      diaria.push(pobInicial > 0 ? (numSeg(seguim[i]?.avesMuertas) / pobInicial) * 100 : 0);
+      acum += numEntero(seguim[i]?.avesMuertas);
+      diaria.push(pobInicial > 0 ? (numEntero(seguim[i]?.avesMuertas) / pobInicial) * 100 : 0);
       acumulada.push(pobInicial > 0 ? (acum / pobInicial) * 100 : 0);
     });
     let ultimo = -1;
@@ -413,7 +416,7 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
     if (clave === "tempAmbiente") return String(ROSS308.tempAmbiente[i]);
     if (clave === "tempCriadora") return String(ROSS308.tempCriadora[i]);
     if (clave === "tempCloacal")  return String(ROSS308.tempCloacal[i]);
-    const aves = numSeg(seguim[i]?.avesVivas);
+    const aves = numEntero(seguim[i]?.avesVivas);
     if (clave === "consumoAlimento") return aves > 0 ? ((ROSS308.alimentoG[i] * aves) / 1000).toFixed(2) : "";
     if (clave === "consumoAgua")     return aves > 0 ? ((ROSS308.alimentoG[i] * 1.8 * aves) / 1000).toFixed(1) : "";
     return "";
@@ -436,7 +439,7 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
       let v = NaN;
       if (ind.clave === "mortDiaria")         v = pobInicial > 0 ? mort.diaria[i] : NaN;
       else if (ind.clave === "mortAcumulada") v = pobInicial > 0 ? mort.acumulada[i] : NaN;
-      else { const eff = efectivoSeg(ind.clave, i).trim(); v = eff === "" ? NaN : numSeg(eff); }
+      else { const eff = efectivoSeg(ind.clave, i).trim(); v = eff === "" ? NaN : (ES_CONTEO(ind.clave) ? numEntero(eff) : numSeg(eff)); }
       if (!isNaN(v)) { suma += v; count++; }
     });
     if (count === 0) return "—";

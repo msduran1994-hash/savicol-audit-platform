@@ -17,7 +17,8 @@ import { leerMetaFoto, calcularCumplimiento, type LoteItem, type ChecklistData, 
 const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.972-5", area: "Control Interno y Auditoría · Trazabilidad Avícola" };
 const CYAN = "#06B6D4", VERDE = "#22C55E", ROJO = "#EF4444", NARANJA = "#F59E0B";
 
-const numv = (v: any) => { const n = parseFloat((v ?? "").toString().replace(",", ".")); return isFinite(n) ? n : 0; };
+// Conteos de aves = enteros. Ignora separadores de miles ("13.100" o "13,100" → 13100).
+const numv = (v: any) => { const n = parseInt((v ?? "").toString().replace(/[^\d]/g, ""), 10); return isFinite(n) ? n : 0; };
 const fFecha = (d?: string) => { if (!d) return "—"; const t = new Date(d + (d.length <= 10 ? "T00:00:00" : "")); return isNaN(t.getTime()) ? "—" : t.toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" }); };
 const fNum = (n: number) => (n ?? 0).toLocaleString("es-CO");
 
