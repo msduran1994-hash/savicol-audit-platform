@@ -295,6 +295,29 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
     setSeguimState(arr => arr.map((d, idx) => idx === diaIdx ? { ...d, [clave]: v } : d));
   }
 
+  // ── Mortalidad auto-calculada (sobre población inicial = "Total recibido (aves)") ──
+  const numSeg = (v: any) => { const n = parseFloat((v ?? "").toString().replace(",", ".")); return isFinite(n) ? n : 0; };
+  const CAMPOS_MANUALES_SEG = ["muestra", "avesVivas", "avesMuertas", "consumoAgua", "consumoAlimento", "peso", "tempAmbiente", "tempCriadora", "tempCloacal", "bioseguridad", "comportamiento"];
+  const pobInicial = useMemo(() => numSeg(recep.find(f => /total\s+recibido/i.test(f.parametro))?.valor), [recep]);
+  const mort = useMemo(() => {
+    let acum = 0;
+    const diaria: number[] = [], acumulada: number[] = [];
+    DIAS.forEach((_, i) => {
+      acum += numSeg(seguim[i]?.avesMuertas);
+      diaria.push(pobInicial > 0 ? (numSeg(seguim[i]?.avesMuertas) / pobInicial) * 100 : 0);
+      acumulada.push(pobInicial > 0 ? (acum / pobInicial) * 100 : 0);
+    });
+    let ultimo = -1;
+    DIAS.forEach((_, i) => { if (seguim[i] && CAMPOS_MANUALES_SEG.some(k => ((seguim[i] as any)[k] ?? "").toString().trim() !== "")) ultimo = i; });
+    const totalMuertas = acum;
+    const vivasFinales = pobInicial > 0 ? Math.max(0, pobInicial - totalMuertas) : 0;
+    const diasDatos = DIAS.map((_, i) => i).filter(i => i <= ultimo);
+    const promDiaria = diasDatos.length ? diasDatos.reduce((a, i) => a + diaria[i], 0) / diasDatos.length : 0;
+    const general = pobInicial > 0 ? (totalMuertas / pobInicial) * 100 : 0;
+    return { diaria, acumulada, ultimo, totalMuertas, vivasFinales, promDiaria, general };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seguim, pobInicial]);
+
   // Checklist de Descargue: 30 preguntas aplanadas (sección + pregunta + resultado/obs/evidencia)
   const [checklist, setChecklistState] = useState<PreguntaChecklist[]>(() => {
     const guardado = item?.data.checklist ?? [];
@@ -349,12 +372,19 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
     const descargueCompleto   = checklist.some(p => p.resultado !== "");
     const alistamientoCompleto = alist.some(p => p.resultado !== "");
 
+    // Persistir la mortalidad calculada (diaria/acumulada) dentro del seguimiento
+    const seguimConMort = seguim.map((d, i) => ({
+      ...d,
+      mortDiaria:    pobInicial > 0 && i <= mort.ultimo ? mort.diaria[i].toFixed(2) : "",
+      mortAcumulada: pobInicial > 0 && i <= mort.ultimo ? mort.acumulada[i].toFixed(2) : "",
+    }));
+
     const payload: LoteData = {
       ...data,
       granjaNombre: granjas.find(g => g.id === data.granjaId)?.nombre ?? data.granjaNombre,
       preliminares: prelim,
       recepcion: recep,
-      seguimiento: seguim,
+      seguimiento: seguimConMort,
       checklist,
       checklistAuditor,
       checklistFecha,
@@ -549,7 +579,12 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
           {tab === "seguimiento" && (
             <div>
               <h3 className="text-sm font-bold text-white mb-1">Seguimiento Día 1 a 7</h3>
-              <p className="text-[11px] text-[#64748B] mb-4">Monitoreo diario de indicadores productivos, ambientales y sanitarios</p>
+              <p className="text-[11px] text-[#64748B] mb-4">Monitoreo diario de indicadores productivos, ambientales y sanitarios. La mortalidad diaria y acumulada se calculan automáticamente.</p>
+              {pobInicial <= 0 && (
+                <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px]">
+                  Define <strong>"Total recibido (aves)"</strong> en la pestaña <strong>Recepción</strong> para calcular automáticamente la mortalidad diaria y acumulada.
+                </div>
+              )}
               <div className="overflow-x-auto rounded-lg border border-[#1E2D4A]">
                 <table className="text-sm border-collapse" style={{ minWidth: "760px" }}>
                   <thead>
@@ -566,7 +601,11 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
                         <td className="px-3 py-1.5 text-white text-xs sticky left-0 bg-[#0D1526] z-10">{ind.label}</td>
                         {DIAS.map((_, diaIdx) => (
                           <td key={diaIdx} className="px-1 py-1">
-                            {ind.tipo === "num" ? (
+                            {(ind.clave === "mortDiaria" || ind.clave === "mortAcumulada") ? (
+                              <div className="w-full bg-emerald-500/5 border border-emerald-500/20 rounded-md px-1.5 py-1 text-xs text-emerald-300 text-center font-medium" title="Cálculo automático según mortalidad">
+                                {pobInicial > 0 && diaIdx <= mort.ultimo ? `${(ind.clave === "mortDiaria" ? mort.diaria[diaIdx] : mort.acumulada[diaIdx]).toFixed(2)}%` : "—"}
+                              </div>
+                            ) : ind.tipo === "num" ? (
                               <input
                                 value={seguim[diaIdx]?.[ind.clave] ?? ""}
                                 onChange={e => setSeguim(diaIdx, ind.clave, e.target.value)}
@@ -588,6 +627,28 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
                   </tbody>
                 </table>
               </div>
+
+              {/* Totales del galpón (auto) */}
+              <div className="mt-4 rounded-xl border border-[#1E2D4A] overflow-hidden">
+                <div className="px-4 py-2.5 bg-[#0A111F] flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-sm font-bold text-white">Resumen de Mortalidad{data.galponPrincipal ? ` · Galpón ${data.galponPrincipal}` : ""}</h4>
+                  <span className="text-[10px] text-[#64748B]">Población inicial (Total recibido): {pobInicial > 0 ? `${pobInicial.toLocaleString("es-CO")} aves` : "— sin definir"}</span>
+                </div>
+                <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {([
+                    ["Aves vivas (final)",   pobInicial > 0 ? mort.vivasFinales.toLocaleString("es-CO") : "—", "#22C55E"],
+                    ["Aves muertas (total)", mort.totalMuertas.toLocaleString("es-CO"),                       "#EF4444"],
+                    ["Mortalidad promedio",  pobInicial > 0 ? `${mort.promDiaria.toFixed(2)}%` : "—",         "#F59E0B"],
+                    ["Mortalidad general",   pobInicial > 0 ? `${mort.general.toFixed(2)}%` : "—",            mort.general > 5 ? "#EF4444" : mort.general > 2 ? "#F59E0B" : "#22C55E"],
+                  ] as [string, string, string][]).map(([lbl, val, col]) => (
+                    <div key={lbl} className="bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2">
+                      <p className="text-[9px] uppercase tracking-wide text-[#64748B]">{lbl}</p>
+                      <p className="text-base font-bold mt-0.5" style={{ color: col }}>{val}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="mt-5">
                 <EvidenciasFotograficas loteCodigo={data.codigo} granjaId={data.granjaId} esEdicion={esEdicion}/>
               </div>
