@@ -208,10 +208,12 @@ function construirInforme(opts: {
         const pct = calcularCumplimiento((c.preguntas || []).map(p => p.resultado));
         const col = pct >= 90 ? VERDE : pct >= 70 ? NARANJA : ROJO;
         const resp = (c.preguntas || []).filter(p => p.resultado !== "");
+        const evidsChk: FotoPDF[] = (c.preguntas || []).filter(p => p.evidencia && /^data:image\//i.test(p.evidencia)).map(p => ({ src: p.evidencia as string, titulo: p.pregunta, pie: RESULTADO_LABEL[p.resultado] || p.resultado }));
         return `<div style="border:1px solid #e2e8f0;border-radius:6px;padding:8px;margin-bottom:8px;page-break-inside:avoid">
           <div style="display:flex;justify-content:space-between;font-size:10px"><strong style="color:#0D1526">${TIPO_LABEL[c.tipo] || c.tipo}${c.diaEvaluado ? ` · Día ${c.diaEvaluado}` : ""}</strong><span style="color:${col};font-weight:700">${pct}%</span></div>
           <div style="font-size:8.5px;color:#94a3b8;margin:2px 0 4px">Lote: ${c.lote || "—"} · Fecha de visita: ${fFecha(c.fechaVisita)} · Auditor: ${c.auditor || "—"} · ${resp.length}/${(c.preguntas || []).length} respondidas</div>
           ${resp.length ? `<table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr style="background:#f8fafc"><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Sección</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Pregunta</th><th style="text-align:center;padding:3px;border-bottom:1px solid #e2e8f0">Resultado</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Observación</th></tr></thead><tbody>${resp.map(p => `<tr><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#64748b">${p.seccion || "—"}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9">${p.pregunta}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:center;color:${RESULTADO_COLOR[p.resultado] || "#64748b"};font-weight:700">${RESULTADO_LABEL[p.resultado] || p.resultado}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#475569">${p.observacion || ""}</td></tr>`).join("")}</tbody></table>` : '<p style="font-size:9px;color:#94a3b8;margin:0">Sin respuestas registradas.</p>'}
+          ${evidsChk.length ? `<div style="font-size:9px;font-weight:700;color:#475569;margin:7px 0 3px">Evidencias del checklist (${evidsChk.length})</div>${evidenciasGridHTML(evidsChk)}` : ""}
         </div>`;
       }).join("")}`;
       // Muestreos (pesajes) del galpón: resumen + tabla
