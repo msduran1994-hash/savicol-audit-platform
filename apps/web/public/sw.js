@@ -4,10 +4,11 @@
    - NUNCA cachea llamadas al API ni autenticación (siempre red).
    - Navegación/documentos: network-first con respaldo en caché (la app abre
      aunque haya mala conexión, pero prioriza datos frescos).
-   - Estáticos (JS/CSS/imágenes/fuentes): stale-while-revalidate.
+   - Estáticos (JS/CSS/imágenes/fuentes): network-first con respaldo en caché,
+     para que cada despliegue tome efecto de inmediato (evita servir JS viejo).
    - Versionar CACHE invalida cachés antiguas en cada actualización.
    ═══════════════════════════════════════════════════════════════════════════ */
-const CACHE = "savicol-pwa-v1";
+const CACHE = "savicol-pwa-v3";
 const OFFLINE_URL = "/";
 
 // Rutas/orígenes que NUNCA deben cachearse (datos en vivo y seguridad)
@@ -61,21 +62,20 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 3) Estáticos del mismo origen → stale-while-revalidate
+  // 3) Estáticos del mismo origen → network-first con respaldo en caché.
+  //    Garantiza que el JS/CSS recién desplegado se sirva fresco (sin código
+  //    viejo en caché); si no hay red, recurre a la copia cacheada.
   if (url.origin === self.location.origin) {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        const fetchPromise = fetch(request)
-          .then((res) => {
-            if (res && res.status === 200) {
-              const copy = res.clone();
-              caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
-            }
-            return res;
-          })
-          .catch(() => cached);
-        return cached || fetchPromise;
-      })
+      fetch(request)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(() => caches.match(request))
     );
   }
 });
