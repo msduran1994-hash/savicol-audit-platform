@@ -329,15 +329,44 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seguim, pobInicial]);
 
-  // Promedio por indicador (fila), sobre los días con datos
+  // ── Autocompletado por día (referencia Ross 308) · editable, el manual prima ──
+  const ROSS308 = {
+    peso:         [58, 73, 91, 113, 138, 166, 197],          // g/ave
+    tempAmbiente: [32, 31.5, 31, 30.5, 30, 29.5, 29],         // °C
+    tempCriadora: [34, 33.5, 33, 32.5, 32, 31.5, 31],         // °C
+    tempCloacal:  [40.5, 40.5, 40.5, 40.5, 40.5, 40.5, 40.5], // °C
+    alimentoG:    [13, 18, 22, 26, 30, 34, 38],               // g/ave/día
+  };
+  const AUTO_CLAVES_SEG = ["consumoAgua", "consumoAlimento", "peso", "tempAmbiente", "tempCriadora", "tempCloacal"];
+  const autoEstandar = (clave: string, i: number): string => {
+    if (clave === "peso")         return String(ROSS308.peso[i]);
+    if (clave === "tempAmbiente") return String(ROSS308.tempAmbiente[i]);
+    if (clave === "tempCriadora") return String(ROSS308.tempCriadora[i]);
+    if (clave === "tempCloacal")  return String(ROSS308.tempCloacal[i]);
+    const aves = numSeg(seguim[i]?.avesVivas);
+    if (clave === "consumoAlimento") return aves > 0 ? ((ROSS308.alimentoG[i] * aves) / 1000).toFixed(2) : "";
+    if (clave === "consumoAgua")     return aves > 0 ? ((ROSS308.alimentoG[i] * 1.8 * aves) / 1000).toFixed(1) : "";
+    return "";
+  };
+  // Valor efectivo de una celda: el manual si existe; si no, el estándar autocompletado
+  const efectivoSeg = (clave: string, i: number): string => {
+    const manual = (seguim[i]?.[clave] ?? "").toString();
+    if (manual.trim() !== "") return manual;
+    return AUTO_CLAVES_SEG.includes(clave) ? autoEstandar(clave, i) : "";
+  };
+  const esAutoSeg = (clave: string, i: number): boolean =>
+    AUTO_CLAVES_SEG.includes(clave) && (seguim[i]?.[clave] ?? "").toString().trim() === "" && autoEstandar(clave, i) !== "";
+
+  // Promedio por indicador (fila), sobre los días activos (≤ último con datos)
   const promedioFila = (ind: { clave: string; tipo: string }): string => {
     if (ind.tipo !== "num") return "—";
     let suma = 0, count = 0;
     DIAS.forEach((_, i) => {
+      if (i > mort.ultimo) return;
       let v = NaN;
-      if (ind.clave === "mortDiaria")          v = pobInicial > 0 && i <= mort.ultimo ? mort.diaria[i] : NaN;
-      else if (ind.clave === "mortAcumulada")  v = pobInicial > 0 && i <= mort.ultimo ? mort.acumulada[i] : NaN;
-      else { const raw = (seguim[i]?.[ind.clave] ?? "").toString().trim(); v = raw === "" ? NaN : numSeg(raw); }
+      if (ind.clave === "mortDiaria")         v = pobInicial > 0 ? mort.diaria[i] : NaN;
+      else if (ind.clave === "mortAcumulada") v = pobInicial > 0 ? mort.acumulada[i] : NaN;
+      else { const eff = efectivoSeg(ind.clave, i).trim(); v = eff === "" ? NaN : numSeg(eff); }
       if (!isNaN(v)) { suma += v; count++; }
     });
     if (count === 0) return "—";
@@ -407,11 +436,20 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
     const alistamientoCompleto = alist.some(p => p.resultado !== "");
 
     // Persistir la mortalidad calculada (diaria/acumulada) dentro del seguimiento
-    const seguimConMort = seguim.map((d, i) => ({
-      ...d,
-      mortDiaria:    pobInicial > 0 && i <= mort.ultimo ? mort.diaria[i].toFixed(2) : "",
-      mortAcumulada: pobInicial > 0 && i <= mort.ultimo ? mort.acumulada[i].toFixed(2) : "",
-    }));
+    const seguimConMort = seguim.map((d, i) => {
+      const next: Record<string, string> = {
+        ...d,
+        mortDiaria:    pobInicial > 0 && i <= mort.ultimo ? mort.diaria[i].toFixed(2) : "",
+        mortAcumulada: pobInicial > 0 && i <= mort.ultimo ? mort.acumulada[i].toFixed(2) : "",
+      };
+      // Días activos: si una medición no se registró manual, persistir el estándar autocompletado
+      if (i <= mort.ultimo) {
+        AUTO_CLAVES_SEG.forEach(k => {
+          if ((next[k] ?? "").toString().trim() === "") { const a = autoEstandar(k, i); if (a !== "") next[k] = a; }
+        });
+      }
+      return next;
+    });
 
     const payload: LoteData = {
       ...data,
@@ -642,10 +680,11 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
                               </div>
                             ) : ind.tipo === "num" ? (
                               <input
-                                value={seguim[diaIdx]?.[ind.clave] ?? ""}
+                                value={efectivoSeg(ind.clave, diaIdx)}
                                 onChange={e => setSeguim(diaIdx, ind.clave, e.target.value)}
                                 placeholder="—"
-                                className="w-full bg-[#0A111F] border border-[#1E2D4A] rounded-md px-1.5 py-1 text-xs text-white text-center outline-none focus:border-emerald-500/50"/>
+                                title={esAutoSeg(ind.clave, diaIdx) ? "Valor estándar (Ross 308) · edítalo para registrar el dato manual" : undefined}
+                                className={`w-full bg-[#0A111F] border border-[#1E2D4A] rounded-md px-1.5 py-1 text-xs text-center outline-none focus:border-emerald-500/50 ${esAutoSeg(ind.clave, diaIdx) ? "text-cyan-300/70 italic" : "text-white"}`}/>
                             ) : (
                               <select
                                 value={seguim[diaIdx]?.[ind.clave] ?? ""}
