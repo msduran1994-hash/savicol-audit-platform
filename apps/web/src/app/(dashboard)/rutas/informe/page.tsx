@@ -80,7 +80,7 @@ export default function InformeEjecutivoPage() {
                   : `Se ejecutaron ${total} acompañamientos auditados. Se detectaron ${conHallazgos.length} acompañamientos con hallazgos (${criticos.length} críticos, ${altos.length} altos). El impacto financiero acumulado es de ${formatCOP(valorTotal)} con ${formatKg(kgTotal)} de mercancía devuelta.`}
               </p>
             </div>
-            <button onClick={() => setExportOpen(true)} className="btn-secondary text-xs shrink-0 hover:bg-cyan-500/10 hover:border-cyan-500/30 hover:text-cyan-400">
+            <button onClick={() => setExportOpen(true)} className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold shrink-0 transition-all active:scale-[0.98] bg-cyan-500 hover:bg-cyan-400 text-[#0A111F] shadow-lg shadow-cyan-500/20">
               <Download className="w-3.5 h-3.5"/> Exportar PDF
             </button>
           </div>
