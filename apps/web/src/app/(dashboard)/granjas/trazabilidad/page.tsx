@@ -4,6 +4,7 @@ import { Header } from "@/components/layout/header";
 import { useGranjas } from "@/hooks/useGranjas";
 import { useAuthStore } from "@/store/auth.store";
 import { ChecklistSection } from "./checklists-trazabilidad";
+import { InformeGeneralModal } from "./informe-general";
 import {
   useLotes, useCreateLote, useUpdateLote, useDeleteLote,
   loteVacio, avanceGlobal, GALPONES,
@@ -19,7 +20,7 @@ import {
 import {
   Egg, Plus, Search, Trash2, X, Loader2, Pencil, AlertTriangle,
   CheckCircle2, Circle, TrendingUp, Bird, Calendar, ChevronRight,
-  ClipboardCheck, FileDown, ImagePlus, Image as ImageIcon,
+  ClipboardCheck, FileDown, FileText, ImagePlus, Image as ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -71,6 +72,7 @@ export default function TrazabilidadPage() {
   const limpiarFiltros = () => { setSearch(""); setFilterEstado(""); setFilterGranja(""); setFechaDesde(""); setFechaHasta(""); };
   const hayFiltros = !!(search || filterEstado || filterGranja || fechaDesde || fechaHasta);
   const [modalOpen, setModalOpen] = useState(false);
+  const [informeOpen, setInformeOpen] = useState(false);
   const [editing, setEditing] = useState<LoteItem | null>(null);
   const [vista, setVista] = useState<"lotes" | "encacetamiento" | "trazabilidad7">("lotes");
 
@@ -188,6 +190,11 @@ export default function TrazabilidadPage() {
               <X className="w-3.5 h-3.5"/> Limpiar
             </button>
           )}
+          <button onClick={() => setInformeOpen(true)} disabled={filtrados.length === 0}
+            title="Generar Informe Ejecutivo de los lotes filtrados"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#1A2540] hover:bg-[#243150] border border-cyan-500/30 text-cyan-300 text-sm font-semibold whitespace-nowrap disabled:opacity-40">
+            <FileText className="w-4 h-4"/> Generar Informe General
+          </button>
           <button onClick={() => { setEditing(null); setModalOpen(true); }}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-sm font-bold whitespace-nowrap">
             <Plus className="w-4 h-4"/> Nuevo Lote
@@ -297,6 +304,15 @@ export default function TrazabilidadPage() {
           onCreate={async (data) => { await createLote.mutateAsync(data); setModalOpen(false); setEditing(null); }}
           onUpdate={async (id, data) => { await updateLote.mutateAsync({ id, data }); setModalOpen(false); setEditing(null); }}
           saving={createLote.isPending || updateLote.isPending}
+        />
+      )}
+
+      {informeOpen && (
+        <InformeGeneralModal
+          lotes={filtrados}
+          granjas={granjas}
+          usuario={usuario}
+          onClose={() => setInformeOpen(false)}
         />
       )}
     </div>
