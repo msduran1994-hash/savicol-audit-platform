@@ -400,6 +400,17 @@ function Dato({ label, value }: { label: string; value: string }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2"><p className="text-[9px] uppercase tracking-wide text-[#64748B]">{label}</p><p className="text-sm font-bold text-white mt-0.5">{value}</p></div>;
 }
+function GalponChip({ active, label, sub, color, onClick }: { active: boolean; label: string; sub?: string; color?: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] transition-colors",
+        active ? "bg-emerald-500/15 border-emerald-500/50 text-emerald-200" : "bg-[#0D1526] border-[#1E2D4A] text-[#94A3B8] hover:text-white")}>
+      {color && <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }}/>}
+      <span className="font-semibold">{label}</span>
+      {sub && <span className="text-[10px] text-[#64748B]">{sub}</span>}
+    </button>
+  );
+}
 
 function MuestreosTab({ data, setData, tipo }: {
   data: ChecklistData;
@@ -425,10 +436,19 @@ function MuestreosTab({ data, setData, tipo }: {
     setData(d => ({ ...d, muestreoInfo: { ...(d.muestreoInfo ?? {}), ...patch } }));
   const updateRow = (i: number, field: keyof Muestreo, val: number | string) =>
     setMuestreos(muestreos.map((r, idx) => idx === i ? { ...r, [field]: val } : r));
-  const addRow = () => { if (muestreos.length >= 40) return; setMuestreos([...muestreos, { n: muestreos.length + 1, cantidad: 0, pesoTotal: 0, obs: "", galpon: dgDefault }]); };
+  const addRow = () => { if (muestreos.length >= 40) return; setMuestreos([...muestreos, { n: muestreos.length + 1, cantidad: 0, pesoTotal: 0, obs: "", galpon: filtroGalpon || dgDefault }]); };
   const removeRow = (i: number) => setMuestreos(muestreos.filter((_, idx) => idx !== i).map((r, idx) => ({ ...r, n: idx + 1 })));
 
-  const st = useMemo(() => calcMuestreoStats(muestreos), [muestreos]);
+  // Filtro por galpón (para analizar el resultado por galpón, no solo el general)
+  const [filtroGalpon, setFiltroGalpon] = useState("");
+  const galponesConDatos = useMemo(() => {
+    const s = new Set<string>();
+    muestreos.forEach(m => { if (((m.cantidad ?? 0) > 0 || (m.pesoTotal ?? 0) > 0) && m.galpon) s.add(m.galpon); });
+    return Array.from(s).sort((a, b) => Number(a) - Number(b));
+  }, [muestreos]);
+  const mostrarFiltro = galponesConDatos.length >= 2;
+  const muestreosFiltrados = filtroGalpon ? muestreos.filter(m => (m.galpon ?? "") === filtroGalpon) : muestreos;
+  const st = useMemo(() => calcMuestreoStats(muestreosFiltrados), [muestreos, filtroGalpon]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const IN = "w-full bg-[#0A111F] border border-[#1E2D4A] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/50";
   const LBL = "text-xs text-[#94A3B8] mb-1.5 block";
@@ -464,10 +484,24 @@ function MuestreosTab({ data, setData, tipo }: {
         </div>
       </div>
 
+      {/* Filtro por galpón · permite validar el resultado por galpón, no solo el general */}
+      {mostrarFiltro && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] text-[#94A3B8] font-semibold">Filtrar por galpón:</span>
+          <GalponChip active={!filtroGalpon} label="Todos" onClick={() => setFiltroGalpon("")} />
+          {galponesConDatos.map(g => {
+            const s = calcMuestreoStats(muestreos.filter(m => (m.galpon ?? "") === g));
+            return <GalponChip key={g} active={filtroGalpon === g} label={`Galpón ${g}`} color={s.estado.color}
+              sub={`${s.totalMuestreos}·${kg(s.pesoUnitario)}·CV ${s.cv.toFixed(0)}%`}
+              onClick={() => setFiltroGalpon(filtroGalpon === g ? "" : g)} />;
+          })}
+        </div>
+      )}
+
       {/* FASE 4 · Tabla de muestreos */}
       <div className="rounded-xl border border-[#1E2D4A] overflow-hidden">
         <div className="flex items-center justify-between px-4 py-2.5 bg-[#0A111F]">
-          <h4 className="text-sm font-bold text-white">Tabla de Muestreos <span className="text-[10px] text-[#64748B] font-normal">· pesos en kg{esTodos ? " · indica el galpón de cada pesaje" : ""}</span></h4>
+          <h4 className="text-sm font-bold text-white">Tabla de Muestreos <span className="text-[10px] text-[#64748B] font-normal">· pesos en kg{esTodos ? " · indica el galpón de cada pesaje" : ""}{filtroGalpon ? ` · filtrado: Galpón ${filtroGalpon}` : ""}</span></h4>
           <span className="text-[10px] text-[#94A3B8]">{muestreos.length} fila(s)</span>
         </div>
         <div className="overflow-x-auto">
@@ -482,6 +516,7 @@ function MuestreosTab({ data, setData, tipo }: {
             </tr></thead>
             <tbody>
               {muestreos.map((m, i) => {
+                if (filtroGalpon && (m.galpon ?? "") !== filtroGalpon) return null;
                 const u = m.cantidad > 0 && m.pesoTotal > 0 ? m.pesoTotal / m.cantidad : 0;
                 return (
                   <tr key={i} className="border-b border-[#1E2D4A]/40">
@@ -512,6 +547,7 @@ function MuestreosTab({ data, setData, tipo }: {
       </div>
 
       {/* FASE 5 · Cálculos automáticos */}
+      <p className="text-xs font-semibold text-[#94A3B8]">Indicadores {filtroGalpon ? `· Galpón ${filtroGalpon}` : "· General (todos los galpones)"}</p>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
         <Stat label="Total muestreos" value={String(st.totalMuestreos)}/>
         <Stat label="Total pollitos" value={String(st.totalPollitos)}/>
@@ -529,7 +565,7 @@ function MuestreosTab({ data, setData, tipo }: {
       <div className="rounded-xl border p-4" style={{ background: `${st.estado.color}10`, borderColor: `${st.estado.color}40` }}>
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <p className="text-sm font-bold text-white flex items-center gap-2"><Scale className="w-4 h-4" style={{ color: st.estado.color }}/> Resumen del Muestreo</p>
+            <p className="text-sm font-bold text-white flex items-center gap-2"><Scale className="w-4 h-4" style={{ color: st.estado.color }}/> Resumen del Muestreo {filtroGalpon ? `· Galpón ${filtroGalpon}` : "· General"}</p>
             <p className="text-[11px] text-[#94A3B8] mt-1">{st.totalMuestreos} muestreos · {st.totalPollitos} aves · {kg(st.pesoTotal)} · unitario {kg(st.pesoUnitario)}</p>
           </div>
           <div className="text-right">
