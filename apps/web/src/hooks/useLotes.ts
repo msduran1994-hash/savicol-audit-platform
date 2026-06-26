@@ -540,9 +540,10 @@ export function loteVacio(granjaId: string, granjaNombre?: string): LoteData {
 
 // Porcentaje de avance global del lote (cuántas etapas están completas)
 export function avanceGlobal(data: LoteData): number {
-  const etapas = Object.values(data.avance);
+  // "descargue" se retiró del Registro Técnico → no cuenta para el progreso.
+  const etapas = Object.entries(data.avance).filter(([k]) => k !== "descargue").map(([, v]) => v);
   const hechas = etapas.filter(Boolean).length;
-  return Math.round((hechas / etapas.length) * 100);
+  return etapas.length ? Math.round((hechas / etapas.length) * 100) : 0;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

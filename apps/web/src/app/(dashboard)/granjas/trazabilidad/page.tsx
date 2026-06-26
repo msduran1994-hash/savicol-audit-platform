@@ -40,7 +40,6 @@ const TABS = [
   { id: "recepcion",   label: "Recepción" },
   { id: "seguimiento", label: "Seg. D1–D7" },
   { id: "alistamiento",label: "Alistamiento" },
-  { id: "descargue",   label: "Descargue" },
 ];
 
 const fNum = (n: number) => (n ?? 0).toLocaleString("es-CO");
@@ -211,7 +210,7 @@ export default function TrazabilidadPage() {
                       { k: "preliminares",   lbl: "Prelim." },
                       { k: "recepcion",      lbl: "Recep." },
                       { k: "seguimiento",    lbl: "Seg." },
-                      { k: "descargue",      lbl: "Descg." },
+                      { k: "alistamiento",   lbl: "Alist." },
                     ].map(et => {
                       const done = (l.data.avance as any)[et.k];
                       return (
