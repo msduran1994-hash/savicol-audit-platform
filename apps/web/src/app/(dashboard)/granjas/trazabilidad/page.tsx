@@ -486,7 +486,7 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col">
         {/* Header */}
-        <header className="flex items-start justify-between px-6 py-4 border-b border-[#1E2D4A]">
+        <header className="shrink-0 flex items-start justify-between px-6 py-4 border-b border-[#1E2D4A]">
           <div>
             <h2 className="font-display font-bold text-white text-lg">{esEdicion ? "Editar Lote" : "Nuevo Lote"} — Registro Técnico Completo</h2>
             <p className="text-xs text-[#94A3B8] mt-0.5">Complete todas las secciones para un registro técnico integral del lote</p>
@@ -495,7 +495,7 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
         </header>
 
         {/* Tabs */}
-        <div className="flex gap-1 px-6 pt-3 border-b border-[#1E2D4A] overflow-x-auto">
+        <div className="shrink-0 flex gap-1 px-6 pt-3 border-b border-[#1E2D4A] overflow-x-auto">
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={cn("px-4 py-2 text-sm font-medium rounded-t-lg whitespace-nowrap transition-colors",
@@ -506,7 +506,7 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6">
           {tab === "generales" && (
             <div className="space-y-5">
               <div>
@@ -878,7 +878,7 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
         </div>
 
         {/* Footer */}
-        <footer className="flex items-center justify-between gap-3 px-6 py-4 border-t border-[#1E2D4A]">
+        <footer className="shrink-0 flex items-center justify-between gap-3 px-6 py-4 border-t border-[#1E2D4A]">
           <div className="text-[11px] text-[#64748B]">
             {error
               ? <span className="text-red-400 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5"/> {error}</span>
