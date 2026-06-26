@@ -1,9 +1,19 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { X, FileText, Download, Loader2, Building2, MapPin, User, AlertTriangle, Calendar } from "lucide-react";
 import { LOGO_SAVICOL } from "../../cedis/cumplimiento/savicol-logo";
 import { formatCOP, formatKg, TIPO_RIESGO_RUTA } from "@/lib/rutas.constants";
-import type { Acompanamiento, AccionCumplimiento, EvidenciaRuta } from "@/lib/rutas.types";
+import type { Acompanamiento, AccionCumplimiento } from "@/lib/rutas.types";
+import { apiGet } from "@/lib/api";
+
+// Evidencia tal como la entrega el API (/evidencias/ruta)
+interface EvidenciaApi {
+  id: string; acompanamientoId: string; tipo: string; nombre: string;
+  url: string; size: number; categoria?: string; uploadedAt: string; uploadedBy: string;
+}
+// Foto ya resuelta a base64 para incrustar en el PDF
+interface FotoEvidencia { dataUrl: string; motivo: string; cliente: string; ruta: string; fecha: string; categoria: string; nombre: string; }
+interface RefEvidencia  { nombre: string; tipo: string; fecha: string; relacion: string; url: string; }
 
 /* ════════════════════════════════════════════════════════════════════════════
    INFORME EJECUTIVO RUTAS — Exportar PDF
@@ -187,9 +197,9 @@ function seccion(num: string, titulo: string, contenido: string): string {
 
 function construirInforme(opts: {
   al: any; usuario: string; acomp: Acompanamiento[]; acciones: AccionCumplimiento[];
-  evidencias: EvidenciaRuta[]; secciones: Record<string, string>;
+  fotos: FotoEvidencia[]; evRefs: RefEvidencia[]; secciones: Record<string, string>;
 }): string {
-  const { al, usuario, acomp, acciones, evidencias, secciones } = opts;
+  const { al, usuario, acomp, acciones, fotos, evRefs, secciones } = opts;
   const k = calcular(acomp, acciones);
   const hoy = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
   const S = (key: string) => secciones[key] || "—";
@@ -337,38 +347,33 @@ function construirInforme(opts: {
       </div>`}
   </div>`;
 
-  // 7. Evidencias (incrusta imágenes directas; las demás como referencia con vínculo)
-  const esImg = (u: string) => /^data:image\//i.test(u) || /\.(png|jpe?g|webp|gif)(\?|$)/i.test(u);
-  const evHtml = evidencias.length === 0 ? '<p style="font-size:11px;color:#94a3b8">Sin evidencias registradas en el alcance.</p>' : `<div>
-    ${evidencias.filter(e => e.tipo === "Foto" && esImg(e.url)).slice(0, 9).map(ev => {
-      const ac = acompById[ev.acompanamientoId];
-      return `<div style="display:inline-block;width:120px;margin:4px;vertical-align:top">
-        <img src="${ev.url}" style="width:120px;height:120px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0"/>
-        <p style="font-size:8px;color:#94a3b8;margin:2px 0 0;text-align:center">${ac ? ac.motivo : ev.nombre} · ${fmtFecha(ev.uploadedAt)}</p>
-      </div>`;
-    }).join("")}
-    ${(() => {
-      const refs = evidencias.filter(e => !(e.tipo === "Foto" && esImg(e.url)));
-      if (refs.length === 0) return "";
-      return `<table style="width:100%;border-collapse:collapse;font-size:9px;margin-top:8px">
-        <thead><tr style="background:#f8fafc">
-          <th style="text-align:left;padding:5px;border-bottom:2px solid #e2e8f0">Evidencia</th>
-          <th style="text-align:center;padding:5px;border-bottom:2px solid #e2e8f0">Tipo</th>
-          <th style="text-align:center;padding:5px;border-bottom:2px solid #e2e8f0">Fecha</th>
-          <th style="text-align:left;padding:5px;border-bottom:2px solid #e2e8f0">Relación con hallazgo</th>
-        </tr></thead><tbody>
-        ${refs.map(ev => { const ac = acompById[ev.acompanamientoId]; return `<tr>
-          <td style="padding:5px;border-bottom:1px solid #f1f5f9">${ev.nombre || "—"}</td>
-          <td style="padding:5px;border-bottom:1px solid #f1f5f9;text-align:center">${ev.tipo}</td>
-          <td style="padding:5px;border-bottom:1px solid #f1f5f9;text-align:center">${fmtFecha(ev.uploadedAt)}</td>
-          <td style="padding:5px;border-bottom:1px solid #f1f5f9">${ac ? `${ac.motivo} · ${ac.clienteNombre} (${ac.rutaNombre})` : "—"}</td>
-        </tr>`; }).join("")}
-        </tbody></table>`;
-    })()}
+  // 7. Evidencias — fotos reales del módulo Evidencias incrustadas + referencias
+  const fotosHtml = fotos.length === 0 ? "" : `<div style="margin-bottom:10px">
+    ${fotos.map(f => `<div style="display:inline-block;width:150px;margin:5px;vertical-align:top">
+      <img src="${f.dataUrl}" style="width:150px;height:150px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0"/>
+      <p style="font-size:8px;color:#475569;margin:3px 0 0;text-align:center;line-height:1.35"><strong>${f.motivo}</strong><br>${[f.cliente, f.ruta].filter(Boolean).join(" · ")}<br><span style="color:#94a3b8">${f.categoria || "Evidencia"} · ${fmtFecha(f.fecha)}</span></p>
+    </div>`).join("")}
   </div>`;
+  const refsHtml = evRefs.length === 0 ? "" : `<table style="width:100%;border-collapse:collapse;font-size:9px;margin-top:8px">
+    <thead><tr style="background:#f8fafc">
+      <th style="text-align:left;padding:5px;border-bottom:2px solid #e2e8f0">Evidencia</th>
+      <th style="text-align:center;padding:5px;border-bottom:2px solid #e2e8f0">Tipo</th>
+      <th style="text-align:center;padding:5px;border-bottom:2px solid #e2e8f0">Fecha</th>
+      <th style="text-align:left;padding:5px;border-bottom:2px solid #e2e8f0">Relación con hallazgo</th>
+    </tr></thead><tbody>
+    ${evRefs.map(ev => `<tr>
+      <td style="padding:5px;border-bottom:1px solid #f1f5f9">${ev.nombre || "—"}</td>
+      <td style="padding:5px;border-bottom:1px solid #f1f5f9;text-align:center">${ev.tipo}</td>
+      <td style="padding:5px;border-bottom:1px solid #f1f5f9;text-align:center">${fmtFecha(ev.fecha)}</td>
+      <td style="padding:5px;border-bottom:1px solid #f1f5f9">${ev.relacion}</td>
+    </tr>`).join("")}
+    </tbody></table>`;
+  const totalEv = fotos.length + evRefs.length;
   const evidenciasSec = `<div style="margin-bottom:18px">
     <h2 style="font-size:15px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 8px">7. Evidencias</h2>
-    ${evHtml}
+    ${totalEv === 0
+      ? '<p style="font-size:11px;color:#94a3b8">Sin evidencias registradas en el alcance. Cárguelas en Rutas → Evidencias para incluir soporte fotográfico de los hallazgos.</p>'
+      : `<p style="font-size:10px;color:#475569;margin:0 0 8px">Soporte documental vinculado a los hallazgos${fotos.length ? ` · ${fotos.length} fotografía(s) incrustada(s)` : ""}${evRefs.length ? ` · ${evRefs.length} referencia(s) externa(s)` : ""}.</p>${fotosHtml}${refsHtml}`}
   </div>`;
 
   // 9. Conclusiones
@@ -446,10 +451,9 @@ function construirInforme(opts: {
 }
 
 // ── Modal generador ─────────────────────────────────────────────────────────
-export function InformeEjecutivoRutasModal({ acompanamientos, cumplimiento, evidencias, usuario, onClose }: {
+export function InformeEjecutivoRutasModal({ acompanamientos, cumplimiento, usuario, onClose }: {
   acompanamientos: Acompanamiento[];
   cumplimiento: AccionCumplimiento[];
-  evidencias: EvidenciaRuta[];
   usuario: string;
   onClose: () => void;
 }) {
@@ -459,7 +463,7 @@ export function InformeEjecutivoRutasModal({ acompanamientos, cumplimiento, evid
   const [auditor, setAuditor]   = useState("");
   const [desde, setDesde]       = useState("");
   const [hasta, setHasta]       = useState("");
-  const [fase, setFase]         = useState<"idle"|"ia"|"pdf">("idle");
+  const [fase, setFase]         = useState<"idle"|"ia"|"fotos"|"pdf">("idle");
   const [error, setError]       = useState<string | null>(null);
 
   // Catálogos para los filtros (derivados de los datos reales)
@@ -480,7 +484,17 @@ export function InformeEjecutivoRutasModal({ acompanamientos, cumplimiento, evid
 
   const idsScope = useMemo(() => new Set(acompFiltrados.map(a => a.id)), [acompFiltrados]);
   const accionesScope = useMemo(() => cumplimiento.filter(c => idsScope.has(c.acompanamientoId)), [cumplimiento, idsScope]);
-  const evidenciasScope = useMemo(() => evidencias.filter(e => idsScope.has(e.acompanamientoId)), [evidencias, idsScope]);
+
+  // Evidencias desde el API (el store no las hidrata); se cargan una vez y se filtran por alcance
+  const [allEvidencias, setAllEvidencias] = useState<EvidenciaApi[]>([]);
+  useEffect(() => {
+    let alive = true;
+    apiGet<EvidenciaApi[]>("/evidencias/ruta")
+      .then(d => { if (alive) setAllEvidencias(Array.isArray(d) ? d : []); })
+      .catch(() => { if (alive) setAllEvidencias([]); });
+    return () => { alive = false; };
+  }, []);
+  const evidenciasScope = useMemo(() => allEvidencias.filter(e => idsScope.has(e.acompanamientoId)), [allEvidencias, idsScope]);
 
   const nombrePara = (arr: [string, string][], id: string) => arr.find(([k]) => k === id)?.[1] ?? "";
 
@@ -531,9 +545,35 @@ export function InformeEjecutivoRutasModal({ acompanamientos, cumplimiento, evid
         }
       } catch { /* respaldo determinista ya cargado */ }
 
-      // 2) Construir HTML y generar PDF
+      // 2) Resolver fotos del módulo Evidencias (proxy server-side → base64, sin CORS)
+      setFase("fotos");
+      const fotos: FotoEvidencia[] = [];
+      const evRefs: RefEvidencia[] = [];
+      const refDe = (e: EvidenciaApi): RefEvidencia => {
+        const ac = acompById[e.acompanamientoId];
+        return { nombre: e.nombre, tipo: e.tipo, fecha: e.uploadedAt, url: e.url,
+          relacion: ac ? `${ac.motivo} · ${ac.clienteNombre} (${ac.rutaNombre})` : "—" };
+      };
+      const fotosEv = evidenciasScope.filter(e => e.tipo === "Foto");
+      evidenciasScope.filter(e => e.tipo !== "Foto").forEach(e => evRefs.push(refDe(e)));
+      const CAP = 12; // tope de fotos incrustadas para mantener el PDF manejable
+      for (const e of fotosEv.slice(0, CAP)) {
+        try {
+          const r = await fetch("/api/evidencia-img?url=" + encodeURIComponent(e.url));
+          const d = r.ok ? await r.json() : null;
+          if (d?.dataUrl) {
+            const ac = acompById[e.acompanamientoId];
+            fotos.push({ dataUrl: d.dataUrl, motivo: ac?.motivo ?? e.nombre, cliente: ac?.clienteNombre ?? "", ruta: ac?.rutaNombre ?? "", fecha: e.uploadedAt, categoria: e.categoria ?? "", nombre: e.nombre });
+          } else {
+            evRefs.push(refDe(e)); // no incrustable (privada / no es imagen) → referencia
+          }
+        } catch { evRefs.push(refDe(e)); }
+      }
+      fotosEv.slice(CAP).forEach(e => evRefs.push(refDe(e))); // exceso del tope → referencia
+
+      // 3) Construir HTML y generar PDF
       setFase("pdf");
-      const html = construirInforme({ al, usuario, acomp: acompFiltrados, acciones: accionesScope, evidencias: evidenciasScope, secciones });
+      const html = construirInforme({ al, usuario, acomp: acompFiltrados, acciones: accionesScope, fotos, evRefs, secciones });
       const fname = `Informe-Ejecutivo-Rutas${al.cliente ? "-" + al.cliente.replace(/\s+/g, "-") : ""}-${new Date().toISOString().slice(0, 10)}.pdf`;
       await generarPDF(html, fname);
       onClose();
@@ -623,7 +663,7 @@ export function InformeEjecutivoRutasModal({ acompanamientos, cumplimiento, evid
             <button onClick={exportar} disabled={generando || acompFiltrados.length === 0}
               className="px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-[#0A111F] text-xs font-bold flex items-center gap-2 disabled:opacity-40">
               {generando ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Download className="w-3.5 h-3.5"/>}
-              {fase === "ia" ? "Generando análisis…" : fase === "pdf" ? "Construyendo PDF…" : "Exportar PDF"}
+              {fase === "ia" ? "Generando análisis…" : fase === "fotos" ? "Procesando evidencias…" : fase === "pdf" ? "Construyendo PDF…" : "Exportar PDF"}
             </button>
           </div>
         </div>

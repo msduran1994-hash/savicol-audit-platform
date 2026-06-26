@@ -18,7 +18,6 @@ import {
 export default function InformeEjecutivoPage() {
   const acomp        = useRutasStore(useShallow((s) => s.acompanamientos));
   const cumplimiento = useRutasStore(useShallow((s) => s.cumplimiento));
-  const evidencias   = useRutasStore(useShallow((s) => s.evidencias));
   const usuario      = useAuthStore((s) => s.user?.name ?? "Auditor de Rutas");
   const [exportOpen, setExportOpen] = useState(false);
 
@@ -237,7 +236,6 @@ export default function InformeEjecutivoPage() {
         <InformeEjecutivoRutasModal
           acompanamientos={acomp}
           cumplimiento={cumplimiento}
-          evidencias={evidencias}
           usuario={usuario}
           onClose={() => setExportOpen(false)}
         />
