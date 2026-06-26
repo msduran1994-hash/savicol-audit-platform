@@ -298,7 +298,18 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
   // ── Mortalidad auto-calculada (sobre población inicial = "Total recibido (aves)") ──
   const numSeg = (v: any) => { const n = parseFloat((v ?? "").toString().replace(",", ".")); return isFinite(n) ? n : 0; };
   const CAMPOS_MANUALES_SEG = ["muestra", "avesVivas", "avesMuertas", "consumoAgua", "consumoAlimento", "peso", "tempAmbiente", "tempCriadora", "tempCloacal", "bioseguridad", "comportamiento"];
-  const pobInicial = useMemo(() => numSeg(recep.find(f => /total\s+recibido/i.test(f.parametro))?.valor), [recep]);
+  // Población inicial: "Total recibido (aves)" de Recepción; si no está definido,
+  // se infiere de las Aves vivas del primer día con datos (población al inicio del seguimiento).
+  const pobBase = useMemo(() => {
+    const recibido = numSeg(recep.find(f => /total\s+recibido/i.test(f.parametro))?.valor);
+    if (recibido > 0) return { val: recibido, fuente: "Total recibido (Recepción)" };
+    for (let i = 0; i < DIAS.length; i++) {
+      const v = numSeg(seguim[i]?.avesVivas);
+      if (v > 0) return { val: v, fuente: `Aves vivas Día ${i + 1}` };
+    }
+    return { val: 0, fuente: "" };
+  }, [recep, seguim]);
+  const pobInicial = pobBase.val;
   const mort = useMemo(() => {
     let acum = 0;
     const diaria: number[] = [], acumulada: number[] = [];
@@ -582,7 +593,7 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
               <p className="text-[11px] text-[#64748B] mb-4">Monitoreo diario de indicadores productivos, ambientales y sanitarios. La mortalidad diaria y acumulada se calculan automáticamente.</p>
               {pobInicial <= 0 && (
                 <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px]">
-                  Define <strong>"Total recibido (aves)"</strong> en la pestaña <strong>Recepción</strong> para calcular automáticamente la mortalidad diaria y acumulada.
+                  Ingresa las <strong>Aves vivas del Día 1</strong> o define <strong>"Total recibido (aves)"</strong> en <strong>Recepción</strong> para calcular automáticamente la mortalidad.
                 </div>
               )}
               <div className="overflow-x-auto rounded-lg border border-[#1E2D4A]">
@@ -632,7 +643,7 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
               <div className="mt-4 rounded-xl border border-[#1E2D4A] overflow-hidden">
                 <div className="px-4 py-2.5 bg-[#0A111F] flex flex-wrap items-center justify-between gap-2">
                   <h4 className="text-sm font-bold text-white">Resumen de Mortalidad{data.galponPrincipal ? ` · Galpón ${data.galponPrincipal}` : ""}</h4>
-                  <span className="text-[10px] text-[#64748B]">Población inicial (Total recibido): {pobInicial > 0 ? `${pobInicial.toLocaleString("es-CO")} aves` : "— sin definir"}</span>
+                  <span className="text-[10px] text-[#64748B]">Población inicial: {pobInicial > 0 ? `${pobInicial.toLocaleString("es-CO")} aves · ${pobBase.fuente}` : "— sin datos"}</span>
                 </div>
                 <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-2">
                   {([
