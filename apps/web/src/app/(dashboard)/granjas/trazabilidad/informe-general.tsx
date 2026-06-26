@@ -4,7 +4,7 @@ import { X, FileText, Download, Loader2, Building2, Calendar, Hash, User } from 
 import { LOGO_SAVICOL } from "../../cedis/cumplimiento/savicol-logo";
 import { evidenciasGridHTML, type FotoPDF } from "@/lib/pdf-evidencias";
 import { apiGet } from "@/lib/api";
-import { leerMetaFoto, type LoteItem } from "@/hooks/useLotes";
+import { leerMetaFoto, calcularCumplimiento, type LoteItem, type ChecklistData, type Muestreo } from "@/hooks/useLotes";
 
 /* ════════════════════════════════════════════════════════════════════════════
    INFORME GENERAL DE AUDITORÍA · Granjas → Trazabilidad → Lotes (Etapa 1)
@@ -41,6 +41,28 @@ function mortLote(l: LoteItem) {
   const vivasFinales = pob > 0 ? Math.max(0, pob - totalMuertas) : 0;
   let ultimo = -1; for (let i = 0; i < 7; i++) { if (seg[i] && Object.values(seg[i]).some(v => (v ?? "").toString().trim() !== "")) ultimo = i; }
   return { pob, fuente, totalMuertas, general, vivasFinales, tieneD7: pob > 0 && ultimo >= 6, cumple: pob > 0 && ultimo >= 6 && general <= MORT_RANGO_D7, seg };
+}
+
+// ── Checklists (Encasetamiento / Trazabilidad 7 Días) y Muestreos por galpón ──
+const TIPO_LABEL: Record<string, string> = { encacetamiento: "Checklist Encasetamiento", trazabilidad7: "Checklist Trazabilidad 7 Días" };
+function checklistsGalpon(chks: ChecklistData[], g: string): ChecklistData[] {
+  return chks.filter(c => !c.galpon || c.galpon === g || c.galpon === "TODOS");
+}
+function muestreosGalpon(chks: ChecklistData[], g: string): Muestreo[] {
+  const out: Muestreo[] = [];
+  chks.forEach(c => (c.muestreos || []).forEach(m => { if ((m.galpon || c.galpon) === g) out.push(m); }));
+  return out;
+}
+function statMuestreo(ms: Muestreo[]) {
+  const v = ms.filter(m => (m.cantidad ?? 0) > 0 && (m.pesoTotal ?? 0) > 0);
+  const totalM = v.length, pollitos = v.reduce((s, m) => s + m.cantidad, 0), pesoT = v.reduce((s, m) => s + m.pesoTotal, 0);
+  const unit = pollitos > 0 ? pesoT / pollitos : 0;
+  const us = v.map(m => m.pesoTotal / m.cantidad);
+  const mean = us.length ? us.reduce((a, u) => a + u, 0) / us.length : 0;
+  const sd = us.length ? Math.sqrt(us.reduce((a, u) => a + (u - mean) ** 2, 0) / us.length) : 0;
+  const cv = mean > 0 ? (sd / mean) * 100 : 0;
+  const estado = totalM === 0 ? { l: "Sin datos", c: "#64748B" } : cv <= 8 ? { l: "Dentro del rango", c: VERDE } : cv <= 12 ? { l: "Variación moderada", c: NARANJA } : { l: "Variación significativa", c: ROJO };
+  return { totalM, pollitos, pesoT, unit, cv, estado };
 }
 
 // ── PDF (jsPDF + html2canvas, multipágina A4) ───────────────────────────────
@@ -86,9 +108,9 @@ function seccion(num: string, titulo: string, contenido: string): string {
 }
 
 function construirInforme(opts: {
-  form: any; lotes: LoteItem[]; fotosByLoteGalpon: Record<string, FotoPDF[]>; usuario: string;
+  form: any; lotes: LoteItem[]; fotosByLoteGalpon: Record<string, FotoPDF[]>; checklistsByLote: Record<string, ChecklistData[]>; usuario: string;
 }): string {
-  const { form, lotes, fotosByLoteGalpon, usuario } = opts;
+  const { form, lotes, fotosByLoteGalpon, checklistsByLote, usuario } = opts;
   const hoy = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
   const morts = lotes.map(l => ({ l, m: mortLote(l) }));
   const totalAvesIni = morts.reduce((s, x) => s + x.m.pob, 0);
@@ -133,7 +155,7 @@ function construirInforme(opts: {
   </div>`;
 
   // Resumen ejecutivo (determinista, datos reales)
-  const resumen = `Se auditaron ${lotes.length} lote(s) en ${granjasSet.length} granja(s) durante el periodo ${form.visitaDesde ? fFecha(form.visitaDesde) : "—"} a ${form.visitaHasta ? fFecha(form.visitaHasta) : "—"}. La población inicial consolidada asciende a ${fNum(totalAvesIni)} aves, con ${fNum(totalMuertas)} bajas acumuladas y una mortalidad general del ${mortGeneral.toFixed(2)}%. De los lotes con seguimiento completo a 7 días, ${cumplen} cumplen el rango de mortalidad estipulado (≤ ${MORT_RANGO_D7}%). El presente informe consolida los registros de Datos Generales, Recepción, Seguimiento Día 1–7, Alistamiento y la evidencia fotográfica asociada a cada galpón.`;
+  const resumen = `Se auditaron ${lotes.length} lote(s) en ${granjasSet.length} granja(s) durante el periodo ${form.visitaDesde ? fFecha(form.visitaDesde) : "—"} a ${form.visitaHasta ? fFecha(form.visitaHasta) : "—"}. La población inicial consolidada asciende a ${fNum(totalAvesIni)} aves, con ${fNum(totalMuertas)} bajas acumuladas y una mortalidad general del ${mortGeneral.toFixed(2)}%. De los lotes con seguimiento completo a 7 días, ${cumplen} cumplen el rango de mortalidad estipulado (≤ ${MORT_RANGO_D7}%). El presente informe consolida los registros de Datos Generales, Recepción, Seguimiento Día 1–7, Alistamiento, los Checklists de Encasetamiento y Trazabilidad 7 Días, los muestreos de pesaje y la evidencia fotográfica, relacionados por granja, lote, galpón y fecha de visita.`;
 
   // Capítulos (redacción técnica determinista)
   const capI = `<div style="page-break-before:always">
@@ -176,6 +198,25 @@ function construirInforme(opts: {
       const fotos = fotosByLoteGalpon[`${l.data.codigo}|${g}`] || [];
       const estadoColor = !m.tieneD7 ? "#64748B" : m.cumple ? VERDE : ROJO;
       const estadoTxt = !m.tieneD7 ? "Parcial" : m.cumple ? "CUMPLE" : "FUERA DE RANGO";
+      // Checklists de auditoría que aplican al galpón
+      const chksG = checklistsGalpon(checklistsByLote[l.data.codigo] || [], g);
+      const chkHtml = chksG.length === 0 ? "" : `<div style="font-size:10px;font-weight:700;color:#475569;margin:10px 0 4px">Checklists de Auditoría</div>${chksG.map(c => {
+        const pct = calcularCumplimiento((c.preguntas || []).map(p => p.resultado));
+        const nc = (c.preguntas || []).filter(p => p.resultado === "no_cumple" || p.resultado === "parcial");
+        const col = pct >= 90 ? VERDE : pct >= 70 ? NARANJA : ROJO;
+        return `<div style="border:1px solid #e2e8f0;border-radius:6px;padding:8px;margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;font-size:10px"><strong style="color:#0D1526">${TIPO_LABEL[c.tipo] || c.tipo}${c.diaEvaluado ? ` · Día ${c.diaEvaluado}` : ""}</strong><span style="color:${col};font-weight:700">${pct}%</span></div>
+          <div style="font-size:8.5px;color:#94a3b8;margin:2px 0">Fecha de visita: ${fFecha(c.fechaVisita)} · Auditor: ${c.auditor || "—"} · ${nc.length} no conforme(s)</div>
+          ${nc.length ? `<ul style="margin:3px 0 0;padding-left:14px;font-size:9px;color:#475569">${nc.slice(0, 10).map(p => `<li>(${p.resultado === "no_cumple" ? "No cumple" : "Parcial"}) ${p.pregunta}${p.observacion ? ` — ${p.observacion}` : ""}</li>`).join("")}</ul>` : ""}
+        </div>`;
+      }).join("")}`;
+      // Muestreos (pesajes) del galpón
+      const st = statMuestreo(muestreosGalpon(checklistsByLote[l.data.codigo] || [], g));
+      const msHtml = st.totalM === 0 ? "" : `<div style="font-size:10px;font-weight:700;color:#475569;margin:10px 0 4px">Muestreos (pesajes)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:9px">
+          ${[["Muestreos", String(st.totalM)], ["Aves", String(st.pollitos)], ["Peso total", `${st.pesoT.toLocaleString("es-CO", { maximumFractionDigits: 2 })} kg`], ["Peso unitario", `${st.unit.toLocaleString("es-CO", { maximumFractionDigits: 3 })} kg`], ["CV", `${st.cv.toFixed(1)}%`]].map(d => `<span style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:4px 8px"><strong style="color:#0D1526">${d[1]}</strong> <span style="color:#64748b">${d[0]}</span></span>`).join("")}
+          <span style="padding:4px 8px;border-radius:5px;background:${st.estado.c}22;color:${st.estado.c};font-weight:700">${st.estado.l}</span>
+        </div>`;
       fichas += `<div style="${gi > 0 || true ? "page-break-before:always;" : ""}padding-top:6px">
         <div style="background:#0D1526;color:#fff;padding:10px 14px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center">
           <div><div style="font-size:13px;font-weight:800">${l.data.granjaNombre || "—"} · Galpón ${g}</div><div style="font-size:10px;color:#94A3B8">Lote ${l.data.codigo || "—"} · ${l.data.tipoProduccion || "—"} · ${l.data.raza || "—"}</div></div>
@@ -194,6 +235,7 @@ function construirInforme(opts: {
           </table>
           ${(l.data as any).recepcionObs ? `<div style="font-size:10px;color:#475569;margin-bottom:8px"><strong>Observaciones:</strong> ${(l.data as any).recepcionObs}</div>` : ""}
           ${(l.data as any).recepcionPlan ? `<div style="font-size:10px;color:#475569;margin-bottom:8px"><strong>Plan de acción:</strong> ${(l.data as any).recepcionPlan}</div>` : ""}
+          ${chkHtml}${msHtml}
           <div style="font-size:10px;font-weight:700;color:#475569;margin:8px 0 4px">Evidencias Fotográficas</div>
           ${fotos.length > 0 ? evidenciasGridHTML(fotos) : '<p style="font-size:10px;color:#94a3b8;margin:0">Sin evidencias fotográficas para este galpón.</p>'}
         </div>
@@ -269,8 +311,15 @@ export function InformeGeneralModal({ lotes, granjas, usuario, onClose }: {
       setFase("fotos");
       const codigos = new Set(lotes.map(l => l.data.codigo));
       let fotosByLoteGalpon: Record<string, FotoPDF[]> = {};
+      let checklistsByLote: Record<string, ChecklistData[]> = {};
       try {
         const docs = await apiGet<any[]>("/documentos");
+        // Checklists Encasetamiento / Trazabilidad 7 Días (misma consulta, sin duplicar)
+        (docs ?? []).filter(d => (d.nombre ?? "").includes("[CHK-ENC]") || (d.nombre ?? "").includes("[CHK-TRZ7]")).forEach(d => {
+          const mm = (d.ocrTexto ?? "").match(/\[CHK\]([\s\S]*?)\[\/CHK\]/);
+          if (!mm) return;
+          try { const data = JSON.parse(mm[1]) as ChecklistData; if (codigos.has(data.lote)) { (checklistsByLote[data.lote] = checklistsByLote[data.lote] || []).push(data); } } catch { /* json inválido */ }
+        });
         const fotos: FotoMeta[] = (docs ?? [])
           .filter(d => (d.nombre ?? "").includes("[FOTO-LOTE]"))
           .map(d => { const meta = leerMetaFoto(d.ocrTexto); return { url: (d as any).url ?? "", nombre: (d.nombre ?? "").replace(/\s*\[FOTO-LOTE\]\s*/, "").trim(), dia: meta.dia, galpon: meta.galpon, loteCodigo: meta.loteCodigo, uploadedAt: d.uploadedAt }; })
@@ -290,7 +339,7 @@ export function InformeGeneralModal({ lotes, granjas, usuario, onClose }: {
 
       // 2) Construir HTML y generar PDF
       setFase("pdf");
-      const html = construirInforme({ form, lotes, fotosByLoteGalpon, usuario });
+      const html = construirInforme({ form, lotes, fotosByLoteGalpon, checklistsByLote, usuario });
       await generarPDF(html, `Informe-General-${(granjasSet[0] || "Granjas").replace(/\s+/g, "-")}-${hoy}.pdf`);
       onClose();
     } catch (e: any) {
