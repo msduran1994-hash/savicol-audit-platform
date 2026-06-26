@@ -21,8 +21,9 @@ export function useLogin() {
       return res.data as {
         mfaRequired: boolean;
         tempToken?: string;
-        user?:        { id: string; email: string; name: string; role: any };
-        accessToken?: string;
+        user?:         { id: string; email: string; name: string; role: any };
+        accessToken?:  string;
+        refreshToken?: string;
       };
     },
     onSuccess: (data) => {
@@ -31,7 +32,7 @@ export function useLogin() {
         router.push("/mfa");
       } else if (data.user && data.accessToken) {
         // Backend devolvió tokens directos (MFA no requerido)
-        setUser(data.user, data.accessToken);
+        setUser(data.user, data.accessToken, data.refreshToken);
         toast.success(`Bienvenido ${data.user.name}`);
         router.push("/");
       }
@@ -55,10 +56,11 @@ export function useMfaVerify() {
       return res.data as {
         user: { id: string; email: string; name: string; role: any };
         accessToken: string;
+        refreshToken?: string;
       };
     },
     onSuccess: (data) => {
-      setUser(data.user, data.accessToken);
+      setUser(data.user, data.accessToken, data.refreshToken);
       setMfaPending(null);
       toast.success("Bienvenido");
       router.push("/");

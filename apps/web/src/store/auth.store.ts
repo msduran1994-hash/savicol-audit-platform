@@ -15,10 +15,14 @@ export interface AuthUser {
 interface AuthState {
   user: AuthUser | null;
   accessToken: string | null;
+  /** Refresh token (JWT) para renovar el access token sin sacar al usuario */
+  refreshToken: string | null;
   isAuthenticated: boolean;
   /** Temp token emitido por /auth/login antes de pasar por MFA */
   tempToken: string | null;
-  setUser: (user: AuthUser, token: string) => void;
+  setUser: (user: AuthUser, token: string, refreshToken?: string) => void;
+  /** Actualiza solo los tokens (usado al refrescar; el refresh rota ambos) */
+  setTokens: (accessToken: string, refreshToken?: string) => void;
   /** Guarda el tempToken cuando el login requiere MFA */
   setMfaPending: (tempToken: string | null) => void;
   logout: () => void;
@@ -29,11 +33,15 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user:            null,
       accessToken:     null,
+      refreshToken:    null,
       isAuthenticated: false,
       tempToken:       null,
 
-      setUser: (user, accessToken) =>
-        set({ user, accessToken, isAuthenticated: true, tempToken: null }),
+      setUser: (user, accessToken, refreshToken) =>
+        set((s) => ({ user, accessToken, refreshToken: refreshToken ?? s.refreshToken, isAuthenticated: true, tempToken: null })),
+
+      setTokens: (accessToken, refreshToken) =>
+        set((s) => ({ accessToken, refreshToken: refreshToken ?? s.refreshToken })),
 
       setMfaPending: (tempToken) =>
         set({ tempToken, isAuthenticated: false }),
@@ -49,7 +57,7 @@ export const useAuthStore = create<AuthState>()(
         keysToRemove.forEach((k) => {
           try { localStorage.removeItem(k); } catch { /* SSR */ }
         });
-        set({ user: null, accessToken: null, isAuthenticated: false, tempToken: null });
+        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, tempToken: null });
       },
     }),
     {
@@ -57,6 +65,7 @@ export const useAuthStore = create<AuthState>()(
       partialize: (s) => ({
         user:            s.user,
         accessToken:     s.accessToken,
+        refreshToken:    s.refreshToken,
         isAuthenticated: s.isAuthenticated,
         // No persistir tempToken por seguridad
       }),

@@ -43,16 +43,17 @@ api.interceptors.response.use(
 
       refreshing = true;
       try {
+        // Enviamos el refresh token en el body (camino fiable cross-origin);
+        // withCredentials mantiene también la cookie como respaldo.
         const res = await axios.post(
           `${BASE_URL}/api/v1/auth/refresh`,
-          {},
+          { refreshToken: useAuthStore.getState().refreshToken },
           { withCredentials: true }
         );
         const newToken: string = res.data.accessToken;
-        useAuthStore.getState().setUser(
-          useAuthStore.getState().user!,
-          newToken
-        );
+        const newRefresh: string | undefined = res.data.refreshToken;
+        // El refresh rota ambos tokens → guardamos los dos.
+        useAuthStore.getState().setTokens(newToken, newRefresh);
         refreshQueue.forEach((cb) => cb(newToken));
         refreshQueue = [];
         original.headers.Authorization = `Bearer ${newToken}`;

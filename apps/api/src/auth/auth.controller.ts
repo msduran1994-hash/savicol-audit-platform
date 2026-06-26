@@ -43,8 +43,9 @@ export class AuthController {
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: "/",
     });
-    const { refreshToken: _, ...safe } = result;
-    return safe;
+    // Devolvemos el refreshToken también en el body para habilitar el refresco
+    // body-based (fiable en SPA cross-origin), además de la cookie httpOnly.
+    return result;
   }
 
   @Post("refresh")
