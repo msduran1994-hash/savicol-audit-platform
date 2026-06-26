@@ -494,19 +494,20 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
           <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
         </header>
 
-        {/* Tabs */}
-        <div className="shrink-0 flex gap-1 px-6 pt-3 border-b border-[#1E2D4A] overflow-x-auto">
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={cn("px-4 py-2 text-sm font-medium rounded-t-lg whitespace-nowrap transition-colors",
-                tab === t.id ? "bg-[#0A111F] text-white border-b-2 border-emerald-500" : "text-[#64748B] hover:text-[#94A3B8]")}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+        {/* Body con pestañas fijas (sticky dentro del scroll) */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {/* Tabs · permanecen fijas y visibles al hacer scroll */}
+          <div className="sticky top-0 z-20 bg-[#0D1526] flex gap-1 px-6 pt-3 border-b border-[#1E2D4A] overflow-x-auto">
+            {TABS.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={cn("px-4 py-2 text-sm font-medium rounded-t-lg whitespace-nowrap transition-colors",
+                  tab === t.id ? "bg-[#0A111F] text-white border-b-2 border-emerald-500" : "text-[#64748B] hover:text-[#94A3B8]")}>
+                {t.label}
+              </button>
+            ))}
+          </div>
 
-        {/* Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-6">
+          <div className="p-6">
           {tab === "generales" && (
             <div className="space-y-5">
               <div>
@@ -875,6 +876,7 @@ function LoteModal({ item, granjas, usuario, onClose, onCreate, onUpdate, saving
               </div>
             </div>
           )}
+          </div>
         </div>
 
         {/* Footer */}
