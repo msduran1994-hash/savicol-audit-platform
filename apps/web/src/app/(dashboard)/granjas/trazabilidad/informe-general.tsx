@@ -68,7 +68,9 @@ function statMuestreo(ms: Muestreo[]) {
   return { totalM, pollitos, pesoT, unit, cv, estado };
 }
 
-// ── PDF (jsPDF + html2canvas, multipágina A4) ───────────────────────────────
+// ── PDF (jsPDF + html2canvas) · márgenes ICONTEC + paginado inteligente ─────
+// Márgenes (mm) ~ NTC 1486: superior 3, inferior 3, izquierdo 3, derecho 2.
+const MARGEN = { top: 30, bottom: 30, left: 30, right: 20 };
 async function generarPDF(html: string, filename: string): Promise<void> {
   const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
   let cont: HTMLDivElement | null = document.createElement("div");
@@ -80,16 +82,32 @@ async function generarPDF(html: string, filename: string): Promise<void> {
     const canvas = await html2canvas(cont, { scale: 2, useCORS: true, backgroundColor: "#fff", logging: false, windowWidth: 794 });
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
     const pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight();
-    const pxPerMm = canvas.width / pageW, pageHpx = Math.floor(pageH * pxPerMm);
-    let rendered = 0, idx = 0;
+    const usableW = pageW - MARGEN.left - MARGEN.right, usableH = pageH - MARGEN.top - MARGEN.bottom;
+    const pxPerMm = canvas.width / usableW, pageHpx = Math.floor(usableH * pxPerMm);
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width;
+    const filaBlanca = (band: Uint8ClampedArray, y: number): boolean => {
+      const off = y * W * 4;
+      for (let x = 0; x < W; x += 8) { const o = off + x * 4; if (band[o] < 244 || band[o + 1] < 244 || band[o + 2] < 244) return false; }
+      return true;
+    };
+    let rendered = 0, page = 0;
     while (rendered < canvas.height) {
-      if (idx > 0) pdf.addPage();
-      const sliceH = Math.min(pageHpx, canvas.height - rendered);
-      const pc = document.createElement("canvas"); pc.width = canvas.width; pc.height = sliceH;
-      const ctx = pc.getContext("2d");
-      if (ctx) { ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, pc.width, pc.height); ctx.drawImage(canvas, 0, rendered, canvas.width, sliceH, 0, 0, canvas.width, sliceH); }
-      pdf.addImage(pc.toDataURL("image/jpeg", 0.85), "JPEG", 0, 0, pageW, (sliceH * pageW) / canvas.width, undefined, "FAST");
-      rendered += sliceH; idx++;
+      let sliceH = Math.min(pageHpx, canvas.height - rendered);
+      // Si no es la última porción, busca un corte por fila blanca (evita partir tablas/fotos)
+      if (rendered + sliceH < canvas.height && ctx) {
+        const lo = rendered + Math.floor(pageHpx * 0.5), hi = rendered + sliceH;
+        try {
+          const band = ctx.getImageData(0, lo, W, hi - lo).data;
+          for (let y = (hi - lo) - 1; y >= 0; y--) { if (filaBlanca(band, y)) { sliceH = (lo - rendered) + y + 1; break; } }
+        } catch { /* canvas tainted improbable (todo es base64); corte duro */ }
+      }
+      if (page > 0) pdf.addPage();
+      const pc = document.createElement("canvas"); pc.width = W; pc.height = sliceH;
+      const pctx = pc.getContext("2d");
+      if (pctx) { pctx.fillStyle = "#fff"; pctx.fillRect(0, 0, pc.width, pc.height); pctx.drawImage(canvas, 0, rendered, W, sliceH, 0, 0, W, sliceH); }
+      pdf.addImage(pc.toDataURL("image/jpeg", 0.85), "JPEG", MARGEN.left, MARGEN.top, usableW, sliceH / pxPerMm, undefined, "FAST");
+      rendered += sliceH; page++;
     }
     pdf.save(filename);
   } finally { if (cont?.parentNode) document.body.removeChild(cont); cont = null; }
@@ -151,9 +169,9 @@ function construirInforme(opts: {
       <li>Resumen Ejecutivo</li>
       <li>Capítulo I — Aspectos Preliminares</li>
       <li>Capítulo II — Características Generales</li>
-      <li>Capítulo III — Consideraciones</li>
       <li>Fichas Técnicas por Galpón</li>
       <li>Anexos</li>
+      <li>Capítulo III — Consideraciones (Conclusiones y Recomendaciones)</li>
     </ol>
   </div>`;
 
@@ -274,12 +292,13 @@ function construirInforme(opts: {
 
   return `<div style="font-family:Arial,Helvetica,sans-serif;color:#0D1526;width:794px">
     ${portada}
-    <div style="padding:0 40px 30px">
+    <div style="padding:0 8px 20px">
       ${indice}
       ${seccion("", "Resumen Ejecutivo", resumen)}
-      ${capI}${capII}${capIII}
+      ${capI}${capII}
       ${fichas}
       ${anexoTabla}
+      ${capIII}
       ${firmas}
       ${pie}
     </div>
