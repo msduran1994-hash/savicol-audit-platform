@@ -125,7 +125,7 @@ interface FotoMeta { url: string; nombre: string; dia: string; galpon: string; l
 
 // ── Construcción del HTML del informe ───────────────────────────────────────
 function seccion(num: string, titulo: string, contenido: string): string {
-  return `<div style="margin-bottom:16px"><h2 style="font-size:14px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 6px">${num} ${titulo}</h2><p style="font-size:11px;line-height:1.7;color:#334155;margin:0;text-align:justify">${(contenido || "—").replace(/\n/g, "<br>")}</p></div>`;
+  return `<div style="margin-bottom:16px"><h2 style="font-size:22px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 6px">${num} ${titulo}</h2><p style="font-size:20px;line-height:1.7;color:#334155;margin:0;text-align:justify">${(contenido || "—").replace(/\n/g, "<br>")}</p></div>`;
 }
 
 function construirInforme(opts: {
@@ -145,12 +145,12 @@ function construirInforme(opts: {
     <div style="display:flex;align-items:flex-start;gap:22px">
       <img src="${LOGO_SAVICOL}" style="width:84px;height:auto;border-radius:6px;flex-shrink:0"/>
       <div style="flex:1">
-        <div style="font-size:11px;letter-spacing:3px;color:${CYAN};text-transform:uppercase;font-weight:700">${EMPRESA.area}</div>
-        <h1 style="font-size:26px;margin:10px 0 4px;font-weight:800">Informe General de Auditoría</h1>
-        <p style="font-size:14px;color:#94A3B8;margin:0">${form.area || "Trazabilidad Avícola"}</p>
+        <div style="font-size:20px;letter-spacing:3px;color:${CYAN};text-transform:uppercase;font-weight:700">${EMPRESA.area}</div>
+        <h1 style="font-size:32px;margin:10px 0 4px;font-weight:800">Informe General de Auditoría</h1>
+        <p style="font-size:22px;color:#94A3B8;margin:0">${form.area || "Trazabilidad Avícola"}</p>
       </div>
     </div>
-    <div style="margin-top:26px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.15);display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;color:#cbd5e1">
+    <div style="margin-top:26px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.15);display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:20px;color:#cbd5e1">
       <div><strong style="color:#fff">N.º de informe:</strong> ${form.numeroInforme || "—"}</div>
       <div><strong style="color:#fff">Empresa:</strong> ${EMPRESA.nombre}</div>
       <div><strong style="color:#fff">Granja(s):</strong> ${granjasSet.join(", ")}</div>
@@ -164,8 +164,8 @@ function construirInforme(opts: {
 
   // Índice
   const indice = `<div style="margin-bottom:20px;padding:16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
-    <h3 style="font-size:13px;color:#0D1526;margin:0 0 8px">Tabla de Contenido</h3>
-    <ol style="font-size:10.5px;color:#475569;margin:0;padding-left:18px;line-height:1.9">
+    <h3 style="font-size:20px;color:#0D1526;margin:0 0 8px">Tabla de Contenido</h3>
+    <ol style="font-size:17px;color:#475569;margin:0;padding-left:18px;line-height:1.9">
       <li>Resumen Ejecutivo</li>
       <li>Capítulo I — Aspectos Preliminares</li>
       <li>Capítulo II — Características Generales</li>
@@ -193,8 +193,8 @@ function construirInforme(opts: {
     ${seccion("2.2", "Observaciones derivadas del análisis", `La mortalidad general consolidada es del ${mortGeneral.toFixed(2)}%. ${cumplen} de ${lotes.length} lote(s) con seguimiento a 7 días se encuentran dentro del rango estipulado; el resto requiere revisión de causas y refuerzo de los planes de acción.`)}
     ${seccion("2.3", "Causas identificadas", "Cuando la mortalidad supera el rango, las causas se asocian típicamente a condiciones de recepción, manejo de temperatura de cama y ambiente, calidad del pollito y prácticas de bioseguridad en los primeros días.")}
     <div style="margin-bottom:16px">
-      <h2 style="font-size:14px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 6px">2.4 Riesgos</h2>
-      <table style="width:100%;border-collapse:collapse;font-size:10px">
+      <h2 style="font-size:22px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 6px">2.4 Riesgos</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:17px">
         <thead><tr style="background:#f8fafc"><th style="text-align:left;padding:5px;border-bottom:2px solid #e2e8f0">Tipo de riesgo</th><th style="text-align:left;padding:5px;border-bottom:2px solid #e2e8f0">Descripción</th></tr></thead>
         <tbody>
         ${[["Legal", "Incumplimiento de normativa sanitaria y de bioseguridad aplicable."], ["Reputacional", "Afectación de la imagen ante clientes y autoridades por desviaciones sanitarias."], ["Financiero", "Pérdidas por mortalidad, conversión y reposición de lote."], ["Contagio", "Diseminación de agentes patógenos por fallas de bioseguridad."], ["Operativo", "Desviaciones de proceso en recepción, encasetamiento y seguimiento."]].map(r => `<tr><td style="padding:5px;border-bottom:1px solid #f1f5f9;font-weight:600;color:#0D1526">${r[0]}</td><td style="padding:5px;border-bottom:1px solid #f1f5f9;color:#334155">${r[1]}</td></tr>`).join("")}
@@ -213,7 +213,7 @@ function construirInforme(opts: {
   </div>`;
 
   // Fichas técnicas por galpón
-  let fichas = `<div style="page-break-before:always"><h2 style="font-size:15px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 12px">Fichas Técnicas por Galpón</h2></div>`;
+  let fichas = `<div style="page-break-before:always"><h2 style="font-size:24px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 12px">Fichas Técnicas por Galpón</h2></div>`;
   morts.forEach(({ l, m }) => {
     galponesDeLote(l).forEach((g, gi) => {
       const fotos = fotosByLoteGalpon[`${l.data.codigo}|${g}`] || [];
@@ -222,48 +222,48 @@ function construirInforme(opts: {
       // Checklists de auditoría de la GRANJA que aplican al galpón (con todas las respuestas)
       const granjaChks = checklistsByGranja[l.data.granjaId] || [];
       const chksG = checklistsGalpon(granjaChks, g);
-      const chkHtml = chksG.length === 0 ? "" : `<div style="font-size:10px;font-weight:700;color:#475569;margin:10px 0 4px">Checklists de Auditoría</div>${chksG.map(c => {
+      const chkHtml = chksG.length === 0 ? "" : `<div style="font-size:17px;font-weight:700;color:#475569;margin:10px 0 4px">Checklists de Auditoría</div>${chksG.map(c => {
         const pct = calcularCumplimiento((c.preguntas || []).map(p => p.resultado));
         const col = pct >= 90 ? VERDE : pct >= 70 ? NARANJA : ROJO;
         const resp = (c.preguntas || []).filter(p => p.resultado !== "");
         const evidsChk: FotoPDF[] = (c.preguntas || []).filter(p => p.evidencia && /^data:image\//i.test(p.evidencia)).map(p => ({ src: p.evidencia as string, titulo: p.pregunta, pie: RESULTADO_LABEL[p.resultado] || p.resultado }));
         return `<div style="border:1px solid #e2e8f0;border-radius:6px;padding:8px;margin-bottom:8px;page-break-inside:avoid">
-          <div style="display:flex;justify-content:space-between;font-size:10px"><strong style="color:#0D1526">${TIPO_LABEL[c.tipo] || c.tipo}${c.diaEvaluado ? ` · Día ${c.diaEvaluado}` : ""}</strong><span style="color:${col};font-weight:700">${pct}%</span></div>
-          <div style="font-size:8.5px;color:#94a3b8;margin:2px 0 4px">Lote: ${c.lote || "—"} · Fecha de visita: ${fFecha(c.fechaVisita)} · Auditor: ${c.auditor || "—"} · ${resp.length}/${(c.preguntas || []).length} respondidas</div>
-          ${resp.length ? `<table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr style="background:#f8fafc"><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Sección</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Pregunta</th><th style="text-align:center;padding:3px;border-bottom:1px solid #e2e8f0">Resultado</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Observación</th></tr></thead><tbody>${resp.map(p => `<tr><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#64748b">${p.seccion || "—"}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9">${p.pregunta}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:center;color:${RESULTADO_COLOR[p.resultado] || "#64748b"};font-weight:700">${RESULTADO_LABEL[p.resultado] || p.resultado}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#475569">${p.observacion || ""}</td></tr>`).join("")}</tbody></table>` : '<p style="font-size:9px;color:#94a3b8;margin:0">Sin respuestas registradas.</p>'}
-          ${evidsChk.length ? `<div style="font-size:9px;font-weight:700;color:#475569;margin:7px 0 3px">Evidencias del checklist (${evidsChk.length})</div>${evidenciasGridHTML(evidsChk)}` : ""}
+          <div style="display:flex;justify-content:space-between;font-size:17px"><strong style="color:#0D1526">${TIPO_LABEL[c.tipo] || c.tipo}${c.diaEvaluado ? ` · Día ${c.diaEvaluado}` : ""}</strong><span style="color:${col};font-weight:700">${pct}%</span></div>
+          <div style="font-size:14px;color:#94a3b8;margin:2px 0 4px">Lote: ${c.lote || "—"} · Fecha de visita: ${fFecha(c.fechaVisita)} · Auditor: ${c.auditor || "—"} · ${resp.length}/${(c.preguntas || []).length} respondidas</div>
+          ${resp.length ? `<table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#f8fafc"><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Sección</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Pregunta</th><th style="text-align:center;padding:3px;border-bottom:1px solid #e2e8f0">Resultado</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Observación</th></tr></thead><tbody>${resp.map(p => `<tr><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#64748b">${p.seccion || "—"}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9">${p.pregunta}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:center;color:${RESULTADO_COLOR[p.resultado] || "#64748b"};font-weight:700">${RESULTADO_LABEL[p.resultado] || p.resultado}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#475569">${p.observacion || ""}</td></tr>`).join("")}</tbody></table>` : '<p style="font-size:15px;color:#94a3b8;margin:0">Sin respuestas registradas.</p>'}
+          ${evidsChk.length ? `<div style="font-size:15px;font-weight:700;color:#475569;margin:7px 0 3px">Evidencias del checklist (${evidsChk.length})</div>${evidenciasGridHTML(evidsChk)}` : ""}
         </div>`;
       }).join("")}`;
       // Muestreos (pesajes) del galpón: resumen + tabla
       const msG = muestreosGalpon(granjaChks, g).filter(m => (m.cantidad ?? 0) > 0 || (m.pesoTotal ?? 0) > 0);
       const st = statMuestreo(msG);
-      const msHtml = msG.length === 0 ? "" : `<div style="font-size:10px;font-weight:700;color:#475569;margin:10px 0 4px">Muestreos (pesajes)</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:9px;margin-bottom:5px">
+      const msHtml = msG.length === 0 ? "" : `<div style="font-size:17px;font-weight:700;color:#475569;margin:10px 0 4px">Muestreos (pesajes)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:15px;margin-bottom:5px">
           ${[["Muestreos", String(st.totalM)], ["Aves", String(st.pollitos)], ["Peso total", `${st.pesoT.toLocaleString("es-CO", { maximumFractionDigits: 2 })} kg`], ["Peso unitario", `${st.unit.toLocaleString("es-CO", { maximumFractionDigits: 3 })} kg`], ["CV", `${st.cv.toFixed(1)}%`]].map(d => `<span style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:4px 8px"><strong style="color:#0D1526">${d[1]}</strong> <span style="color:#64748b">${d[0]}</span></span>`).join("")}
           <span style="padding:4px 8px;border-radius:5px;background:${st.estado.c}22;color:${st.estado.c};font-weight:700">${st.estado.l}</span>
         </div>
-        <table style="width:100%;border-collapse:collapse;font-size:8.5px"><thead><tr style="background:#f8fafc"><th style="text-align:center;padding:3px;border-bottom:1px solid #e2e8f0">N.º</th><th style="text-align:right;padding:3px;border-bottom:1px solid #e2e8f0">Pollitos</th><th style="text-align:right;padding:3px;border-bottom:1px solid #e2e8f0">Peso total (kg)</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Observación</th></tr></thead><tbody>${msG.map(m => `<tr><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:center">${m.n}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:right">${m.cantidad}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:right">${m.pesoTotal}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#475569">${m.obs || ""}</td></tr>`).join("")}</tbody></table>`;
+        <table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#f8fafc"><th style="text-align:center;padding:3px;border-bottom:1px solid #e2e8f0">N.º</th><th style="text-align:right;padding:3px;border-bottom:1px solid #e2e8f0">Pollitos</th><th style="text-align:right;padding:3px;border-bottom:1px solid #e2e8f0">Peso total (kg)</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Observación</th></tr></thead><tbody>${msG.map(m => `<tr><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:center">${m.n}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:right">${m.cantidad}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:right">${m.pesoTotal}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#475569">${m.obs || ""}</td></tr>`).join("")}</tbody></table>`;
       fichas += `<div style="${gi > 0 || true ? "page-break-before:always;" : ""}padding-top:6px">
         <div style="background:#0D1526;color:#fff;padding:10px 14px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center">
-          <div><div style="font-size:13px;font-weight:800">${l.data.granjaNombre || "—"} · Galpón ${g}</div><div style="font-size:10px;color:#94A3B8">Lote ${l.data.codigo || "—"} · ${l.data.tipoProduccion || "—"} · ${l.data.raza || "—"}</div></div>
-          <span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:10px;background:${estadoColor}22;color:${estadoColor}">${estadoTxt}</span>
+          <div><div style="font-size:20px;font-weight:800">${l.data.granjaNombre || "—"} · Galpón ${g}</div><div style="font-size:17px;color:#94A3B8">Lote ${l.data.codigo || "—"} · ${l.data.tipoProduccion || "—"} · ${l.data.raza || "—"}</div></div>
+          <span style="font-size:17px;font-weight:700;padding:3px 9px;border-radius:10px;background:${estadoColor}22;color:${estadoColor}">${estadoTxt}</span>
         </div>
         <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;padding:14px;margin-bottom:16px">
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:10px;margin-bottom:12px">
-            ${[["Fecha de ingreso", fFecha(l.data.fechaIngreso)], ["Edad (días)", String(l.data.edadDias || 0)], ["Población inicial", `${fNum(m.pob)} (${m.fuente})`], ["Aves vivas (final)", fNum(m.vivasFinales)], ["Aves muertas (total)", fNum(m.totalMuertas)], ["Mortalidad general", `${m.general.toFixed(2)}%`]].map(d => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px"><div style="font-size:8px;text-transform:uppercase;color:#94a3b8">${d[0]}</div><div style="font-weight:700;color:#0D1526">${d[1]}</div></div>`).join("")}
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:17px;margin-bottom:12px">
+            ${[["Fecha de ingreso", fFecha(l.data.fechaIngreso)], ["Edad (días)", String(l.data.edadDias || 0)], ["Población inicial", `${fNum(m.pob)} (${m.fuente})`], ["Aves vivas (final)", fNum(m.vivasFinales)], ["Aves muertas (total)", fNum(m.totalMuertas)], ["Mortalidad general", `${m.general.toFixed(2)}%`]].map(d => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px"><div style="font-size:14px;text-transform:uppercase;color:#94a3b8">${d[0]}</div><div style="font-weight:700;color:#0D1526">${d[1]}</div></div>`).join("")}
           </div>
-          <div style="font-size:10px;font-weight:700;color:#475569;margin:6px 0 4px">Seguimiento Día 1–7 · Mortalidad</div>
-          <table style="width:100%;border-collapse:collapse;font-size:9px;margin-bottom:10px">
+          <div style="font-size:17px;font-weight:700;color:#475569;margin:6px 0 4px">Seguimiento Día 1–7 · Mortalidad</div>
+          <table style="width:100%;border-collapse:collapse;font-size:15px;margin-bottom:10px">
             <thead><tr style="background:#f8fafc"><th style="text-align:left;padding:4px;border-bottom:1px solid #e2e8f0">Indicador</th>${[1,2,3,4,5,6,7].map(d => `<th style="padding:4px;border-bottom:1px solid #e2e8f0">D${d}</th>`).join("")}</tr></thead>
             <tbody>
               ${[["Aves muertas", "avesMuertas"], ["Peso (g)", "peso"]].map(row => `<tr><td style="padding:4px;border-bottom:1px solid #f1f5f9;color:#475569">${row[0]}</td>${[0,1,2,3,4,5,6].map(i => `<td style="padding:4px;border-bottom:1px solid #f1f5f9;text-align:center">${(m.seg[i]?.[row[1]] ?? "") || "—"}</td>`).join("")}</tr>`).join("")}
             </tbody>
           </table>
-          ${(l.data as any).recepcionObs ? `<div style="font-size:10px;color:#475569;margin-bottom:8px"><strong>Observaciones:</strong> ${(l.data as any).recepcionObs}</div>` : ""}
-          ${(l.data as any).recepcionPlan ? `<div style="font-size:10px;color:#475569;margin-bottom:8px"><strong>Plan de acción:</strong> ${(l.data as any).recepcionPlan}</div>` : ""}
+          ${(l.data as any).recepcionObs ? `<div style="font-size:17px;color:#475569;margin-bottom:8px"><strong>Observaciones:</strong> ${(l.data as any).recepcionObs}</div>` : ""}
+          ${(l.data as any).recepcionPlan ? `<div style="font-size:17px;color:#475569;margin-bottom:8px"><strong>Plan de acción:</strong> ${(l.data as any).recepcionPlan}</div>` : ""}
           ${chkHtml}${msHtml}
-          <div style="font-size:10px;font-weight:700;color:#475569;margin:8px 0 4px">Evidencias Fotográficas</div>
-          ${fotos.length > 0 ? evidenciasGridHTML(fotos) : '<p style="font-size:10px;color:#94a3b8;margin:0">Sin evidencias fotográficas para este galpón.</p>'}
+          <div style="font-size:17px;font-weight:700;color:#475569;margin:8px 0 4px">Evidencias Fotográficas</div>
+          ${fotos.length > 0 ? evidenciasGridHTML(fotos) : '<p style="font-size:17px;color:#94a3b8;margin:0">Sin evidencias fotográficas para este galpón.</p>'}
         </div>
       </div>`;
     });
@@ -271,8 +271,8 @@ function construirInforme(opts: {
 
   // Anexos
   const anexoTabla = `<div style="page-break-before:always">
-    <h2 style="font-size:15px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 8px">Anexos · Tabla Consolidada de Lotes</h2>
-    <table style="width:100%;border-collapse:collapse;font-size:9px">
+    <h2 style="font-size:24px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 8px">Anexos · Tabla Consolidada de Lotes</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:15px">
       <thead><tr style="background:#f8fafc">
         <th style="text-align:left;padding:5px;border-bottom:2px solid #e2e8f0">Granja</th><th style="text-align:center;padding:5px;border-bottom:2px solid #e2e8f0">Galpón</th><th style="text-align:left;padding:5px;border-bottom:2px solid #e2e8f0">Lote</th><th style="text-align:center;padding:5px;border-bottom:2px solid #e2e8f0">Ingreso</th><th style="text-align:right;padding:5px;border-bottom:2px solid #e2e8f0">Pobl. inicial</th><th style="text-align:right;padding:5px;border-bottom:2px solid #e2e8f0">Muertas</th><th style="text-align:right;padding:5px;border-bottom:2px solid #e2e8f0">Mort. %</th><th style="text-align:center;padding:5px;border-bottom:2px solid #e2e8f0">Estado</th>
       </tr></thead><tbody>
@@ -284,13 +284,13 @@ function construirInforme(opts: {
   // Firmas
   const firmas = `<div style="margin-top:34px;page-break-inside:avoid">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px">
-      ${[["Auditor responsable", form.auditor], ["Líder del proceso", form.lider]].map(f => `<div style="text-align:center"><div style="border-top:1px solid #0D1526;margin-top:36px;padding-top:5px"><div style="font-size:11px;font-weight:700;color:#0D1526">${f[1] || "—"}</div><div style="font-size:9px;color:#94a3b8">${f[0]}</div></div></div>`).join("")}
+      ${[["Auditor responsable", form.auditor], ["Líder del proceso", form.lider]].map(f => `<div style="text-align:center"><div style="border-top:1px solid #0D1526;margin-top:36px;padding-top:5px"><div style="font-size:20px;font-weight:700;color:#0D1526">${f[1] || "—"}</div><div style="font-size:15px;color:#94a3b8">${f[0]}</div></div></div>`).join("")}
     </div>
   </div>`;
 
-  const pie = `<div style="margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:9px;color:#94a3b8;text-align:center">${EMPRESA.nombre} · ${EMPRESA.area} · Documento confidencial de uso interno · ${hoy}</div>`;
+  const pie = `<div style="margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:15px;color:#94a3b8;text-align:center">${EMPRESA.nombre} · ${EMPRESA.area} · Documento confidencial de uso interno · ${hoy}</div>`;
 
-  return `<div style="font-family:Arial,Helvetica,sans-serif;color:#0D1526;width:794px">
+  return `<div style="font-family:'Times New Roman', Times, serif;color:#0D1526;width:794px">
     ${portada}
     <div style="padding:0 8px 20px">
       ${indice}
