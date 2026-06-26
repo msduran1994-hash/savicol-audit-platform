@@ -45,6 +45,8 @@ function mortLote(l: LoteItem) {
 
 // ── Checklists (Encasetamiento / Trazabilidad 7 Días) y Muestreos por galpón ──
 const TIPO_LABEL: Record<string, string> = { encacetamiento: "Checklist Encasetamiento", trazabilidad7: "Checklist Trazabilidad 7 Días" };
+const RESULTADO_LABEL: Record<string, string> = { cumple: "Cumple", no_cumple: "No cumple", parcial: "Parcial", na: "N/A", "": "—" };
+const RESULTADO_COLOR: Record<string, string> = { cumple: "#16A34A", no_cumple: "#DC2626", parcial: "#D97706", na: "#64748B", "": "#64748B" };
 function checklistsGalpon(chks: ChecklistData[], g: string): ChecklistData[] {
   return chks.filter(c => !c.galpon || c.galpon === g || c.galpon === "TODOS");
 }
@@ -108,9 +110,9 @@ function seccion(num: string, titulo: string, contenido: string): string {
 }
 
 function construirInforme(opts: {
-  form: any; lotes: LoteItem[]; fotosByLoteGalpon: Record<string, FotoPDF[]>; checklistsByLote: Record<string, ChecklistData[]>; usuario: string;
+  form: any; lotes: LoteItem[]; fotosByLoteGalpon: Record<string, FotoPDF[]>; checklistsByGranja: Record<string, ChecklistData[]>; usuario: string;
 }): string {
-  const { form, lotes, fotosByLoteGalpon, checklistsByLote, usuario } = opts;
+  const { form, lotes, fotosByLoteGalpon, checklistsByGranja, usuario } = opts;
   const hoy = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
   const morts = lotes.map(l => ({ l, m: mortLote(l) }));
   const totalAvesIni = morts.reduce((s, x) => s + x.m.pob, 0);
@@ -198,25 +200,28 @@ function construirInforme(opts: {
       const fotos = fotosByLoteGalpon[`${l.data.codigo}|${g}`] || [];
       const estadoColor = !m.tieneD7 ? "#64748B" : m.cumple ? VERDE : ROJO;
       const estadoTxt = !m.tieneD7 ? "Parcial" : m.cumple ? "CUMPLE" : "FUERA DE RANGO";
-      // Checklists de auditoría que aplican al galpón
-      const chksG = checklistsGalpon(checklistsByLote[l.data.codigo] || [], g);
+      // Checklists de auditoría de la GRANJA que aplican al galpón (con todas las respuestas)
+      const granjaChks = checklistsByGranja[l.data.granjaId] || [];
+      const chksG = checklistsGalpon(granjaChks, g);
       const chkHtml = chksG.length === 0 ? "" : `<div style="font-size:10px;font-weight:700;color:#475569;margin:10px 0 4px">Checklists de Auditoría</div>${chksG.map(c => {
         const pct = calcularCumplimiento((c.preguntas || []).map(p => p.resultado));
-        const nc = (c.preguntas || []).filter(p => p.resultado === "no_cumple" || p.resultado === "parcial");
         const col = pct >= 90 ? VERDE : pct >= 70 ? NARANJA : ROJO;
-        return `<div style="border:1px solid #e2e8f0;border-radius:6px;padding:8px;margin-bottom:6px">
+        const resp = (c.preguntas || []).filter(p => p.resultado !== "");
+        return `<div style="border:1px solid #e2e8f0;border-radius:6px;padding:8px;margin-bottom:8px;page-break-inside:avoid">
           <div style="display:flex;justify-content:space-between;font-size:10px"><strong style="color:#0D1526">${TIPO_LABEL[c.tipo] || c.tipo}${c.diaEvaluado ? ` · Día ${c.diaEvaluado}` : ""}</strong><span style="color:${col};font-weight:700">${pct}%</span></div>
-          <div style="font-size:8.5px;color:#94a3b8;margin:2px 0">Fecha de visita: ${fFecha(c.fechaVisita)} · Auditor: ${c.auditor || "—"} · ${nc.length} no conforme(s)</div>
-          ${nc.length ? `<ul style="margin:3px 0 0;padding-left:14px;font-size:9px;color:#475569">${nc.slice(0, 10).map(p => `<li>(${p.resultado === "no_cumple" ? "No cumple" : "Parcial"}) ${p.pregunta}${p.observacion ? ` — ${p.observacion}` : ""}</li>`).join("")}</ul>` : ""}
+          <div style="font-size:8.5px;color:#94a3b8;margin:2px 0 4px">Lote: ${c.lote || "—"} · Fecha de visita: ${fFecha(c.fechaVisita)} · Auditor: ${c.auditor || "—"} · ${resp.length}/${(c.preguntas || []).length} respondidas</div>
+          ${resp.length ? `<table style="width:100%;border-collapse:collapse;font-size:8px"><thead><tr style="background:#f8fafc"><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Sección</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Pregunta</th><th style="text-align:center;padding:3px;border-bottom:1px solid #e2e8f0">Resultado</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Observación</th></tr></thead><tbody>${resp.map(p => `<tr><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#64748b">${p.seccion || "—"}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9">${p.pregunta}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:center;color:${RESULTADO_COLOR[p.resultado] || "#64748b"};font-weight:700">${RESULTADO_LABEL[p.resultado] || p.resultado}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#475569">${p.observacion || ""}</td></tr>`).join("")}</tbody></table>` : '<p style="font-size:9px;color:#94a3b8;margin:0">Sin respuestas registradas.</p>'}
         </div>`;
       }).join("")}`;
-      // Muestreos (pesajes) del galpón
-      const st = statMuestreo(muestreosGalpon(checklistsByLote[l.data.codigo] || [], g));
-      const msHtml = st.totalM === 0 ? "" : `<div style="font-size:10px;font-weight:700;color:#475569;margin:10px 0 4px">Muestreos (pesajes)</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:9px">
+      // Muestreos (pesajes) del galpón: resumen + tabla
+      const msG = muestreosGalpon(granjaChks, g).filter(m => (m.cantidad ?? 0) > 0 || (m.pesoTotal ?? 0) > 0);
+      const st = statMuestreo(msG);
+      const msHtml = msG.length === 0 ? "" : `<div style="font-size:10px;font-weight:700;color:#475569;margin:10px 0 4px">Muestreos (pesajes)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:9px;margin-bottom:5px">
           ${[["Muestreos", String(st.totalM)], ["Aves", String(st.pollitos)], ["Peso total", `${st.pesoT.toLocaleString("es-CO", { maximumFractionDigits: 2 })} kg`], ["Peso unitario", `${st.unit.toLocaleString("es-CO", { maximumFractionDigits: 3 })} kg`], ["CV", `${st.cv.toFixed(1)}%`]].map(d => `<span style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:4px 8px"><strong style="color:#0D1526">${d[1]}</strong> <span style="color:#64748b">${d[0]}</span></span>`).join("")}
           <span style="padding:4px 8px;border-radius:5px;background:${st.estado.c}22;color:${st.estado.c};font-weight:700">${st.estado.l}</span>
-        </div>`;
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:8.5px"><thead><tr style="background:#f8fafc"><th style="text-align:center;padding:3px;border-bottom:1px solid #e2e8f0">N.º</th><th style="text-align:right;padding:3px;border-bottom:1px solid #e2e8f0">Pollitos</th><th style="text-align:right;padding:3px;border-bottom:1px solid #e2e8f0">Peso total (kg)</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Observación</th></tr></thead><tbody>${msG.map(m => `<tr><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:center">${m.n}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:right">${m.cantidad}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:right">${m.pesoTotal}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#475569">${m.obs || ""}</td></tr>`).join("")}</tbody></table>`;
       fichas += `<div style="${gi > 0 || true ? "page-break-before:always;" : ""}padding-top:6px">
         <div style="background:#0D1526;color:#fff;padding:10px 14px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center">
           <div><div style="font-size:13px;font-weight:800">${l.data.granjaNombre || "—"} · Galpón ${g}</div><div style="font-size:10px;color:#94A3B8">Lote ${l.data.codigo || "—"} · ${l.data.tipoProduccion || "—"} · ${l.data.raza || "—"}</div></div>
@@ -310,15 +315,18 @@ export function InformeGeneralModal({ lotes, granjas, usuario, onClose }: {
       // 1) Evidencias por lote/galpón (una sola consulta de documentos)
       setFase("fotos");
       const codigos = new Set(lotes.map(l => l.data.codigo));
+      const granjaIds = new Set(lotes.map(l => l.data.granjaId).filter(Boolean));
       let fotosByLoteGalpon: Record<string, FotoPDF[]> = {};
-      let checklistsByLote: Record<string, ChecklistData[]> = {};
+      let checklistsByGranja: Record<string, ChecklistData[]> = {};
       try {
         const docs = await apiGet<any[]>("/documentos");
-        // Checklists Encasetamiento / Trazabilidad 7 Días (misma consulta, sin duplicar)
+        // Checklists Encasetamiento / Trazabilidad 7 Días (misma consulta, sin duplicar).
+        // Se relacionan por GRANJA (el campo "lote" del checklist es texto libre y puede no
+        // coincidir con el código del lote), respetando la granja filtrada.
         (docs ?? []).filter(d => (d.nombre ?? "").includes("[CHK-ENC]") || (d.nombre ?? "").includes("[CHK-TRZ7]")).forEach(d => {
           const mm = (d.ocrTexto ?? "").match(/\[CHK\]([\s\S]*?)\[\/CHK\]/);
           if (!mm) return;
-          try { const data = JSON.parse(mm[1]) as ChecklistData; if (codigos.has(data.lote)) { (checklistsByLote[data.lote] = checklistsByLote[data.lote] || []).push(data); } } catch { /* json inválido */ }
+          try { const data = JSON.parse(mm[1]) as ChecklistData; if (granjaIds.has(data.granjaId) || codigos.has(data.lote)) { const k = data.granjaId || "_"; (checklistsByGranja[k] = checklistsByGranja[k] || []).push(data); } } catch { /* json inválido */ }
         });
         const fotos: FotoMeta[] = (docs ?? [])
           .filter(d => (d.nombre ?? "").includes("[FOTO-LOTE]"))
@@ -339,7 +347,7 @@ export function InformeGeneralModal({ lotes, granjas, usuario, onClose }: {
 
       // 2) Construir HTML y generar PDF
       setFase("pdf");
-      const html = construirInforme({ form, lotes, fotosByLoteGalpon, checklistsByLote, usuario });
+      const html = construirInforme({ form, lotes, fotosByLoteGalpon, checklistsByGranja, usuario });
       await generarPDF(html, `Informe-General-${(granjasSet[0] || "Granjas").replace(/\s+/g, "-")}-${hoy}.pdf`);
       onClose();
     } catch (e: any) {
