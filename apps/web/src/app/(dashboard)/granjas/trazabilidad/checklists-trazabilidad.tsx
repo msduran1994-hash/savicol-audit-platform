@@ -506,7 +506,18 @@ async function generarPDFChecklistPro(tipo: ChecklistTipo, data: ChecklistData, 
     filas.forEach((f, i) => {
       const pregLines = doc.splitTextToSize(f.pregunta, CW - 42);
       const obsLines = f.observacion ? doc.splitTextToSize(`Obs: ${f.observacion}`, CW - 10) : [];
-      const rowH = Math.max(7, pregLines.length * 3.6 + 2) + (obsLines.length * 3.4) + (f.evidencia ? 20 : 0);
+      // Evidencia fotográfica ampliada con proporción preservada (sin deformar)
+      let imgW = 0, imgH = 0;
+      if (f.evidencia) {
+        try {
+          const pr = doc.getImageProperties(f.evidencia);
+          if (pr?.width && pr?.height) {
+            imgW = 85;                                  // ancho amplio de auditoría
+            imgH = Math.min(90, imgW * pr.height / pr.width); // alto proporcional, con tope
+          }
+        } catch { imgW = 0; imgH = 0; }
+      }
+      const rowH = Math.max(7, pregLines.length * 3.6 + 2) + (obsLines.length * 3.4) + (imgH ? imgH + 6 : 0);
       need(rowH);
       if (i % 2 === 0) { setFill("#F8FAFC"); doc.rect(M, y, CW, rowH, "F"); }
       setText("#334155"); doc.text(pregLines, M + 3, y + 4);
@@ -515,9 +526,9 @@ async function generarPDFChecklistPro(tipo: ChecklistTipo, data: ChecklistData, 
       doc.setFont("helvetica", "normal");
       let yy = y + 4 + pregLines.length * 3.6;
       if (obsLines.length) { setText("#64748B"); doc.text(obsLines, M + 5, yy); yy += obsLines.length * 3.4; }
-      if (f.evidencia) {
-        try { doc.addImage(f.evidencia, "JPEG", M + 5, yy, 24, 18); } catch {}
-        yy += 20;
+      if (imgH) {
+        try { doc.addImage(f.evidencia, "JPEG", M + 5, yy + 1, imgW, imgH); } catch {}
+        yy += imgH + 6;
       }
       y += rowH;
     });
