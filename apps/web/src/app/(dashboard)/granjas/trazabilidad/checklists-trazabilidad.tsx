@@ -1,16 +1,17 @@
 "use client";
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   useChecklists, useCreateChecklist, useUpdateChecklist, useDeleteChecklist,
   checklistVacio, calcularCumplimiento, semaforo90, CHECKLIST_META, GALPONES, DIAS,
   comprimirImagen,
   type ChecklistData, type ChecklistItem, type ChecklistTipo, type PreguntaChk,
+  type Muestreo,
 } from "@/hooks/useLotes";
 import { useGranjas } from "@/hooks/useGranjas";
 import { useAuthStore } from "@/store/auth.store";
 import {
   Plus, Search, Trash2, X, Loader2, Pencil, AlertTriangle, ClipboardList,
-  FileDown, ImagePlus, ChevronRight,
+  FileDown, ImagePlus, ChevronRight, Scale,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -147,6 +148,7 @@ function ChecklistModal({ tipo, item, granjas, usuario, onClose, onCreate, onUpd
   const [error, setError] = useState<string | null>(null);
   const [subiendoIdx, setSubiendoIdx] = useState<number | null>(null);
   const [generandoPDF, setGenerandoPDF] = useState(false);
+  const [tab, setTab] = useState<"checklist" | "muestreos">("checklist");
   const fileRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   function set<K extends keyof ChecklistData>(k: K, v: ChecklistData[K]) { setData(d => ({ ...d, [k]: v })); }
@@ -226,6 +228,22 @@ function ChecklistModal({ tipo, item, granjas, usuario, onClose, onCreate, onUpd
             </div>
           </div>
 
+          {/* Pestañas: Checklist · Muestreos */}
+          <div className="flex gap-1 bg-[#0A111F] border border-[#1E2D4A] rounded-xl p-1 w-fit">
+            <button type="button" onClick={() => setTab("checklist")}
+              className={cn("px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors", tab === "checklist" ? "bg-emerald-500 text-[#0A111F]" : "text-[#94A3B8] hover:text-white")}>
+              Checklist
+            </button>
+            <button type="button" onClick={() => data.galpon && setTab("muestreos")} disabled={!data.galpon}
+              title={!data.galpon ? "Selecciona un galpón primero" : undefined}
+              className={cn("px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5",
+                tab === "muestreos" ? "bg-emerald-500 text-[#0A111F]" : "text-[#94A3B8] hover:text-white",
+                !data.galpon && "opacity-40 cursor-not-allowed")}>
+              <Scale className="w-3.5 h-3.5"/> Muestreos
+            </button>
+          </div>
+
+          {tab === "checklist" && (<>
           {/* Datos obligatorios */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label className={LBL}>Nombre Auditor *</label><input value={data.auditor} onChange={e => set("auditor", e.target.value)} placeholder="Nombre del auditor" className={IN}/></div>
@@ -318,6 +336,9 @@ function ChecklistModal({ tipo, item, granjas, usuario, onClose, onCreate, onUpd
               {generandoPDF ? "Generando informe…" : "Descargar PDF"}
             </button>
           </div>
+          </>)}
+
+          {tab === "muestreos" && <MuestreosTab data={data} setData={setData} tipo={tipo}/>}
         </div>
 
         <footer className="flex items-center justify-between gap-3 px-6 py-4 border-t border-[#1E2D4A]">
@@ -334,6 +355,174 @@ function ChecklistModal({ tipo, item, granjas, usuario, onClose, onCreate, onUpd
             </button>
           </div>
         </footer>
+      </div>
+    </div>
+  );
+}
+
+// ═══ Pestaña Muestreos (pesajes de pollitos por galpón · pesos en kg) ═════════
+// Semáforo por coeficiente de variación (CV). Umbrales configurables.
+const CV_VERDE = 8;    // % · verde si CV ≤ 8
+const CV_NARANJA = 12; // % · naranja si CV ≤ 12 · rojo si > 12
+
+function calcMuestreoStats(muestreos: Muestreo[]) {
+  const validos = muestreos.filter(m => (m.cantidad ?? 0) > 0 && (m.pesoTotal ?? 0) > 0);
+  const totalMuestreos   = validos.length;
+  const totalPollitos    = validos.reduce((a, m) => a + m.cantidad, 0);
+  const pesoTotal        = validos.reduce((a, m) => a + m.pesoTotal, 0);
+  const pesoPromMuestreo = totalMuestreos ? pesoTotal / totalMuestreos : 0;
+  const pesoUnitario     = totalPollitos ? pesoTotal / totalPollitos : 0;       // kg/ave
+  const unidades = validos.map(m => m.pesoTotal / m.cantidad);                  // kg/ave por muestra
+  const pesoMin = unidades.length ? Math.min(...unidades) : 0;
+  const pesoMax = unidades.length ? Math.max(...unidades) : 0;
+  const meanU = unidades.length ? unidades.reduce((a, u) => a + u, 0) / unidades.length : 0;
+  const variance = unidades.length ? unidades.reduce((a, u) => a + (u - meanU) ** 2, 0) / unidades.length : 0;
+  const desviacion = Math.sqrt(variance);                                       // kg
+  const cv = meanU > 0 ? (desviacion / meanU) * 100 : 0;                        // %
+  const dentro = unidades.filter(u => Math.abs(u - meanU) <= 0.10 * meanU).length;
+  const uniformidad = unidades.length ? Math.round((dentro / unidades.length) * 100) : 0; // %
+  const estado = totalMuestreos === 0
+    ? { label: "Sin datos",                 color: "#64748B" }
+    : cv <= CV_VERDE   ? { label: "Dentro del rango",        color: "#22C55E" }
+    : cv <= CV_NARANJA ? { label: "Variación moderada",      color: "#F59E0B" }
+    :                    { label: "Variación significativa", color: "#EF4444" };
+  return { totalMuestreos, totalPollitos, pesoTotal, pesoPromMuestreo, pesoUnitario, pesoMin, pesoMax, desviacion, cv, uniformidad, estado };
+}
+
+const kg = (v: number, d = 3) => `${v.toLocaleString("es-CO", { maximumFractionDigits: d })} kg`;
+
+function Dato({ label, value }: { label: string; value: string }) {
+  return <div><p className="text-[10px] uppercase tracking-wide text-[#64748B]">{label}</p><p className="text-white font-medium truncate">{value}</p></div>;
+}
+function Stat({ label, value }: { label: string; value: string }) {
+  return <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2"><p className="text-[9px] uppercase tracking-wide text-[#64748B]">{label}</p><p className="text-sm font-bold text-white mt-0.5">{value}</p></div>;
+}
+
+function MuestreosTab({ data, setData, tipo }: {
+  data: ChecklistData;
+  setData: (updater: (d: ChecklistData) => ChecklistData) => void;
+  tipo: ChecklistTipo;
+}) {
+  const muestreos = data.muestreos ?? [];
+  const info = data.muestreoInfo ?? {};
+
+  // Semilla: 5 filas vacías la primera vez que se abre la pestaña
+  useEffect(() => {
+    if ((data.muestreos?.length ?? 0) === 0) {
+      setData(d => ({ ...d, muestreos: Array.from({ length: 5 }, (_, i) => ({ n: i + 1, cantidad: 0, pesoTotal: 0, obs: "" })) }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setMuestreos = (m: Muestreo[]) => setData(d => ({ ...d, muestreos: m }));
+  const setInfo = (patch: Partial<NonNullable<ChecklistData["muestreoInfo"]>>) =>
+    setData(d => ({ ...d, muestreoInfo: { ...(d.muestreoInfo ?? {}), ...patch } }));
+  const updateRow = (i: number, field: keyof Muestreo, val: number | string) =>
+    setMuestreos(muestreos.map((r, idx) => idx === i ? { ...r, [field]: val } : r));
+  const addRow = () => { if (muestreos.length >= 40) return; setMuestreos([...muestreos, { n: muestreos.length + 1, cantidad: 0, pesoTotal: 0, obs: "" }]); };
+  const removeRow = (i: number) => setMuestreos(muestreos.filter((_, idx) => idx !== i).map((r, idx) => ({ ...r, n: idx + 1 })));
+
+  const st = useMemo(() => calcMuestreoStats(muestreos), [muestreos]);
+
+  const IN = "w-full bg-[#0A111F] border border-[#1E2D4A] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/50";
+  const LBL = "text-xs text-[#94A3B8] mb-1.5 block";
+  const numv = (v: number) => v === 0 ? "" : String(v);
+  const cellIn = "bg-[#0A111F] border border-[#1E2D4A] rounded-md px-2 py-1 text-white outline-none focus:border-emerald-500/50";
+
+  return (
+    <div className="space-y-5">
+      {/* FASE 3 · Información general */}
+      <div className="rounded-xl border border-[#1E2D4A] overflow-hidden">
+        <div className="px-4 py-2.5 bg-[#0A111F]"><h4 className="text-sm font-bold text-white">Información General</h4></div>
+        <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+          <Dato label="Lote" value={data.lote || "—"}/>
+          <Dato label="Granja" value={data.granjaNombre || "—"}/>
+          <Dato label="Galpón" value={data.galpon ? `Galpón ${data.galpon}` : "—"}/>
+          {tipo === "trazabilidad7" && <Dato label="Día evaluado" value={data.diaEvaluado ? `Día ${data.diaEvaluado}` : "—"}/>}
+          <Dato label="Auditor" value={data.auditor || "—"}/>
+          <Dato label="Fecha" value={data.fechaVisita || "—"}/>
+          <div>
+            <label className={LBL}>Género</label>
+            <select value={info.genero ?? ""} onChange={e => setInfo({ genero: e.target.value as "" | "Macho" | "Hembra" })} className={IN}>
+              <option value="">—</option><option value="Macho">Macho</option><option value="Hembra">Hembra</option>
+            </select>
+          </div>
+          <div>
+            <label className={LBL}>Capacidad del galpón</label>
+            <input type="number" min={0} value={numv(info.capacidad ?? 0)} onChange={e => setInfo({ capacidad: parseInt(e.target.value) || 0 })} placeholder="aves" className={IN}/>
+          </div>
+          <div>
+            <label className={LBL}>Cantidad actual de aves</label>
+            <input type="number" min={0} value={numv(info.avesActuales ?? 0)} onChange={e => setInfo({ avesActuales: parseInt(e.target.value) || 0 })} placeholder="aves" className={IN}/>
+          </div>
+        </div>
+      </div>
+
+      {/* FASE 4 · Tabla de muestreos */}
+      <div className="rounded-xl border border-[#1E2D4A] overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-[#0A111F]">
+          <h4 className="text-sm font-bold text-white">Tabla de Muestreos <span className="text-[10px] text-[#64748B] font-normal">· pesos en kg</span></h4>
+          <span className="text-[10px] text-[#94A3B8]">{muestreos.length} fila(s)</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead><tr className="text-[#94A3B8] border-b border-[#1E2D4A]">
+              <th className="text-left px-3 py-2 w-12">N.º</th>
+              <th className="text-left px-3 py-2">Pollitos pesados</th>
+              <th className="text-left px-3 py-2">Peso total (kg)</th>
+              <th className="text-left px-3 py-2">Observaciones</th>
+              <th className="px-2 py-2 w-8"></th>
+            </tr></thead>
+            <tbody>
+              {muestreos.map((m, i) => {
+                const u = m.cantidad > 0 && m.pesoTotal > 0 ? m.pesoTotal / m.cantidad : 0;
+                return (
+                  <tr key={i} className="border-b border-[#1E2D4A]/40">
+                    <td className="px-3 py-1.5 text-[#64748B]">{m.n}</td>
+                    <td className="px-3 py-1.5"><input type="number" min={0} value={numv(m.cantidad)} onChange={e => updateRow(i, "cantidad", parseInt(e.target.value) || 0)} placeholder="0" className={cn(cellIn, "w-24")}/></td>
+                    <td className="px-3 py-1.5"><input type="number" min={0} step="0.001" value={m.pesoTotal === 0 ? "" : String(m.pesoTotal)} onChange={e => updateRow(i, "pesoTotal", parseFloat(e.target.value) || 0)} placeholder="0.000" className={cn(cellIn, "w-28")}/>{u > 0 && <span className="ml-2 text-[10px] text-[#64748B]">{kg(u)} c/u</span>}</td>
+                    <td className="px-3 py-1.5"><input value={m.obs ?? ""} onChange={e => updateRow(i, "obs", e.target.value)} placeholder="Observación…" className={cn(cellIn, "w-full")}/></td>
+                    <td className="px-2 py-1.5 text-center"><button type="button" onClick={() => removeRow(i)} className="text-[#64748B] hover:text-red-400" title="Quitar fila"><Trash2 className="w-3.5 h-3.5"/></button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-4 py-2.5 bg-[#0A111F] border-t border-[#1E2D4A]">
+          <button type="button" onClick={addRow} disabled={muestreos.length >= 40}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1A2540] hover:bg-[#243150] text-emerald-300 text-xs font-semibold disabled:opacity-40">
+            <Plus className="w-3.5 h-3.5"/> Agregar fila
+          </button>
+        </div>
+      </div>
+
+      {/* FASE 5 · Cálculos automáticos */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+        <Stat label="Total muestreos" value={String(st.totalMuestreos)}/>
+        <Stat label="Total pollitos" value={String(st.totalPollitos)}/>
+        <Stat label="Peso total" value={kg(st.pesoTotal)}/>
+        <Stat label="Peso prom./muestreo" value={kg(st.pesoPromMuestreo)}/>
+        <Stat label="Peso unitario prom." value={kg(st.pesoUnitario)}/>
+        <Stat label="Peso mínimo (c/u)" value={kg(st.pesoMin)}/>
+        <Stat label="Peso máximo (c/u)" value={kg(st.pesoMax)}/>
+        <Stat label="Desviación" value={kg(st.desviacion)}/>
+        <Stat label="CV" value={`${st.cv.toFixed(1)}%`}/>
+        <Stat label="Uniformidad" value={st.totalMuestreos >= 2 ? `${st.uniformidad}%` : "—"}/>
+      </div>
+
+      {/* FASE 6 · Resumen del muestreo */}
+      <div className="rounded-xl border p-4" style={{ background: `${st.estado.color}10`, borderColor: `${st.estado.color}40` }}>
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p className="text-sm font-bold text-white flex items-center gap-2"><Scale className="w-4 h-4" style={{ color: st.estado.color }}/> Resumen del Muestreo</p>
+            <p className="text-[11px] text-[#94A3B8] mt-1">{st.totalMuestreos} muestreos · {st.totalPollitos} aves · {kg(st.pesoTotal)} · unitario {kg(st.pesoUnitario)}</p>
+          </div>
+          <div className="text-right">
+            <span className="text-[10px] px-2.5 py-1 rounded-full font-bold inline-block" style={{ background: `${st.estado.color}22`, color: st.estado.color }}>{st.estado.label}</span>
+            <p className="text-[10px] text-[#64748B] mt-1">CV {st.cv.toFixed(1)}% · verde ≤{CV_VERDE}% · naranja ≤{CV_NARANJA}%</p>
+          </div>
+        </div>
       </div>
     </div>
   );

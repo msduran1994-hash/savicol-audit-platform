@@ -381,6 +381,19 @@ export interface PreguntaChk {
   evidencia: string;     // data URI (foto comprimida) o URL
 }
 
+// ─── Muestreos (pesajes de pollitos por galpón) · pesos en kg ────────────────
+export interface Muestreo {
+  n: number;          // N.º de muestra
+  cantidad: number;   // cantidad de pollitos pesados
+  pesoTotal: number;  // peso total del muestreo (kg)
+  obs?: string;       // observaciones
+}
+export interface MuestreoInfo {
+  genero?: "" | "Macho" | "Hembra";
+  capacidad?: number;     // capacidad del galpón (aves)
+  avesActuales?: number;  // cantidad actual de aves
+}
+
 export interface ChecklistData {
   tipo: ChecklistTipo;
   auditor: string;
@@ -398,6 +411,9 @@ export interface ChecklistData {
   // Cierre
   observacionGeneral?: string;
   planAccion?: string;
+  // Muestreos (pestaña nueva) — no rompe checklists existentes (opcional)
+  muestreos?: Muestreo[];
+  muestreoInfo?: MuestreoInfo;
 }
 
 export interface ChecklistItem {
@@ -437,6 +453,7 @@ export function checklistVacio(tipo: ChecklistTipo, granjaId = "", auditor = "")
     granjaId, lote: "", galpon: "",
     tecnicoVeterinario: "", responsableRecepcion: "", diaEvaluado: "",
     preguntas, observacionGeneral: "", planAccion: "",
+    muestreos: [], muestreoInfo: { genero: "", capacidad: 0, avesActuales: 0 },
   };
 }
 
