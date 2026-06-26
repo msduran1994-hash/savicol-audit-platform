@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import { useGranjas } from "@/hooks/useGranjas";
 import { useAuthStore } from "@/store/auth.store";
@@ -56,6 +56,20 @@ export default function TrazabilidadPage() {
 
   const [search, setSearch] = useState("");
   const [filterEstado, setFilterEstado] = useState("");
+  // Filtros nuevos (Granja + rango de fecha de ingreso) · se conservan en la sesión
+  const ss = (k: string) => (typeof window !== "undefined" ? sessionStorage.getItem(k) ?? "" : "");
+  const [filterGranja, setFilterGranja] = useState(() => ss("traz-f-granja"));
+  const [fechaDesde, setFechaDesde]     = useState(() => ss("traz-f-desde"));
+  const [fechaHasta, setFechaHasta]     = useState(() => ss("traz-f-hasta"));
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("traz-f-granja", filterGranja);
+      sessionStorage.setItem("traz-f-desde", fechaDesde);
+      sessionStorage.setItem("traz-f-hasta", fechaHasta);
+    } catch { /* SSR / storage no disponible */ }
+  }, [filterGranja, fechaDesde, fechaHasta]);
+  const limpiarFiltros = () => { setSearch(""); setFilterEstado(""); setFilterGranja(""); setFechaDesde(""); setFechaHasta(""); };
+  const hayFiltros = !!(search || filterEstado || filterGranja || fechaDesde || fechaHasta);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<LoteItem | null>(null);
   const [vista, setVista] = useState<"lotes" | "encacetamiento" | "trazabilidad7">("lotes");
@@ -63,15 +77,23 @@ export default function TrazabilidadPage() {
   const lotes = lotesQ.data ?? [];
   const granjas = granjasQ.data ?? [];
 
-  const filtrados = useMemo(() => lotes.filter(l => {
-    if (filterEstado && l.data.estado !== filterEstado) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      const g = (l.data.granjaNombre ?? "").toLowerCase();
-      if (!l.data.codigo.toLowerCase().includes(q) && !g.includes(q) && !(l.data.raza ?? "").toLowerCase().includes(q)) return false;
-    }
-    return true;
-  }), [lotes, search, filterEstado]);
+  const filtrados = useMemo(() => {
+    const arr = lotes.filter(l => {
+      if (filterEstado && l.data.estado !== filterEstado) return false;
+      if (filterGranja && l.data.granjaId !== filterGranja) return false;
+      const f = l.data.fechaIngreso || "";
+      if (fechaDesde && f < fechaDesde) return false;
+      if (fechaHasta && f > fechaHasta) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        const g = (l.data.granjaNombre ?? "").toLowerCase();
+        if (!l.data.codigo.toLowerCase().includes(q) && !g.includes(q) && !(l.data.raza ?? "").toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+    // Orden por fecha de ingreso descendente (más reciente primero)
+    return arr.sort((a, b) => (b.data.fechaIngreso || "").localeCompare(a.data.fechaIngreso || ""));
+  }, [lotes, search, filterEstado, filterGranja, fechaDesde, fechaHasta]);
 
   // Indicadores
   const totalLotes = lotes.length;
@@ -145,6 +167,27 @@ export default function TrazabilidadPage() {
             <option value="">Todos los estados</option>
             {Object.entries(ESTADO_INFO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
+          {/* Filtro Granja */}
+          <select value={filterGranja} onChange={e => setFilterGranja(e.target.value)}
+            className="bg-[#0A111F] border border-[#1E2D4A] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/50">
+            <option value="">Todas las granjas</option>
+            {granjas.map((g: any) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+          </select>
+          {/* Filtro rango de fecha de ingreso */}
+          <div className="flex items-center gap-1.5 bg-[#0A111F] border border-[#1E2D4A] rounded-lg px-2.5 py-1.5">
+            <span className="text-[11px] text-[#64748B] whitespace-nowrap">Fecha:</span>
+            <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} title="Desde"
+              className="bg-transparent text-xs text-white outline-none"/>
+            <span className="text-[#475569]">–</span>
+            <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} title="Hasta"
+              className="bg-transparent text-xs text-white outline-none"/>
+          </div>
+          {hayFiltros && (
+            <button onClick={limpiarFiltros} title="Limpiar filtros"
+              className="flex items-center gap-1 px-3 py-2 rounded-lg bg-[#1A2540] hover:bg-[#243150] text-[#94A3B8] hover:text-white text-sm">
+              <X className="w-3.5 h-3.5"/> Limpiar
+            </button>
+          )}
           <button onClick={() => { setEditing(null); setModalOpen(true); }}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-sm font-bold whitespace-nowrap">
             <Plus className="w-4 h-4"/> Nuevo Lote
@@ -169,11 +212,23 @@ export default function TrazabilidadPage() {
                 <div key={l.id} className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl p-4 hover:border-[#2A3F6A] transition-colors">
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-base font-bold text-white truncate">{l.data.codigo || "Sin código"}</h3>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0" style={{ background: est.bg, color: est.color }}>{est.label}</span>
+                      {/* Primer nivel: Granja + Galpón (mayor jerarquía) */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-lg font-bold text-white truncate">{l.data.granjaNombre || "Sin granja"}</h3>
+                        {l.data.galponPrincipal && (
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">Galpón {l.data.galponPrincipal}</span>
+                        )}
                       </div>
-                      <p className="text-xs text-[#94A3B8] mt-0.5">{l.data.granjaNombre || "Sin granja"} · {l.data.raza || "—"}</p>
+                      {/* Segundo nivel: Lote · Fecha · Estado · Tipo · Raza */}
+                      <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap mt-1 text-[11px] text-[#94A3B8]">
+                        <span className="font-semibold text-[#CBD5E1]">Lote {l.data.codigo || "—"}</span>
+                        <span className="text-[#475569]">·</span>
+                        <span>{fFecha(l.data.fechaIngreso)}</span>
+                        <span className="text-[#475569]">·</span>
+                        <span className="px-1.5 py-0.5 rounded-full font-semibold" style={{ background: est.bg, color: est.color }}>{est.label}</span>
+                        {l.data.tipoProduccion && (<><span className="text-[#475569]">·</span><span>{l.data.tipoProduccion}</span></>)}
+                        {l.data.raza && (<><span className="text-[#475569]">·</span><span>{l.data.raza}</span></>)}
+                      </div>
                     </div>
                     <div className="flex gap-1 shrink-0">
                       <button onClick={() => { setEditing(l); setModalOpen(true); }} title="Editar" className="p-1.5 text-[#64748B] hover:text-emerald-400"><Pencil className="w-4 h-4"/></button>
