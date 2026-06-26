@@ -33,6 +33,17 @@ const esImagen = (e: { tipo: string; url: string }) =>
   e.tipo === "Foto" || /^data:image\//i.test(e.url) || /\.(png|jpe?g|webp|gif)(\?|$)/i.test(e.url);
 const fmtSize = (b: number) => b > 1_048_576 ? `${(b / 1_048_576).toFixed(1)} MB` : b > 1024 ? `${Math.round(b / 1024)} KB` : `${b} B`;
 
+// Fuente de imagen: las subidas (data URL) se muestran directo; los enlaces
+// externos pasan por el proxy server-side (renderiza públicos, evita CORS).
+const imgSrc = (url: string) => /^data:/i.test(url) ? url : `/api/evidencia-img?raw=1&url=${encodeURIComponent(url)}`;
+
+// Miniatura con degradación elegante si la imagen no carga (enlace privado/roto).
+function EvidThumb({ url, alt, className }: { url: string; alt: string; className?: string }) {
+  const [err, setErr] = useState(false);
+  if (err) return <div className={cn("flex items-center justify-center bg-[#0D1526] border border-[#2A3F6A]", className)}><ImageIcon className="w-5 h-5 text-[#475569]"/></div>;
+  return <img src={imgSrc(url)} alt={alt} className={className} loading="lazy" onError={() => setErr(true)}/>;
+}
+
 // ── Procesamiento de archivos en el navegador ──────────────────────────────────
 function readAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -194,7 +205,7 @@ export default function EvidenciasRutasPage() {
                         <div key={e.id} className="bg-[#1A2540] border border-[#2A3F6A] rounded-lg p-2.5 flex items-center gap-3">
                           {img ? (
                             <button onClick={() => setLightbox(e.url)} className="shrink-0" title="Ver imagen">
-                              <img src={e.url} alt={e.nombre} className="w-12 h-12 object-cover rounded-md border border-[#2A3F6A]"/>
+                              <EvidThumb url={e.url} alt={e.nombre} className="w-12 h-12 object-cover rounded-md border border-[#2A3F6A]"/>
                             </button>
                           ) : (
                             <div className="w-12 h-12 rounded-md bg-[#0D1526] border border-[#2A3F6A] flex items-center justify-center shrink-0">
@@ -274,7 +285,7 @@ export default function EvidenciasRutasPage() {
           <button className="absolute top-4 right-4 text-white/80 hover:text-white" onClick={() => setLightbox(null)}>
             <X className="w-7 h-7"/>
           </button>
-          <img src={lightbox} alt="Evidencia" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={e => e.stopPropagation()}/>
+          <img src={imgSrc(lightbox)} alt="Evidencia" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={e => e.stopPropagation()}/>
         </div>
       )}
     </div>

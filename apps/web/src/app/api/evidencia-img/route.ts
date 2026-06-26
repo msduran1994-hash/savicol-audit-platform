@@ -4,22 +4,21 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 // ════════════════════════════════════════════════════════════════════════════
-// Proxy de imágenes de Evidencias → base64 (para incrustar en el PDF ejecutivo)
-// Descarga la imagen server-side (sin CORS) normalizando enlaces de proveedores
-// comunes (Google Drive, Dropbox) y la devuelve como data URL base64.
-// Si el recurso no es una imagen accesible, responde 422 y el cliente lo deja
-// como referencia con enlace (no rompe la generación del informe).
+// Proxy de imágenes de Evidencias (enlaces externos → imagen accesible)
+//   ?url=...          → JSON { dataUrl } base64  (para incrustar en el PDF)
+//   ?url=...&raw=1    → bytes de la imagen        (para <img src> en la UI)
+// Descarga server-side (sin CORS) normalizando enlaces de Google Drive y Dropbox.
+// Si el recurso no es una imagen accesible (privado, no-imagen), responde 422.
+// Las evidencias subidas a la plataforma ya son data URLs y NO usan este proxy.
 // ════════════════════════════════════════════════════════════════════════════
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
 
-// Normaliza enlaces de proveedores a una URL de descarga directa de imagen.
 function candidatos(raw: string): string[] {
   try {
     const u = new URL(raw);
     const host = u.hostname.toLowerCase();
 
-    // Google Drive
     if (host.includes("drive.google.com") || host.includes("docs.google.com")) {
       let id = "";
       const m1 = u.pathname.match(/\/file\/d\/([^/]+)/);
@@ -33,13 +32,11 @@ function candidatos(raw: string): string[] {
       }
     }
 
-    // Dropbox → descarga directa
     if (host.includes("dropbox.com")) {
       const direct = raw.replace("www.dropbox.com", "dl.dropboxusercontent.com").replace(/([?&])dl=0/, "$1dl=1");
       return [direct.includes("dl=1") ? direct : direct + (direct.includes("?") ? "&dl=1" : "?dl=1")];
     }
 
-    // OneDrive / SharePoint con enlace ya "download"
     if (host.includes("1drv.ms") || host.includes("sharepoint.com") || host.includes("onedrive.live.com")) {
       return [raw.includes("download=1") ? raw : raw + (raw.includes("?") ? "&download=1" : "?download=1"), raw];
     }
@@ -50,7 +47,6 @@ function candidatos(raw: string): string[] {
   }
 }
 
-// Detecta tipo de imagen por firma binaria si falta el content-type.
 function sniff(buf: Buffer): string | null {
   if (buf.length < 12) return null;
   if (buf[0] === 0xff && buf[1] === 0xd8) return "image/jpeg";
@@ -60,7 +56,7 @@ function sniff(buf: Buffer): string | null {
   return null;
 }
 
-async function fetchImagen(url: string): Promise<{ dataUrl: string } | null> {
+async function descargar(url: string): Promise<{ buf: Buffer; ct: string } | null> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 20000);
   try {
@@ -80,7 +76,7 @@ async function fetchImagen(url: string): Promise<{ dataUrl: string } | null> {
       if (!sn) return null; // p.ej. página HTML de login de Drive → no es imagen
       ct = sn;
     }
-    return { dataUrl: `data:${ct};base64,${buf.toString("base64")}` };
+    return { buf, ct };
   } catch {
     return null;
   } finally {
@@ -90,13 +86,29 @@ async function fetchImagen(url: string): Promise<{ dataUrl: string } | null> {
 
 export async function GET(req: NextRequest) {
   const raw = req.nextUrl.searchParams.get("url");
+  const wantRaw = req.nextUrl.searchParams.get("raw") === "1";
   if (!raw || !/^https?:\/\//i.test(raw)) {
     return NextResponse.json({ error: "Parámetro 'url' inválido" }, { status: 400 });
   }
 
+  let img: { buf: Buffer; ct: string } | null = null;
   for (const cand of candidatos(raw)) {
-    const res = await fetchImagen(cand);
-    if (res) return NextResponse.json(res, { status: 200 });
+    img = await descargar(cand);
+    if (img) break;
   }
-  return NextResponse.json({ error: "No se pudo obtener una imagen accesible desde la URL" }, { status: 422 });
+  if (!img) {
+    return NextResponse.json({ error: "No se pudo obtener una imagen accesible desde la URL" }, { status: 422 });
+  }
+
+  if (wantRaw) {
+    return new NextResponse(new Uint8Array(img.buf), {
+      status: 200,
+      headers: {
+        "Content-Type": img.ct,
+        "Cache-Control": "public, max-age=86400, s-maxage=86400",
+      },
+    });
+  }
+
+  return NextResponse.json({ dataUrl: `data:${img.ct};base64,${img.buf.toString("base64")}` }, { status: 200 });
 }
