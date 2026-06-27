@@ -14,7 +14,7 @@ import {
 import {
   Tractor, AlertTriangle, ShieldCheck, Target, Users, Sparkles, Bug,
   Filter, RefreshCw, FileSpreadsheet, FileText, Loader2,
-  X, ChevronDown, ChevronUp, Award, Gauge, Activity, Map, Package, Wheat,
+  X, ChevronDown, ChevronUp, Award, Gauge, Activity, Package, Wheat,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLotes, useChecklists, calcularCumplimiento, type LoteItem, type ChecklistData } from "@/hooks/useLotes";
