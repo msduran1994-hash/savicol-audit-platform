@@ -91,6 +91,8 @@ function renderChecklist(c: ChecklistData): string {
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#f8fafc"><th style="text-align:center;padding:3px;border-bottom:1px solid #e2e8f0">N.º</th><th style="text-align:center;padding:3px;border-bottom:1px solid #e2e8f0">Galpón</th><th style="text-align:right;padding:3px;border-bottom:1px solid #e2e8f0">Pollitos</th><th style="text-align:right;padding:3px;border-bottom:1px solid #e2e8f0">Peso total (kg)</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Observación</th></tr></thead><tbody>${ms.map(m => `<tr><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:center">${m.n}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:center">${galPesaje(m)}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:right">${m.cantidad}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:right">${m.pesoTotal}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#475569">${m.obs || ""}</td></tr>`).join("")}</tbody></table>` : ""}
     ${evids.length ? `<div style="font-size:15px;font-weight:700;color:#475569;margin:9px 0 3px">Evidencias del checklist (${evids.length})</div>${evidenciasGridHTML(evids)}` : ""}
+    ${(c.observacionGeneral || "").trim() ? `<div style="margin-top:9px;background:#f8fafc;border-left:4px solid ${CYAN};border-radius:0 6px 6px 0;padding:7px 11px"><div style="font-size:15px;font-weight:700;color:#0D1526">Observación general</div><div style="font-size:15px;color:#334155;line-height:1.6">${c.observacionGeneral}</div></div>` : ""}
+    ${(c.planAccion || "").trim() ? `<div style="margin-top:6px;background:#fff7ed;border-left:4px solid ${NARANJA};border-radius:0 6px 6px 0;padding:7px 11px"><div style="font-size:15px;font-weight:700;color:#0D1526">Plan de acción correctivo</div><div style="font-size:15px;color:#334155;line-height:1.6">${c.planAccion}</div></div>` : ""}
   </div>`;
 }
 
@@ -476,7 +478,9 @@ function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosBy
   const pesoLote = (x: { m: ReturnType<typeof mortLote> }) => { for (let i = 6; i >= 0; i--) { const v = parseDec(x.m.seg[i]?.peso); if (v > 0) return v; } return 0; };
   let pesoProm = stMs.unit > 0 ? stMs.unit * 1000 : 0;
   if (pesoProm === 0) { const ps = morts.map(pesoLote).filter(v => v > 0); pesoProm = ps.length ? ps.reduce((a, b) => a + b, 0) / ps.length : 0; }
-  const planes = morts.filter(x => ((x.l.data as any).recepcionPlan || "").trim()).length;
+  // Observaciones generales y planes de acción correctivos consignados en los checklists.
+  const obsPlan = allChks.filter(c => (c.observacionGeneral || "").trim() || (c.planAccion || "").trim());
+  const planes = allChks.filter(c => (c.planAccion || "").trim()).length;
 
   // Riesgos / fortalezas / hallazgos (deterministas)
   const riesgos: string[] = [];
@@ -542,7 +546,7 @@ function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosBy
     </div>
   </div>`;
 
-  const indice = `<div style="margin-bottom:18px"><h2 style="font-size:22px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 8px">Contenido</h2><ol style="font-size:20px;line-height:1.8;color:#334155;margin:0;padding-left:24px"><li>Resumen Ejecutivo</li><li>Indicadores Gerenciales</li><li>Análisis Ejecutivo</li><li>Evidencias Relevantes</li><li>Conclusiones</li><li>Recomendaciones</li><li>Firmas</li></ol></div>`;
+  const indice = `<div style="margin-bottom:18px"><h2 style="font-size:22px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 8px">Contenido</h2><ol style="font-size:20px;line-height:1.8;color:#334155;margin:0;padding-left:24px"><li>Resumen Ejecutivo</li><li>Indicadores Gerenciales</li><li>Análisis Ejecutivo</li><li>Observaciones y Planes de Acción Correctivos</li><li>Evidencias Relevantes</li><li>Conclusiones</li><li>Recomendaciones</li><li>Firmas</li></ol></div>`;
 
   // 1) Resumen Ejecutivo
   const resumen = `<div style="page-break-before:always">
@@ -629,16 +633,23 @@ function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosBy
     ])}
   </div>`;
 
-  // 4) Evidencias Relevantes
+  // 4) Observaciones y Planes de Acción Correctivos (consignados en los checklists)
+  const obsPlanSection = `<div style="page-break-before:always">
+    ${h2("4.", "Observaciones y Planes de Acción Correctivos")}
+    ${parr(obsPlan.length ? `Se relacionan las observaciones generales y los planes de acción correctivos consignados en ${obsPlan.length} checklist(s) de auditoría, como contexto para la toma de decisiones y el cierre de hallazgos.` : "No se registraron observaciones generales ni planes de acción correctivos en los checklists del alcance.")}
+    ${obsPlan.map(c => { const gal = c.galpon === "TODOS" ? "Todos los galpones" : c.galpon ? `Galpón ${c.galpon}` : "—"; return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:12px;page-break-inside:avoid"><div style="font-size:17px;font-weight:700;color:#0D1526">${TIPO_LABEL[c.tipo] || c.tipo}${c.diaEvaluado ? ` · Día ${c.diaEvaluado}` : ""}</div><div style="font-size:14px;color:#94a3b8;margin:2px 0 8px">${c.granjaNombre || "—"} · ${gal} · Lote: ${c.lote || "—"} · Visita: ${fFecha(c.fechaVisita)} · Auditor: ${c.auditor || "—"}</div>${(c.observacionGeneral || "").trim() ? `<div style="margin-bottom:7px"><span style="display:inline-block;font-size:13px;font-weight:700;color:#0369a1;background:#e0f2fe;border-radius:4px;padding:2px 8px;margin-bottom:3px">Observación general</span><div style="font-size:19px;color:#334155;line-height:1.6">${c.observacionGeneral}</div></div>` : ""}${(c.planAccion || "").trim() ? `<div><span style="display:inline-block;font-size:13px;font-weight:700;color:#b45309;background:#ffedd5;border-radius:4px;padding:2px 8px;margin-bottom:3px">Plan de acción correctivo</span><div style="font-size:19px;color:#334155;line-height:1.6">${c.planAccion}</div></div>` : ""}</div>`; }).join("")}
+  </div>`;
+
+  // 5) Evidencias Relevantes
   const evidencias = `<div style="page-break-before:always">
-    ${h2("4.", "Evidencias Relevantes")}
+    ${h2("5.", "Evidencias Relevantes")}
     ${parr(evidSel.length ? "Selección de evidencias fotográficas más representativas según la criticidad de los hallazgos registrados." : "No se registraron evidencias fotográficas en el alcance evaluado.")}
     ${evidSel.length ? evidenciasGridHTML(evidSel) : ""}
   </div>`;
 
-  // 5) Conclusiones
+  // 6) Conclusiones
   const conclusiones = `<div style="page-break-before:always">
-    ${h2("5.", "Conclusiones")}
+    ${h2("6.", "Conclusiones")}
     ${bloque("Conclusiones ejecutivas", [
       `El alcance evaluado comprende ${lotes.length} lote(s) y ${allChks.length} checklist(s) de auditoría en ${granjasSet.join(", ")}.`,
       `${cumplenMort} de ${conD7.length} lote(s) con seguimiento completo cumplen el rango de mortalidad (≤ ${MORT_RANGO_D7}%).`,
@@ -650,9 +661,9 @@ function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosBy
     ${parr(`<strong>Estado general del proceso:</strong> ${estado}.`)}
   </div>`;
 
-  // 6) Recomendaciones
+  // 7) Recomendaciones
   const recomendaciones = `<div style="page-break-before:always">
-    ${h2("6.", "Recomendaciones")}
+    ${h2("7.", "Recomendaciones")}
     ${bloque("Gerencia", [
       conD7.some(x => !x.m.cumple) ? "Priorizar la atención de los lotes fuera de rango y asignar recursos para el cierre de no conformidades." : "Sostener el modelo de control interno que mantiene el proceso dentro de los rangos técnicos.",
       "Institucionalizar el seguimiento del tablero de indicadores como insumo de decisión del Comité.",
@@ -671,10 +682,10 @@ function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosBy
     ])}
   </div>`;
 
-  // 7) Firmas
+  // 8) Firmas
   const firmantes: [string, string][] = [["Auditor", form.auditor], ["Director de Engorde", form.directorEngorde], ["Oficial de Cumplimiento", form.oficialCumplimiento], ["Gerente General", form.gerenteGeneral]];
   const firmas = `<div style="margin-top:24px;page-break-inside:avoid">
-    ${h2("7.", "Firmas")}
+    ${h2("8.", "Firmas")}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:34px 40px;margin-top:18px">
       ${firmantes.map(f => `<div style="text-align:center"><div style="border-top:1px solid #0D1526;margin-top:46px;padding-top:6px"><div style="font-size:20px;font-weight:700;color:#0D1526">${f[1] || "—"}</div><div style="font-size:15px;color:#94a3b8">${f[0]}</div><div style="font-size:14px;color:#94a3b8;margin-top:5px">Fecha: ______________</div></div></div>`).join("")}
     </div>
@@ -689,6 +700,7 @@ function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosBy
       ${resumen}
       ${dashboard}
       ${analisis}
+      ${obsPlanSection}
       ${evidencias}
       ${conclusiones}
       ${recomendaciones}
