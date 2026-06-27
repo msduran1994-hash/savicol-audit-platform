@@ -95,7 +95,7 @@ export default function GranjasEjecutivoPage() {
 
   const auditoresOptions = useMemo(() => {
     if (!exec) return [];
-    return Array.from(new Set(exec.charts.auditores.map(a => a.auditorNombre)));
+    return Array.from(new Set((exec.charts?.auditores ?? []).map(a => a.auditorNombre)));
   }, [exec]);
 
   const activeFilters = Object.values(filters).filter(v => v != null && v !== "").length - 1;
@@ -123,8 +123,8 @@ export default function GranjasEjecutivoPage() {
     <div className="flex flex-col min-h-full">
       <Header
         title="Dashboard Ejecutivo · Granjas"
-        subtitle={exec
-          ? `${exec.kpis.totalGranjas} granjas · ${exec.kpis.totalAuditorias} auditorías · ${exec.kpis.totalHallazgos} hallazgos · ${exec.resumenHeuristico.estado}`
+        subtitle={exec?.kpis
+          ? `${exec.kpis.totalGranjas} granjas · ${exec.kpis.totalAuditorias} auditorías · ${exec.kpis.totalHallazgos} hallazgos · ${exec.resumenHeuristico?.estado ?? ""}`
           : "Cargando dashboard..."}
       />
 
@@ -231,13 +231,13 @@ export default function GranjasEjecutivoPage() {
 
         {exec && (
           <>
-            <KpiGrid kpis={exec.kpis}/>
+            {exec.kpis && <KpiGrid kpis={exec.kpis}/>}
 
             {aiTrigger && (
               <AiCard aiData={aiQ.data} heuristico={exec.resumenHeuristico} loading={aiQ.isFetching} open={aiOpen} onToggle={() => setAiOpen(!aiOpen)}/>
             )}
 
-            {exec.alertas.length > 0 && (
+            {(exec.alertas?.length ?? 0) > 0 && (
               <div className="space-y-2">
                 <h2 className="text-xs uppercase tracking-wider text-[#94A3B8] font-semibold flex items-center gap-2">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-400"/> Alertas estratégicas ({exec.alertas.length})
@@ -264,34 +264,34 @@ export default function GranjasEjecutivoPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <ChartCard title="Hallazgos por Categoría" subtitle="Distribución de hallazgos por área temática">
-                <CategoriaChart data={exec.charts.hallazgosPorCategoria}/>
+                <CategoriaChart data={exec.charts?.hallazgosPorCategoria}/>
               </ChartCard>
               <ChartCard title="Diagnóstico por Fecha de Reporte" subtitle="Serie temporal de hallazgos">
-                <DiagnosticoFechaChart data={exec.charts.diagnosticoFecha}/>
+                <DiagnosticoFechaChart data={exec.charts?.diagnosticoFecha}/>
               </ChartCard>
               <ChartCard title="Distribución de Granjas por Tipo" subtitle="Propia · Arrendada · Integrada">
-                <DistribucionTipoChart data={exec.charts.distribucionTipo}/>
+                <DistribucionTipoChart data={exec.charts?.distribucionTipo}/>
               </ChartCard>
               <ChartCard title="Línea Productiva" subtitle="Engorde vs Reproductoras">
-                <LineaProductivaChart data={exec.charts.lineaProductiva}/>
+                <LineaProductivaChart data={exec.charts?.lineaProductiva}/>
               </ChartCard>
               <ChartCard title="Visitas por Auditor" subtitle="Ranking de auditores activos" full>
-                <AuditoresChart data={exec.charts.auditores}/>
+                <AuditoresChart data={exec.charts?.auditores}/>
               </ChartCard>
               <ChartCard title="Tendencia Mensual de Visitas" subtitle="Visitas · hallazgos · críticos por mes" full>
-                <TendenciaChart data={exec.charts.tendenciaMes}/>
+                <TendenciaChart data={exec.charts?.tendenciaMes}/>
               </ChartCard>
               <ChartCard title="Matriz de Criticidad" subtitle="Distribución por nivel">
-                <CriticidadChart data={exec.charts.matrizCriticidad}/>
+                <CriticidadChart data={exec.charts?.matrizCriticidad}/>
               </ChartCard>
               <ChartCard title="Granjas por Producción" subtitle="Top 10 por capacidad de aves">
-                <ProduccionChart data={exec.charts.granjasProduccion}/>
+                <ProduccionChart data={exec.charts?.granjasProduccion}/>
               </ChartCard>
             </div>
 
-            <CalidadCard data={exec.calidadDatos}/>
+            {exec.calidadDatos && <CalidadCard data={exec.calidadDatos}/>}
 
-            <TrazabilidadTable rows={exec.trazabilidad}/>
+            <TrazabilidadTable rows={exec.trazabilidad ?? []}/>
           </>
         )}
 
@@ -399,7 +399,7 @@ function KpiGrid({ kpis }: { kpis: any }) {
     { label: "Activas",             value: kpis.granjasActivas,                icon: <ShieldCheck/>,    color: "#10B981" },
     { label: "Cuarentena",          value: kpis.granjasCuarentena,             icon: <AlertTriangle/>,  color: "#F59E0B" },
     { label: "Riesgo alto",         value: kpis.granjasRiesgoAlto,             icon: <AlertTriangle/>,  color: "#EF4444" },
-    { label: "Capacidad aves",      value: kpis.capacidadTotal.toLocaleString("es-CO"), icon: <Wheat/>,   color: "#06B6D4" },
+    { label: "Capacidad aves",      value: (kpis.capacidadTotal ?? 0).toLocaleString("es-CO"), icon: <Wheat/>,   color: "#06B6D4" },
     { label: "Auditorías",          value: kpis.totalAuditorias,               icon: <Activity/>,       color: "#8B5CF6" },
     { label: "Auditores",           value: kpis.auditoresActivos,              icon: <Users/>,          color: "#EC4899" },
     { label: "Hallazgos",           value: kpis.totalHallazgos,                icon: <Bug/>,            color: "#F97316" },
@@ -511,7 +511,7 @@ const Tip = ({ active, payload, label }: any) => {
 };
 
 function CategoriaChart({ data }: { data: any[] }) {
-  if (data.length === 0) return <p className="text-center text-xs text-[#475569] py-8">Sin hallazgos por categoría</p>;
+  if (!data?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin hallazgos por categoría</p>;
   return (
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={data} layout="vertical" barSize={16}>
@@ -526,7 +526,7 @@ function CategoriaChart({ data }: { data: any[] }) {
 }
 
 function DiagnosticoFechaChart({ data }: { data: any[] }) {
-  if (data.length === 0) return <p className="text-center text-xs text-[#475569] py-8">Sin datos de fechas</p>;
+  if (!data?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin datos de fechas</p>;
   return (
     <ResponsiveContainer width="100%" height={260}>
       <AreaChart data={data}>
@@ -547,7 +547,7 @@ function DiagnosticoFechaChart({ data }: { data: any[] }) {
 }
 
 function DistribucionTipoChart({ data }: { data: any[] }) {
-  if (data.length === 0) return <p className="text-center text-xs text-[#475569] py-8">Sin granjas</p>;
+  if (!data?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin granjas</p>;
   return (
     <ResponsiveContainer width="100%" height={260}>
       <PieChart>
@@ -561,7 +561,7 @@ function DistribucionTipoChart({ data }: { data: any[] }) {
 }
 
 function LineaProductivaChart({ data }: { data: any[] }) {
-  if (data.length === 0) return <p className="text-center text-xs text-[#475569] py-8">Sin línea productiva</p>;
+  if (!data?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin línea productiva</p>;
   return (
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={data} barSize={50}>
@@ -578,7 +578,7 @@ function LineaProductivaChart({ data }: { data: any[] }) {
 }
 
 function AuditoresChart({ data }: { data: any[] }) {
-  if (data.length === 0) return <p className="text-center text-xs text-[#475569] py-8">Sin auditores</p>;
+  if (!data?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin auditores</p>;
   return (
     <ResponsiveContainer width="100%" height={Math.max(260, data.length * 30)}>
       <BarChart data={data} layout="vertical" barSize={14}>
@@ -613,7 +613,7 @@ function TendenciaChart({ data }: { data: any[] }) {
 }
 
 function CriticidadChart({ data }: { data: any[] }) {
-  if (data.length === 0) return <p className="text-center text-xs text-[#475569] py-8">Sin hallazgos</p>;
+  if (!data?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin hallazgos</p>;
   return (
     <ResponsiveContainer width="100%" height={260}>
       <PieChart>
@@ -627,7 +627,7 @@ function CriticidadChart({ data }: { data: any[] }) {
 }
 
 function ProduccionChart({ data }: { data: any[] }) {
-  if (data.length === 0) return <p className="text-center text-xs text-[#475569] py-8">Sin datos de capacidad</p>;
+  if (!data?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin datos de capacidad</p>;
   return (
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={data} layout="vertical" barSize={14}>
