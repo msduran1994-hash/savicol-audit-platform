@@ -68,6 +68,32 @@ function statMuestreo(ms: Muestreo[]) {
   return { totalM, pollitos, pesoT, unit, cv, estado };
 }
 
+// Renderiza UN checklist una sola vez: encabezado + respuestas + muestreos + evidencias.
+// Se usa en la sección consolidada para que NO se repitan tablas ni fotos entre fichas.
+function renderChecklist(c: ChecklistData): string {
+  const preguntas = c.preguntas || [];
+  const pct = calcularCumplimiento(preguntas.map(p => p.resultado));
+  const col = pct >= 90 ? VERDE : pct >= 70 ? NARANJA : ROJO;
+  const resp = preguntas.filter(p => p.resultado !== "");
+  const evids: FotoPDF[] = preguntas.filter(p => p.evidencia && /^data:image\//i.test(p.evidencia)).map(p => ({ src: p.evidencia as string, titulo: p.pregunta, pie: RESULTADO_LABEL[p.resultado] || p.resultado }));
+  const ms = (c.muestreos || []).filter(m => (m.cantidad ?? 0) > 0 || (m.pesoTotal ?? 0) > 0);
+  const st = statMuestreo(ms);
+  const galTxt = c.galpon === "TODOS" ? "Todos los galpones" : c.galpon ? `Galpón ${c.galpon}` : "—";
+  const galPesaje = (m: Muestreo) => m.galpon || (c.galpon && c.galpon !== "TODOS" ? c.galpon : "—");
+  return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:11px;margin-bottom:18px">
+    <div style="display:flex;justify-content:space-between;align-items:center"><strong style="font-size:20px;color:#0D1526">${TIPO_LABEL[c.tipo] || c.tipo}${c.diaEvaluado ? ` · Día ${c.diaEvaluado}` : ""}</strong><span style="font-size:20px;color:${col};font-weight:700">${pct}%</span></div>
+    <div style="font-size:15px;color:#94a3b8;margin:3px 0 8px">${c.granjaNombre || "—"} · ${galTxt} · Lote: ${c.lote || "—"} · Visita: ${fFecha(c.fechaVisita)} · Auditor: ${c.auditor || "—"} · ${resp.length}/${preguntas.length} respondidas</div>
+    ${resp.length ? `<table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#f8fafc"><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Sección</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Pregunta</th><th style="text-align:center;padding:3px;border-bottom:1px solid #e2e8f0">Resultado</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Observación</th></tr></thead><tbody>${resp.map(p => `<tr><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#64748b">${p.seccion || "—"}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9">${p.pregunta}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:center;color:${RESULTADO_COLOR[p.resultado] || "#64748b"};font-weight:700">${RESULTADO_LABEL[p.resultado] || p.resultado}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#475569">${p.observacion || ""}</td></tr>`).join("")}</tbody></table>` : '<p style="font-size:15px;color:#94a3b8;margin:0">Sin respuestas registradas.</p>'}
+    ${ms.length ? `<div style="font-size:17px;font-weight:700;color:#475569;margin:11px 0 4px">Muestreos (pesajes)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:15px;margin-bottom:5px">
+        ${[["Muestreos", String(st.totalM)], ["Aves", String(st.pollitos)], ["Peso total", `${st.pesoT.toLocaleString("es-CO", { maximumFractionDigits: 2 })} kg`], ["Peso unitario", `${st.unit.toLocaleString("es-CO", { maximumFractionDigits: 3 })} kg`], ["CV", `${st.cv.toFixed(1)}%`]].map(d => `<span style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:4px 8px"><strong style="color:#0D1526">${d[1]}</strong> <span style="color:#64748b">${d[0]}</span></span>`).join("")}
+        <span style="padding:4px 8px;border-radius:5px;background:${st.estado.c}22;color:${st.estado.c};font-weight:700">${st.estado.l}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#f8fafc"><th style="text-align:center;padding:3px;border-bottom:1px solid #e2e8f0">N.º</th><th style="text-align:center;padding:3px;border-bottom:1px solid #e2e8f0">Galpón</th><th style="text-align:right;padding:3px;border-bottom:1px solid #e2e8f0">Pollitos</th><th style="text-align:right;padding:3px;border-bottom:1px solid #e2e8f0">Peso total (kg)</th><th style="text-align:left;padding:3px;border-bottom:1px solid #e2e8f0">Observación</th></tr></thead><tbody>${ms.map(m => `<tr><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:center">${m.n}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:center">${galPesaje(m)}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:right">${m.cantidad}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;text-align:right">${m.pesoTotal}</td><td style="padding:3px;border-bottom:1px solid #f1f5f9;color:#475569">${m.obs || ""}</td></tr>`).join("")}</tbody></table>` : ""}
+    ${evids.length ? `<div style="font-size:15px;font-weight:700;color:#475569;margin:9px 0 3px">Evidencias del checklist (${evids.length})</div>${evidenciasGridHTML(evids)}` : ""}
+  </div>`;
+}
+
 // ── PDF (jsPDF + html2canvas) · márgenes ICONTEC + paginado inteligente ─────
 // Márgenes (mm) ~ NTC 1486: superior 3, inferior 3, izquierdo 3, derecho 2.
 const MARGEN = { top: 30, bottom: 30, left: 30, right: 20 };
@@ -88,7 +114,9 @@ async function generarPDF(html: string, filename: string): Promise<void> {
     const W = canvas.width;
     const filaBlanca = (band: Uint8ClampedArray, y: number): boolean => {
       const off = y * W * 4;
-      for (let x = 0; x < W; x += 8) { const o = off + x * 4; if (band[o] < 244 || band[o + 1] < 244 || band[o + 2] < 244) return false; }
+      // "Fila clara": permite cortar también entre filas de tabla (bordes #f1f5f9≈241,
+      // fondos #f8fafc≈248) sin partir texto/fotos (píxeles oscuros < 236).
+      for (let x = 0; x < W; x += 6) { const o = off + x * 4; if (band[o] < 236 || band[o + 1] < 236 || band[o + 2] < 236) return false; }
       return true;
     };
     let rendered = 0, page = 0;
@@ -219,8 +247,10 @@ function construirInforme(opts: {
       const fotos = fotosByLoteGalpon[`${l.data.codigo}|${g}`] || [];
       const estadoColor = !m.tieneD7 ? "#64748B" : m.cumple ? VERDE : ROJO;
       const estadoTxt = !m.tieneD7 ? "Parcial" : m.cumple ? "CUMPLE" : "FUERA DE RANGO";
-      // Checklists de auditoría de la GRANJA que aplican al galpón (con todas las respuestas)
-      const granjaChks = checklistsByGranja[l.data.granjaId] || [];
+      // Los checklists/muestreos NO se dibujan por ficha (se repetirían entre galpones y
+      // lotes de la misma granja); se consolidan UNA sola vez en "checklistsSection".
+      // granjaChks queda vacío a propósito para anular el bloque de abajo sin alterarlo.
+      const granjaChks: ChecklistData[] = [];
       const chksG = checklistsGalpon(granjaChks, g);
       const chkHtml = chksG.length === 0 ? "" : `<div style="font-size:17px;font-weight:700;color:#475569;margin:10px 0 4px">Checklists de Auditoría</div>${chksG.map(c => {
         const pct = calcularCumplimiento((c.preguntas || []).map(p => p.resultado));
@@ -269,6 +299,12 @@ function construirInforme(opts: {
     });
   });
 
+  // Sección consolidada: cada checklist (respuestas + muestreos + evidencias) UNA sola vez,
+  // ordenado por granja → galpón → tipo. Evita las tablas/fotos repetidas de las fichas.
+  const todosChks = Object.values(checklistsByGranja).flat()
+    .sort((a, b) => (a.granjaNombre || "").localeCompare(b.granjaNombre || "") || (a.galpon || "").localeCompare(b.galpon || "") || (a.tipo || "").localeCompare(b.tipo || ""));
+  const checklistsSection = todosChks.length === 0 ? "" : `<div style="page-break-before:always"><h2 style="font-size:24px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 8px">Checklists de Auditoría y Muestreos</h2><p style="font-size:15px;color:#94a3b8;margin:0 0 14px">${todosChks.length} checklist(s) de la(s) granja(s) del alcance. Cada uno se presenta una sola vez con sus respuestas, muestreos y evidencias.</p></div>${todosChks.map(renderChecklist).join("")}`;
+
   // Anexos
   const anexoTabla = `<div style="page-break-before:always">
     <h2 style="font-size:24px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 8px">Anexos · Tabla Consolidada de Lotes</h2>
@@ -297,6 +333,7 @@ function construirInforme(opts: {
       ${seccion("", "Resumen Ejecutivo", resumen)}
       ${capI}${capII}
       ${fichas}
+      ${checklistsSection}
       ${anexoTabla}
       ${capIII}
       ${firmas}
