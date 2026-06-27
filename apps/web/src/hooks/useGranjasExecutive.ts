@@ -16,6 +16,7 @@ export interface GranjasFilters {
   fechaDesde?: string;
   fechaHasta?: string;
   mes?: number;
+  categoria?: string;
 }
 
 export interface GranjasExecutiveResponse {

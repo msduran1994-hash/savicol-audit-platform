@@ -5,7 +5,7 @@
 import { useMemo, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { useGranjasExecutive, useGranjasAiSummary, type GranjasFilters } from "@/hooks/useGranjasExecutive";
-import { useGranjas } from "@/hooks/useGranjas";
+import { useGranjas, useHallazgos } from "@/hooks/useGranjas";
 import { useAuthStore } from "@/store/auth.store";
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
@@ -92,6 +92,46 @@ export default function GranjasDashboardPage() {
     const stG = statMuestreo(allMsG);
     return { datos, kpi: { lotes: lotesF.length, mort: totPob > 0 ? (totMuertas / totPob) * 100 : 0, cumpl: allCumpl.length ? Math.round(allCumpl.reduce((a, b) => a + b, 0) / allCumpl.length) : 0, peso: stG.unit > 0 ? Math.round(stG.unit * 1000) : 0, cv: stG.totalM > 0 ? stG.cv : 0, criticas: datos.filter(d => d.crit >= 60).length } };
   }, [lotesTrz, encItems, trzItems, filters.granjaId, filters.fechaDesde, filters.fechaHasta]);
+
+  // ─── Hallazgos (módulo Hallazgos, datos reales) → auditores, heatmap, rankings ──
+  const { data: hallazgosRaw = [] } = useHallazgos();
+  const hStats = useMemo(() => {
+    const norm = (s: any) => (s ?? "").toString().normalize("NFD").replace(/\p{Diacritic}/gu, "").toUpperCase().trim();
+    const f = filters;
+    const inDate = (d?: string) => { if (!d) return true; const t = new Date(d); if (f.year && !isNaN(t.getTime()) && t.getFullYear() !== f.year) return false; if (f.fechaDesde && d < f.fechaDesde) return false; if (f.fechaHasta && d > f.fechaHasta) return false; return true; };
+    const hF = (hallazgosRaw as any[]).filter(h => {
+      if (f.granjaId && h.granjaId !== f.granjaId) return false;
+      if (f.auditorId && norm(h.auditorNombre) !== norm(f.auditorId)) return false;
+      if ((f as any).categoria && h.categoria !== (f as any).categoria) return false;
+      if (f.criticidad && norm(h.criticidad) !== norm(f.criticidad)) return false;
+      if (f.estado && norm(h.estado) !== norm(f.estado)) return false;
+      if (f.tipoGranja && norm(h.tipoGranja) !== norm(f.tipoGranja)) return false;
+      if (f.tipoOperativo && norm(h.tipoOperativo) !== norm(f.tipoOperativo)) return false;
+      if (f.tipoRiesgo && !(h.tiposRiesgo || []).some((t: string) => norm(t) === norm(f.tipoRiesgo))) return false;
+      if (!inDate(h.fechaVisita)) return false;
+      return true;
+    });
+    // Visitas por auditor (visita = granja+fecha distinta) + hallazgos + críticos
+    const audMap = new Map<string, { v: Set<string>; hallazgos: number; criticos: number }>();
+    hF.forEach(h => { const a = h.auditorNombre || "—"; if (!audMap.has(a)) audMap.set(a, { v: new Set(), hallazgos: 0, criticos: 0 }); const o = audMap.get(a)!; o.v.add(`${h.granjaId}|${h.fechaVisita}`); o.hallazgos++; if (norm(h.criticidad).startsWith("CRIT")) o.criticos++; });
+    const auditores = Array.from(audMap, ([auditorNombre, o]) => ({ auditorNombre, visitas: o.v.size, hallazgos: o.hallazgos, criticos: o.criticos })).sort((a, b) => b.visitas - a.visitas);
+    // Hallazgos por auditor Ene–Jun (meses 0..5)
+    const audHall = new Map<string, number>();
+    hF.forEach(h => { const m = new Date(h.fechaVisita).getMonth(); if (m >= 0 && m <= 5) audHall.set(h.auditorNombre || "—", (audHall.get(h.auditorNombre || "—") ?? 0) + 1); });
+    const hallPorAuditorEneJun = Array.from(audHall, ([auditorNombre, count]) => ({ auditorNombre, count })).sort((a, b) => b.count - a.count);
+    // Heatmap categoría × tipo de riesgo
+    const cats = Array.from(new Set(hF.map(h => h.categoria).filter(Boolean)));
+    const riesgos = Array.from(new Set(hF.flatMap(h => h.tiposRiesgo || []).filter(Boolean)));
+    const heat = cats.map(cat => ({ categoria: cat, cells: riesgos.map(r => ({ riesgo: r, count: hF.filter(h => h.categoria === cat && (h.tiposRiesgo || []).includes(r)).length })) }));
+    const heatMax = Math.max(1, ...heat.flatMap(row => row.cells.map(c => c.count)));
+    // Top 10 granjas por tipos de riesgo y por hallazgos
+    const grR = new Map<string, number>(), grH = new Map<string, number>();
+    hF.forEach(h => { const g = h.granjaNombre || "—"; grR.set(g, (grR.get(g) ?? 0) + (h.tiposRiesgo || []).length); grH.set(g, (grH.get(g) ?? 0) + 1); });
+    const topRiesgo = Array.from(grR, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
+    const topHall = Array.from(grH, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
+    const categoriasAll = Array.from(new Set((hallazgosRaw as any[]).map(h => h.categoria).filter(Boolean))).sort();
+    return { total: hF.length, auditores, hallPorAuditorEneJun, heat, riesgos, heatMax, topRiesgo, topHall, categoriasAll };
+  }, [hallazgosRaw, filters]);
 
   const exec = execQ.data;
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -207,6 +247,12 @@ export default function GranjasDashboardPage() {
                   {TIPOS_RIESGO.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </F>
+              <F label="Hallazgo (categoría)">
+                <select value={(filters as any).categoria ?? ""} onChange={e => setFilters({ ...filters, categoria: e.target.value || undefined } as any)} className="filter-input">
+                  <option value="">Todas</option>
+                  {hStats.categoriasAll.map((c: any) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </F>
               <F label="Fecha desde">
                 <input type="date" value={filters.fechaDesde ?? ""} onChange={e => setFilters({ ...filters, fechaDesde: e.target.value || undefined })} className="filter-input"/>
               </F>
@@ -282,7 +328,7 @@ export default function GranjasDashboardPage() {
                 <LineaProductivaChart data={exec.charts?.lineaProductiva}/>
               </ChartCard>
               <ChartCard title="Visitas por Auditor" subtitle="Ranking de auditores activos" full>
-                <AuditoresChart data={exec.charts?.auditores}/>
+                <AuditoresChart data={hStats.auditores}/>
               </ChartCard>
               <ChartCard title="Tendencia Mensual de Visitas" subtitle="Visitas · hallazgos · críticos por mes" full>
                 <TendenciaChart data={exec.charts?.tendenciaMes}/>
@@ -390,7 +436,79 @@ export default function GranjasDashboardPage() {
             </ChartCard>
           </div>
         )}
+
+        {hStats.total > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ChartCard title="Hallazgos por Auditor (Ene–Jun)" subtitle="Reportes registrados de enero a junio">
+              <HallazgosAuditorChart data={hStats.hallPorAuditorEneJun}/>
+            </ChartCard>
+            <ChartCard title="Heatmap · Hallazgos vs Tipos de Riesgo" subtitle="Concentración por categoría y tipo de riesgo">
+              <HeatmapRiesgo rows={hStats.heat} cols={hStats.riesgos} max={hStats.heatMax}/>
+            </ChartCard>
+            <ChartCard title="Top 10 Granjas por Tipos de Riesgo" subtitle="Mayor exposición a riesgos">
+              <TopGranjasChart data={hStats.topRiesgo} color="#EF4444" name="Tipos de riesgo"/>
+            </ChartCard>
+            <ChartCard title="Top 10 Granjas por Hallazgos" subtitle="Mayor número de hallazgos reportados">
+              <TopGranjasChart data={hStats.topHall} color="#F97316" name="Hallazgos"/>
+            </ChartCard>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function HallazgosAuditorChart({ data }: { data: { auditorNombre: string; count: number }[] }) {
+  if (!data?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin hallazgos por auditor</p>;
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(220, data.length * 30)}>
+      <BarChart data={data} layout="vertical" barSize={14}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" horizontal={false}/>
+        <XAxis type="number" tick={{ fill: "#94A3B8", fontSize: 10 }}/>
+        <YAxis type="category" dataKey="auditorNombre" width={150} tick={{ fill: "#94A3B8", fontSize: 10 }}/>
+        <Tooltip content={<Tip/>}/>
+        <Bar dataKey="count" name="Hallazgos" fill="#F59E0B" radius={[0,3,3,0]}/>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function TopGranjasChart({ data, color, name }: { data: { name: string; value: number }[]; color: string; name: string }) {
+  if (!data?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin datos</p>;
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(220, data.length * 30)}>
+      <BarChart data={data} layout="vertical" barSize={14}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" horizontal={false}/>
+        <XAxis type="number" tick={{ fill: "#94A3B8", fontSize: 10 }}/>
+        <YAxis type="category" dataKey="name" width={150} tick={{ fill: "#94A3B8", fontSize: 9 }}/>
+        <Tooltip content={<Tip/>}/>
+        <Bar dataKey="value" name={name} fill={color} radius={[0,3,3,0]}/>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function HeatmapRiesgo({ rows, cols, max }: { rows: { categoria: string; cells: { riesgo: string; count: number }[] }[]; cols: string[]; max: number }) {
+  if (!rows?.length || !cols?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin datos de hallazgos × riesgo</p>;
+  const bg = (n: number) => n === 0 ? "transparent" : `rgba(239,68,68,${(0.15 + 0.6 * (n / max)).toFixed(2)})`;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr>
+            <th className="text-left p-1.5 text-[10px] uppercase tracking-wider text-[#94A3B8]">Categoría</th>
+            {cols.map(c => <th key={c} className="p-1.5 text-[9px] uppercase text-[#94A3B8] text-center">{c}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.categoria}>
+              <td className="p-1.5 text-[#cbd5e1] text-xs">{r.categoria}</td>
+              {r.cells.map(c => <td key={c.riesgo} className="p-1.5 text-center text-white font-semibold border border-[#0D1526]" style={{ background: bg(c.count) }}>{c.count || ""}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
