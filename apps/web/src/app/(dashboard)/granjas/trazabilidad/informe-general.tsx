@@ -386,11 +386,12 @@ async function cargarDatosInforme(lotes: LoteItem[]): Promise<{ fotosByLoteGalpo
 function kpiCards(cards: { label: string; valor: string; color: string; sub?: string }[]): string {
   return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:6px 0 16px">${cards.map(c => `<div style="border:1px solid #e2e8f0;border-left:5px solid ${c.color};border-radius:8px;padding:10px 12px"><div style="font-size:13px;text-transform:uppercase;color:#94a3b8;letter-spacing:.4px">${c.label}</div><div style="font-size:26px;font-weight:800;color:${c.color};line-height:1.1;margin-top:3px">${c.valor}</div>${c.sub ? `<div style="font-size:12px;color:#64748b;margin-top:2px">${c.sub}</div>` : ""}</div>`).join("")}</div>`;
 }
-function barsHTML(titulo: string, datos: { label: string; valor: number; color: string; texto?: string }[], opts?: { max?: number; ref?: { v: number; label: string } }): string {
+function barsHTML(titulo: string, datos: { label: string; valor: number; color: string; texto?: string }[], opts?: { max?: number; ref?: { v: number; label: string }; labelW?: number }): string {
   if (datos.length === 0) return "";
+  const labelW = opts?.labelW ?? 150;
   const max = opts?.max ?? Math.max(1, ...datos.map(d => d.valor), opts?.ref?.v ?? 0);
-  const rows = datos.map(d => { const w = Math.min(100, Math.max(1, (d.valor / max) * 100)); return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="width:160px;font-size:13px;color:#334155;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.label}</div><div style="flex:1;background:#eef2f7;border-radius:4px;height:20px"><div style="width:${w}%;background:${d.color};height:100%;border-radius:4px"></div></div><div style="width:78px;font-size:12px;color:#475569;font-weight:700;flex-shrink:0">${d.texto ?? d.valor}</div></div>`; }).join("");
-  const ref = opts?.ref ? `<div style="font-size:11px;color:#EF4444;margin:3px 0 0 168px">Referencia: ${opts.ref.label}</div>` : "";
+  const rows = datos.map(d => { const w = Math.min(100, Math.max(1, (d.valor / max) * 100)); return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="width:${labelW}px;font-size:12px;color:#334155;text-align:right;flex-shrink:0;white-space:nowrap">${d.label}</div><div style="flex:1;background:#eef2f7;border-radius:4px;height:20px"><div style="width:${w}%;background:${d.color};height:100%;border-radius:4px"></div></div><div style="width:80px;font-size:12px;color:#475569;font-weight:700;flex-shrink:0">${d.texto ?? d.valor}</div></div>`; }).join("");
+  const ref = opts?.ref ? `<div style="font-size:11px;color:#EF4444;margin:3px 0 0 ${labelW + 8}px">Referencia: ${opts.ref.label}</div>` : "";
   return `<div style="margin:8px 0 16px;page-break-inside:avoid"><div style="font-size:15px;font-weight:700;color:#0D1526;margin-bottom:6px">${titulo}</div>${rows}${ref}</div>`;
 }
 function stackHTML(titulo: string, segs: { label: string; valor: number; color: string }[]): string {
@@ -449,6 +450,7 @@ function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosBy
   const { form, lotes, fotosByLoteGalpon, checklistsByGranja } = opts;
   const hoy = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
   const parseDec = (v: any) => { let s = (v ?? "").toString().trim(); if (!s) return 0; if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s.replace(/[^\d.\-]/g, "")); return isFinite(n) ? n : 0; };
+  const fechaCorta = (d?: string) => { if (!d) return "—"; const t = new Date(d + (d.length <= 10 ? "T00:00:00" : "")); return isNaN(t.getTime()) ? "—" : t.toLocaleDateString("es-CO", { day: "2-digit", month: "2-digit", year: "2-digit" }); };
   const morts = lotes.map(l => ({ l, m: mortLote(l) }));
   const totalAves = morts.reduce((s, x) => s + x.m.pob, 0);
   const totalMuertas = morts.reduce((s, x) => s + x.m.totalMuertas, 0);
@@ -587,7 +589,7 @@ function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosBy
       { label: "CV muestreos", valor: stMs.totalM > 0 ? `${stMs.cv.toFixed(1)}%` : "—", color: stMs.totalM === 0 ? "#94A3B8" : stMs.cv <= 8 ? VERDE : stMs.cv <= 12 ? NARANJA : ROJO, sub: stMs.totalM > 0 ? stMs.estado.l : "Sin datos" },
       { label: "Galpones en cumplimiento", valor: `${galCumplen}/${galConD7 || 0}`, color: galConD7 > 0 && galFuera === 0 ? VERDE : NARANJA, sub: "Rango de mortalidad" },
     ])}
-    ${barsHTML("Mortalidad por galpón (%)", galpones.map(x => ({ label: `G${x.g} · ${x.lote}`, valor: +x.mort.toFixed(2), color: colMort(x.mort, x.tieneD7), texto: `${x.mort.toFixed(2)}%` })), { ref: { v: MORT_RANGO_D7, label: `${MORT_RANGO_D7}% máx.` }, max: Math.max(MORT_RANGO_D7 * 1.6, ...galpones.map(x => x.mort)) })}
+    ${barsHTML("Mortalidad por galpón (%)", galpones.map(x => ({ label: `Galpón ${x.g}`, valor: +x.mort.toFixed(2), color: colMort(x.mort, x.tieneD7), texto: `${x.mort.toFixed(2)}%` })), { ref: { v: MORT_RANGO_D7, label: `${MORT_RANGO_D7}% máx.` }, max: Math.max(MORT_RANGO_D7 * 1.6, ...galpones.map(x => x.mort)), labelW: 130 })}
     <div style="display:flex;gap:18px;flex-wrap:wrap">
       <div style="flex:1;min-width:320px">${canvasPie("Distribución de hallazgos", [{ label: "Cumple", valor: hall.cumple, color: VERDE }, { label: "Parcial", valor: hall.parcial, color: NARANJA }, { label: "No cumple", valor: hall.no_cumple, color: ROJO }, { label: "N/A", valor: hall.na, color: "#94A3B8" }], { centro: `${hall.cumple + hall.no_cumple + hall.parcial + hall.na}`, centroSub: "ítems" })}</div>
       <div style="flex:1;min-width:320px">${canvasPie("Estado de galpones (mortalidad)", [{ label: "En cumplimiento", valor: galCumplen, color: VERDE }, { label: "Fuera de rango", valor: galFuera, color: ROJO }, { label: "Parcial / sin D7", valor: galParcial, color: "#94A3B8" }], { centro: `${galpones.length}`, centroSub: "galpones" })}</div>
@@ -599,7 +601,7 @@ function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosBy
       { text: x.peso > 0 ? `${Math.round(x.peso)} g` : "—", color: x.peso > 0 ? CYAN : "#94A3B8" },
       { text: x.cv != null ? `${x.cv.toFixed(1)}%` : "—", color: colCv(x.cv) },
     ] })))}
-    ${barsHTML("Cumplimiento por checklist (%)", [...enc, ...trz].map(c => { const p = calcularCumplimiento((c.preguntas || []).map(q => q.resultado)); return { label: `${(TIPO_LABEL[c.tipo] || c.tipo).replace("Checklist ", "")}${c.galpon && c.galpon !== "TODOS" ? ` · G${c.galpon}` : ""}`, valor: p, color: colPct(p), texto: `${p}%` }; }), { max: 100 })}
+    ${barsHTML("Cumplimiento por día de visita (%)", [...enc, ...trz].map(c => { const p = calcularCumplimiento((c.preguntas || []).map(q => q.resultado)); return { label: `${c.diaEvaluado ? "Día " + c.diaEvaluado + " · " : ""}${fechaCorta(c.fechaVisita)}`, valor: p, color: colPct(p), texto: `${p}%` }; }), { max: 100, labelW: 170 })}
     ${kpiCards([
       { label: "Planes de acción", valor: `${planes}`, color: planes > 0 ? NARANJA : VERDE, sub: planes > 0 ? "Registrados / por cerrar" : "Sin planes abiertos" },
       { label: "Hallazgos no conformes", valor: `${hall.no_cumple}`, color: hall.no_cumple > 0 ? ROJO : VERDE, sub: "Ítems 'No cumple'" },
