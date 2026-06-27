@@ -97,7 +97,7 @@ function renderChecklist(c: ChecklistData): string {
 // ── PDF (jsPDF + html2canvas) · márgenes ICONTEC + paginado inteligente ─────
 // Márgenes (mm) ~ NTC 1486: superior 3, inferior 3, izquierdo 3, derecho 2.
 const MARGEN = { top: 30, bottom: 30, left: 30, right: 20 };
-async function generarPDF(html: string, filename: string): Promise<void> {
+async function generarPDF(html: string, filename: string, opts?: { pageNumbers?: boolean }): Promise<void> {
   const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
   let cont: HTMLDivElement | null = document.createElement("div");
   cont.style.cssText = "position:absolute;top:0;left:-10000px;width:794px;background:#fff;z-index:-1;";
@@ -136,6 +136,13 @@ async function generarPDF(html: string, filename: string): Promise<void> {
       if (pctx) { pctx.fillStyle = "#fff"; pctx.fillRect(0, 0, pc.width, pc.height); pctx.drawImage(canvas, 0, rendered, W, sliceH, 0, 0, W, sliceH); }
       pdf.addImage(pc.toDataURL("image/jpeg", 0.85), "JPEG", MARGEN.left, MARGEN.top, usableW, sliceH / pxPerMm, undefined, "FAST");
       rendered += sliceH; page++;
+    }
+    if (opts?.pageNumbers) {
+      const total = pdf.getNumberOfPages();
+      for (let i = 1; i <= total; i++) {
+        pdf.setPage(i); pdf.setFont("times", "normal"); pdf.setFontSize(9); pdf.setTextColor(120, 130, 145);
+        pdf.text(`Página ${i} de ${total}`, pageW - MARGEN.right, pageH - 12, { align: "right" });
+      }
     }
     pdf.save(filename);
   } finally { if (cont?.parentNode) document.body.removeChild(cont); cont = null; }
@@ -340,6 +347,358 @@ function construirInforme(opts: {
       ${pie}
     </div>
   </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  INFORME EJECUTIVO · resumen gerencial (Comité/Alta Dirección) basado en la
+//  misma información consolidada del Informe General. Redacción determinista.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Carga compartida de evidencias + checklists (una sola consulta a /documentos).
+async function cargarDatosInforme(lotes: LoteItem[]): Promise<{ fotosByLoteGalpon: Record<string, FotoPDF[]>; checklistsByGranja: Record<string, ChecklistData[]> }> {
+  const codigos = new Set(lotes.map(l => l.data.codigo));
+  const granjaIds = new Set(lotes.map(l => l.data.granjaId).filter(Boolean));
+  let fotosByLoteGalpon: Record<string, FotoPDF[]> = {};
+  const checklistsByGranja: Record<string, ChecklistData[]> = {};
+  try {
+    const docs = await apiGet<any[]>("/documentos");
+    (docs ?? []).filter(d => (d.nombre ?? "").includes("[CHK-ENC]") || (d.nombre ?? "").includes("[CHK-TRZ7]")).forEach(d => {
+      const mm = (d.ocrTexto ?? "").match(/\[CHK\]([\s\S]*?)\[\/CHK\]/);
+      if (!mm) return;
+      try { const data = JSON.parse(mm[1]) as ChecklistData; if (granjaIds.has(data.granjaId) || codigos.has(data.lote)) { const k = data.granjaId || "_"; (checklistsByGranja[k] = checklistsByGranja[k] || []).push(data); } } catch { /* json inválido */ }
+    });
+    const fotos: FotoMeta[] = (docs ?? [])
+      .filter(d => (d.nombre ?? "").includes("[FOTO-LOTE]"))
+      .map(d => { const meta = leerMetaFoto(d.ocrTexto); return { url: (d as any).url ?? "", nombre: (d.nombre ?? "").replace(/\s*\[FOTO-LOTE\]\s*/, "").trim(), dia: meta.dia, galpon: meta.galpon, loteCodigo: meta.loteCodigo, uploadedAt: d.uploadedAt }; })
+      .filter(f => codigos.has(f.loteCodigo));
+    const grupos: Record<string, FotoMeta[]> = {};
+    fotos.forEach(f => { const k = `${f.loteCodigo}|${f.galpon}`; (grupos[k] = grupos[k] || []).push(f); });
+    for (const k of Object.keys(grupos)) {
+      const arr: FotoPDF[] = [];
+      for (const f of grupos[k].slice(0, 8)) { const src = await resolverFoto(f.url); if (src) arr.push({ src, titulo: f.nombre || undefined, pie: f.dia ? `Día ${f.dia}` : undefined }); }
+      if (arr.length) fotosByLoteGalpon[k] = arr;
+    }
+  } catch { fotosByLoteGalpon = {}; }
+  return { fotosByLoteGalpon, checklistsByGranja };
+}
+
+// Mini-dashboard ejecutivo en HTML/CSS (html2canvas lo rasteriza con fidelidad).
+function kpiCards(cards: { label: string; valor: string; color: string; sub?: string }[]): string {
+  return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:6px 0 16px">${cards.map(c => `<div style="border:1px solid #e2e8f0;border-left:5px solid ${c.color};border-radius:8px;padding:10px 12px"><div style="font-size:13px;text-transform:uppercase;color:#94a3b8;letter-spacing:.4px">${c.label}</div><div style="font-size:26px;font-weight:800;color:${c.color};line-height:1.1;margin-top:3px">${c.valor}</div>${c.sub ? `<div style="font-size:12px;color:#64748b;margin-top:2px">${c.sub}</div>` : ""}</div>`).join("")}</div>`;
+}
+function barsHTML(titulo: string, datos: { label: string; valor: number; color: string; texto?: string }[], opts?: { max?: number; ref?: { v: number; label: string } }): string {
+  if (datos.length === 0) return "";
+  const max = opts?.max ?? Math.max(1, ...datos.map(d => d.valor), opts?.ref?.v ?? 0);
+  const rows = datos.map(d => { const w = Math.min(100, Math.max(1, (d.valor / max) * 100)); return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="width:160px;font-size:13px;color:#334155;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.label}</div><div style="flex:1;background:#eef2f7;border-radius:4px;height:20px"><div style="width:${w}%;background:${d.color};height:100%;border-radius:4px"></div></div><div style="width:78px;font-size:12px;color:#475569;font-weight:700;flex-shrink:0">${d.texto ?? d.valor}</div></div>`; }).join("");
+  const ref = opts?.ref ? `<div style="font-size:11px;color:#EF4444;margin:3px 0 0 168px">Referencia: ${opts.ref.label}</div>` : "";
+  return `<div style="margin:8px 0 16px;page-break-inside:avoid"><div style="font-size:15px;font-weight:700;color:#0D1526;margin-bottom:6px">${titulo}</div>${rows}${ref}</div>`;
+}
+function stackHTML(titulo: string, segs: { label: string; valor: number; color: string }[]): string {
+  const total = segs.reduce((s, x) => s + x.valor, 0) || 1;
+  const bar = segs.filter(s => s.valor > 0).map(s => `<div style="width:${(s.valor / total) * 100}%;background:${s.color};height:100%"></div>`).join("");
+  const leg = segs.map(s => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:13px;color:#334155;margin:0 14px 4px 0"><span style="width:11px;height:11px;border-radius:2px;background:${s.color};display:inline-block"></span>${s.label}:&nbsp;<strong>${s.valor}</strong>&nbsp;(${Math.round((s.valor / total) * 100)}%)</span>`).join("");
+  return `<div style="margin:8px 0 16px;page-break-inside:avoid"><div style="font-size:15px;font-weight:700;color:#0D1526;margin-bottom:6px">${titulo}</div><div style="display:flex;height:24px;border-radius:5px;overflow:hidden;border:1px solid #e2e8f0">${bar}</div><div style="margin-top:7px">${leg}</div></div>`;
+}
+
+function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosByLoteGalpon: Record<string, FotoPDF[]>; checklistsByGranja: Record<string, ChecklistData[]>; usuario: string }): string {
+  const { form, lotes, fotosByLoteGalpon, checklistsByGranja } = opts;
+  const hoy = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
+  const parseDec = (v: any) => { let s = (v ?? "").toString().trim(); if (!s) return 0; if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s.replace(/[^\d.\-]/g, "")); return isFinite(n) ? n : 0; };
+  const morts = lotes.map(l => ({ l, m: mortLote(l) }));
+  const totalAves = morts.reduce((s, x) => s + x.m.pob, 0);
+  const totalMuertas = morts.reduce((s, x) => s + x.m.totalMuertas, 0);
+  const mortGeneral = totalAves > 0 ? (totalMuertas / totalAves) * 100 : 0;
+  const conD7 = morts.filter(x => x.m.tieneD7);
+  const cumplenMort = conD7.filter(x => x.m.cumple).length;
+  const granjasSet = Array.from(new Set(lotes.map(l => l.data.granjaNombre || "—")));
+  const lotesSet = Array.from(new Set(lotes.map(l => l.data.codigo || "—")));
+
+  const allChks = Object.values(checklistsByGranja).flat();
+  const enc = allChks.filter(c => c.tipo === "encacetamiento");
+  const trz = allChks.filter(c => c.tipo === "trazabilidad7");
+  const pctTipo = (arr: ChecklistData[]) => arr.length ? Math.round(arr.reduce((s, c) => s + calcularCumplimiento((c.preguntas || []).map(p => p.resultado)), 0) / arr.length) : 0;
+  const pctEnc = pctTipo(enc), pctTrz = pctTipo(trz);
+  const cumplProm = (enc.length + trz.length) ? Math.round((pctEnc * enc.length + pctTrz * trz.length) / (enc.length + trz.length)) : 0;
+  const colPct = (p: number) => p >= 90 ? VERDE : p >= 70 ? NARANJA : ROJO;
+
+  const hall: Record<string, number> = { cumple: 0, no_cumple: 0, parcial: 0, na: 0 };
+  allChks.forEach(c => (c.preguntas || []).forEach(p => { if (p.resultado && hall[p.resultado] !== undefined) hall[p.resultado]++; }));
+
+  const allMs = allChks.flatMap(c => (c.muestreos || []).filter(m => (m.cantidad ?? 0) > 0 && (m.pesoTotal ?? 0) > 0));
+  const stMs = statMuestreo(allMs);
+  const pesoLote = (x: { m: ReturnType<typeof mortLote> }) => { for (let i = 6; i >= 0; i--) { const v = parseDec(x.m.seg[i]?.peso); if (v > 0) return v; } return 0; };
+  let pesoProm = stMs.unit > 0 ? stMs.unit * 1000 : 0;
+  if (pesoProm === 0) { const ps = morts.map(pesoLote).filter(v => v > 0); pesoProm = ps.length ? ps.reduce((a, b) => a + b, 0) / ps.length : 0; }
+  const planes = morts.filter(x => ((x.l.data as any).recepcionPlan || "").trim()).length;
+
+  // Riesgos / fortalezas / hallazgos (deterministas)
+  const riesgos: string[] = [];
+  conD7.filter(x => !x.m.cumple).forEach(x => riesgos.push(`Lote ${x.l.data.codigo} — ${x.l.data.granjaNombre || "—"}: mortalidad ${x.m.general.toFixed(2)}% (supera el rango de ${MORT_RANGO_D7}%).`));
+  [...enc, ...trz].forEach(c => { const p = calcularCumplimiento((c.preguntas || []).map(q => q.resultado)); if ((c.preguntas || []).length && p < 70) riesgos.push(`${TIPO_LABEL[c.tipo]} — ${c.granjaNombre || "—"}${c.galpon && c.galpon !== "TODOS" ? ` (Galpón ${c.galpon})` : ""}: cumplimiento ${p}%.`); });
+  if (stMs.totalM > 0 && stMs.cv > 12) riesgos.push(`Muestreos con variación de peso significativa (CV ${stMs.cv.toFixed(1)}%), indicio de desuniformidad.`);
+  if (hall.no_cumple > 0) riesgos.push(`${hall.no_cumple} ítem(s) de auditoría marcados como "No cumple" pendientes de cierre.`);
+  if (riesgos.length === 0) riesgos.push("No se identificaron riesgos relevantes en el alcance evaluado.");
+
+  const fortalezas: string[] = [];
+  if (conD7.length > 0 && cumplenMort === conD7.length) fortalezas.push(`La totalidad de los lotes con seguimiento completo (${conD7.length}) cumple el rango de mortalidad (≤ ${MORT_RANGO_D7}%).`);
+  else if (cumplenMort > 0) fortalezas.push(`${cumplenMort} de ${conD7.length} lote(s) con seguimiento completo cumple(n) el rango de mortalidad.`);
+  if (pctEnc >= 90) fortalezas.push(`Alto cumplimiento del Checklist Encasetamiento (${pctEnc}%).`);
+  if (pctTrz >= 90) fortalezas.push(`Alto cumplimiento del Checklist Trazabilidad 7 Días (${pctTrz}%).`);
+  if (stMs.totalM > 0 && stMs.cv <= 8) fortalezas.push(`Uniformidad de peso adecuada en muestreos (CV ${stMs.cv.toFixed(1)}%).`);
+  if (fortalezas.length === 0) fortalezas.push("Registros técnicos estructurados y trazables por granja, lote y galpón.");
+
+  const criticos: string[] = [];
+  if (hall.no_cumple > 0) criticos.push(`${hall.no_cumple} ítem(s) "No cumple" en los checklists de auditoría.`);
+  if (hall.parcial > 0) criticos.push(`${hall.parcial} ítem(s) con cumplimiento parcial por verificar.`);
+  conD7.filter(x => !x.m.cumple).forEach(x => criticos.push(`Mortalidad fuera de rango en lote ${x.l.data.codigo} (${x.m.general.toFixed(2)}%).`));
+  if (criticos.length === 0) criticos.push("Sin hallazgos críticos en el alcance evaluado.");
+
+  // Evidencias relevantes (selección automática por criticidad)
+  const evidsCrit: FotoPDF[] = [];
+  allChks.forEach(c => (c.preguntas || []).forEach(p => { if (p.evidencia && /^data:image\//i.test(p.evidencia) && (p.resultado === "no_cumple" || p.resultado === "parcial")) evidsCrit.push({ src: p.evidencia as string, titulo: `${c.granjaNombre || ""}${c.galpon && c.galpon !== "TODOS" ? ` · Galpón ${c.galpon}` : ""} · ${p.pregunta}`.trim(), pie: RESULTADO_LABEL[p.resultado] }); }));
+  conD7.filter(x => !x.m.cumple).forEach(x => galponesDeLote(x.l).forEach(g => (fotosByLoteGalpon[`${x.l.data.codigo}|${g}`] || []).forEach(f => evidsCrit.push({ ...f, pie: `${f.pie ? f.pie + " · " : ""}Galpón ${g} · mortalidad ${x.m.general.toFixed(2)}%` }))));
+  let evidSel = evidsCrit.slice(0, 9);
+  if (evidSel.length === 0) evidSel = Object.values(fotosByLoteGalpon).flat().slice(0, 6);
+
+  // ── Helpers de maquetación ──
+  const h2 = (num: string, t: string) => `<h2 style="font-size:22px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:18px 0 8px">${num ? num + " " : ""}${t}</h2>`;
+  const parr = (t: string) => `<p style="font-size:20px;line-height:1.7;color:#334155;margin:0 0 10px;text-align:justify">${t}</p>`;
+  const bloque = (titulo: string, items: string[]) => `<div style="margin:0 0 12px;page-break-inside:avoid"><div style="font-size:18px;font-weight:700;color:#0D1526;margin:0 0 4px">${titulo}</div><ul style="margin:0;padding-left:22px;font-size:19px;line-height:1.6;color:#334155">${items.map(i => `<li style="margin-bottom:3px">${i}</li>`).join("")}</ul></div>`;
+
+  const estado = mortGeneral <= MORT_RANGO_D7 ? "satisfactorio" : "requiere atención prioritaria";
+  const sanitario = mortGeneral <= MORT_RANGO_D7
+    ? `El comportamiento sanitario es favorable: la mortalidad acumulada al día 7 (${mortGeneral.toFixed(2)}%) se mantiene dentro del rango técnico esperado (≤ ${MORT_RANGO_D7}%).`
+    : `El comportamiento sanitario presenta alerta: la mortalidad acumulada (${mortGeneral.toFixed(2)}%) supera el rango técnico (${MORT_RANGO_D7}%), lo que sugiere revisar condiciones de recepción, temperatura de cama y manejo en los primeros días.`;
+  const operativa = cumplProm >= 90
+    ? `La ejecución operativa es sólida (cumplimiento de auditoría ${cumplProm}%), con procesos de alistamiento y recepción consistentes.`
+    : cumplProm >= 70
+      ? `La ejecución operativa es aceptable (cumplimiento ${cumplProm}%), con oportunidades de estandarización en los puntos parciales.`
+      : `La ejecución operativa presenta debilidades (cumplimiento ${cumplProm}%) que requieren intervención y reentrenamiento del personal.`;
+
+  // ── Portada ──
+  const portada = `<div style="background:linear-gradient(135deg,#0D1526,#0A2533);color:#fff;padding:46px 40px;margin-bottom:24px">
+    <div style="display:flex;align-items:flex-start;gap:22px">
+      <img src="${LOGO_SAVICOL}" style="width:84px;height:auto;border-radius:6px;flex-shrink:0"/>
+      <div style="flex:1">
+        <div style="font-size:20px;letter-spacing:3px;color:${CYAN};text-transform:uppercase;font-weight:700">${EMPRESA.area}</div>
+        <h1 style="font-size:32px;margin:10px 0 4px;font-weight:800">Informe Ejecutivo de Auditoría</h1>
+        <p style="font-size:22px;color:#94A3B8;margin:0">Resumen gerencial para Comité de Gerencia y Alta Dirección</p>
+      </div>
+    </div>
+    <div style="margin-top:26px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.15);display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:20px;color:#cbd5e1">
+      <div><strong style="color:#fff">N.º de informe:</strong> ${form.numeroInforme || "—"}</div>
+      <div><strong style="color:#fff">Empresa:</strong> ${EMPRESA.nombre}</div>
+      <div><strong style="color:#fff">Granja(s):</strong> ${granjasSet.join(", ")}</div>
+      <div><strong style="color:#fff">Lote(s):</strong> ${lotesSet.join(", ")}</div>
+      <div><strong style="color:#fff">Auditor:</strong> ${form.auditor || "—"}</div>
+      <div><strong style="color:#fff">Fecha de emisión:</strong> ${form.fechaEmision ? fFecha(form.fechaEmision) : hoy}</div>
+    </div>
+  </div>`;
+
+  const indice = `<div style="margin-bottom:18px"><h2 style="font-size:22px;color:#0D1526;border-left:4px solid ${CYAN};padding-left:10px;margin:0 0 8px">Contenido</h2><ol style="font-size:20px;line-height:1.8;color:#334155;margin:0;padding-left:24px"><li>Resumen Ejecutivo</li><li>Indicadores Gerenciales</li><li>Análisis Ejecutivo</li><li>Evidencias Relevantes</li><li>Conclusiones</li><li>Recomendaciones</li><li>Firmas</li></ol></div>`;
+
+  // 1) Resumen Ejecutivo
+  const resumen = `<div style="page-break-before:always">
+    ${h2("1.", "Resumen Ejecutivo")}
+    ${parr(`El presente informe consolida <strong>${lotes.length} lote(s)</strong> de <strong>${granjasSet.join(", ")}</strong>, con una población inicial de <strong>${fNum(totalAves)}</strong> aves y una mortalidad acumulada general del <strong>${mortGeneral.toFixed(2)}%</strong> al día 7. El estado general del proceso es <strong>${estado}</strong>: ${cumplenMort} de ${conD7.length} lote(s) con seguimiento completo se encuentran dentro del rango de mortalidad. El cumplimiento promedio de auditoría es del <strong>${cumplProm}%</strong> (Encasetamiento ${pctEnc}%, Trazabilidad 7 Días ${pctTrz}%).`)}
+    ${bloque("Principales fortalezas", fortalezas)}
+    ${bloque("Hallazgos críticos", criticos)}
+    ${bloque("Riesgos relevantes", riesgos)}
+    ${parr(`<strong>Nivel de cumplimiento:</strong> ${cumplProm}% (auditoría) · Mortalidad ${mortGeneral.toFixed(2)}% (${mortGeneral <= MORT_RANGO_D7 ? "dentro de rango" : "fuera de rango"}).`)}
+    ${parr(`<strong>Conclusión ejecutiva:</strong> ${mortGeneral <= MORT_RANGO_D7 && cumplProm >= 90 ? "El proceso evaluado evidencia un desempeño adecuado y bajo control. Se recomienda sostener las prácticas actuales y el seguimiento sistemático." : mortGeneral <= MORT_RANGO_D7 ? "El proceso es estable en lo sanitario; conviene cerrar los puntos de auditoría pendientes para elevar el cumplimiento." : "El proceso requiere atención de la Dirección para corregir las desviaciones de mortalidad y cerrar las no conformidades identificadas."}`)}
+  </div>`;
+
+  // 2) Indicadores Gerenciales (dashboard)
+  const dashboard = `<div style="page-break-before:always">
+    ${h2("2.", "Indicadores Gerenciales")}
+    ${kpiCards([
+      { label: "Cumpl. Encasetamiento", valor: `${pctEnc}%`, color: colPct(pctEnc) },
+      { label: "Cumpl. Trazabilidad 7d", valor: `${pctTrz}%`, color: colPct(pctTrz) },
+      { label: "Mortalidad general", valor: `${mortGeneral.toFixed(2)}%`, color: mortGeneral <= MORT_RANGO_D7 ? VERDE : ROJO, sub: `Rango ≤ ${MORT_RANGO_D7}%` },
+      { label: "Peso promedio", valor: pesoProm > 0 ? `${Math.round(pesoProm)} g` : "—", color: CYAN, sub: stMs.unit > 0 ? "Muestreos" : "Seguimiento D1–7" },
+      { label: "CV muestreos", valor: stMs.totalM > 0 ? `${stMs.cv.toFixed(1)}%` : "—", color: stMs.totalM === 0 ? "#94A3B8" : stMs.cv <= 8 ? VERDE : stMs.cv <= 12 ? NARANJA : ROJO, sub: stMs.totalM > 0 ? stMs.estado.l : "Sin datos" },
+      { label: "Lotes en cumplimiento", valor: `${cumplenMort}/${conD7.length || 0}`, color: conD7.length > 0 && cumplenMort === conD7.length ? VERDE : NARANJA, sub: "Rango de mortalidad" },
+    ])}
+    ${barsHTML("Análisis de mortalidad por lote (%)", morts.map(x => ({ label: `${x.l.data.codigo}`, valor: +x.m.general.toFixed(2), color: x.m.cumple ? VERDE : x.m.tieneD7 ? ROJO : "#94A3B8", texto: `${x.m.general.toFixed(2)}%` })), { ref: { v: MORT_RANGO_D7, label: `${MORT_RANGO_D7}% máx.` }, max: Math.max(MORT_RANGO_D7 * 1.6, ...morts.map(x => x.m.general)) })}
+    ${barsHTML("Cumplimiento por checklist (%)", [...enc, ...trz].map(c => { const p = calcularCumplimiento((c.preguntas || []).map(q => q.resultado)); return { label: `${(TIPO_LABEL[c.tipo] || c.tipo).replace("Checklist ", "")}${c.galpon && c.galpon !== "TODOS" ? ` · G${c.galpon}` : ""}`, valor: p, color: colPct(p), texto: `${p}%` }; }), { max: 100 })}
+    ${barsHTML("Peso promedio por lote (g)", morts.map(x => ({ label: `${x.l.data.codigo}`, valor: Math.round(pesoLote(x)), color: CYAN, texto: `${Math.round(pesoLote(x))} g` })).filter(d => d.valor > 0), {})}
+    ${stackHTML("Distribución de hallazgos de auditoría", [{ label: "Cumple", valor: hall.cumple, color: VERDE }, { label: "Parcial", valor: hall.parcial, color: NARANJA }, { label: "No cumple", valor: hall.no_cumple, color: ROJO }, { label: "N/A", valor: hall.na, color: "#94A3B8" }])}
+    ${kpiCards([
+      { label: "Planes de acción", valor: `${planes}`, color: planes > 0 ? NARANJA : VERDE, sub: planes > 0 ? "Registrados / por cerrar" : "Sin planes abiertos" },
+      { label: "Hallazgos no conformes", valor: `${hall.no_cumple}`, color: hall.no_cumple > 0 ? ROJO : VERDE, sub: "Ítems 'No cumple'" },
+      { label: "Riesgos identificados", valor: `${riesgos[0].startsWith("No se identificaron") ? 0 : riesgos.length}`, color: riesgos[0].startsWith("No se identificaron") ? VERDE : ROJO, sub: "Ver análisis" },
+    ])}
+  </div>`;
+
+  // 3) Análisis Ejecutivo
+  const analisis = `<div style="page-break-before:always">
+    ${h2("3.", "Análisis Ejecutivo")}
+    ${bloque("Aspectos críticos", criticos)}
+    ${bloque("Hallazgos de mayor impacto", [
+      `Cumplimiento de auditoría: ${cumplProm}% (Encasetamiento ${pctEnc}%, Trazabilidad 7 Días ${pctTrz}%).`,
+      `Mortalidad acumulada general: ${mortGeneral.toFixed(2)}% sobre ${fNum(totalAves)} aves.`,
+      stMs.totalM > 0 ? `Muestreos: ${stMs.totalM} pesaje(s), peso unitario ${(stMs.unit).toLocaleString("es-CO", { maximumFractionDigits: 3 })} kg, CV ${stMs.cv.toFixed(1)}% (${stMs.estado.l}).` : "Muestreos: sin registros de pesaje en el alcance.",
+    ])}
+    ${parr(`<strong>Comportamiento sanitario:</strong> ${sanitario}`)}
+    ${parr(`<strong>Evaluación operativa:</strong> ${operativa}`)}
+    ${bloque("Riesgos prioritarios", riesgos)}
+    ${bloque("Oportunidades de mejora", [
+      hall.parcial > 0 || hall.no_cumple > 0 ? "Cerrar los ítems parciales y no conformes de los checklists con verificación de causa raíz." : "Sostener el nivel de cumplimiento mediante auditorías periódicas.",
+      "Reforzar el control de temperatura y manejo en los primeros días para estabilizar la mortalidad temprana.",
+      stMs.totalM > 0 && stMs.cv > 8 ? "Mejorar la uniformidad del lote (CV de peso por encima del óptimo)." : "Mantener el muestreo sistemático de peso para sostener la uniformidad.",
+      planes > 0 ? "Dar seguimiento al cierre verificado de los planes de acción registrados." : "Documentar planes de acción para las desviaciones que se detecten.",
+    ])}
+  </div>`;
+
+  // 4) Evidencias Relevantes
+  const evidencias = `<div style="page-break-before:always">
+    ${h2("4.", "Evidencias Relevantes")}
+    ${parr(evidSel.length ? "Selección de evidencias fotográficas más representativas según la criticidad de los hallazgos registrados." : "No se registraron evidencias fotográficas en el alcance evaluado.")}
+    ${evidSel.length ? evidenciasGridHTML(evidSel) : ""}
+  </div>`;
+
+  // 5) Conclusiones
+  const conclusiones = `<div style="page-break-before:always">
+    ${h2("5.", "Conclusiones")}
+    ${bloque("Conclusiones ejecutivas", [
+      `El alcance evaluado comprende ${lotes.length} lote(s) y ${allChks.length} checklist(s) de auditoría en ${granjasSet.join(", ")}.`,
+      `${cumplenMort} de ${conD7.length} lote(s) con seguimiento completo cumplen el rango de mortalidad (≤ ${MORT_RANGO_D7}%).`,
+      `El cumplimiento promedio de auditoría es del ${cumplProm}%.`,
+    ])}
+    ${parr(`<strong>Impacto operativo:</strong> ${cumplProm >= 90 ? "Procesos operativos consistentes con bajo riesgo de reproceso." : "Existen desviaciones operativas que pueden afectar la eficiencia y deben atenderse."}`)}
+    ${parr(`<strong>Impacto productivo:</strong> ${mortGeneral <= MORT_RANGO_D7 ? "La mortalidad bajo control favorece la conversión y el desempeño productivo esperado." : "La mortalidad fuera de rango compromete el potencial productivo del lote."}`)}
+    ${parr(`<strong>Nivel de cumplimiento:</strong> ${cumplProm}% global de auditoría.`)}
+    ${parr(`<strong>Estado general del proceso:</strong> ${estado}.`)}
+  </div>`;
+
+  // 6) Recomendaciones
+  const recomendaciones = `<div style="page-break-before:always">
+    ${h2("6.", "Recomendaciones")}
+    ${bloque("Gerencia", [
+      conD7.some(x => !x.m.cumple) ? "Priorizar la atención de los lotes fuera de rango y asignar recursos para el cierre de no conformidades." : "Sostener el modelo de control interno que mantiene el proceso dentro de los rangos técnicos.",
+      "Institucionalizar el seguimiento del tablero de indicadores como insumo de decisión del Comité.",
+    ])}
+    ${bloque("Dirección de Engorde", [
+      "Reforzar el control de temperatura de cama y ambiente durante los primeros días.",
+      conD7.some(x => !x.m.cumple) ? "Implementar seguimiento reforzado en los lotes con mortalidad elevada hasta su normalización." : "Mantener el protocolo de recepción y manejo inicial que sostiene la baja mortalidad.",
+    ])}
+    ${bloque("Operación", [
+      "Estandarizar el alistamiento y la recepción conforme a los checklists de auditoría.",
+      hall.no_cumple > 0 || hall.parcial > 0 ? "Atender de forma inmediata los ítems parciales y no conformes detectados." : "Mantener la disciplina operativa que sostiene el cumplimiento.",
+    ])}
+    ${bloque("Cumplimiento", [
+      "Verificar el cierre documentado de los planes de acción.",
+      "Conservar la trazabilidad por granja, lote y galpón para auditorías posteriores.",
+    ])}
+  </div>`;
+
+  // 7) Firmas
+  const firmantes: [string, string][] = [["Auditor", form.auditor], ["Director de Engorde", form.directorEngorde], ["Oficial de Cumplimiento", form.oficialCumplimiento], ["Gerente General", form.gerenteGeneral]];
+  const firmas = `<div style="margin-top:24px;page-break-inside:avoid">
+    ${h2("7.", "Firmas")}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:34px 40px;margin-top:18px">
+      ${firmantes.map(f => `<div style="text-align:center"><div style="border-top:1px solid #0D1526;margin-top:46px;padding-top:6px"><div style="font-size:20px;font-weight:700;color:#0D1526">${f[1] || "—"}</div><div style="font-size:15px;color:#94a3b8">${f[0]}</div><div style="font-size:14px;color:#94a3b8;margin-top:5px">Fecha: ______________</div></div></div>`).join("")}
+    </div>
+  </div>`;
+
+  const pie = `<div style="margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:15px;color:#94a3b8;text-align:center">${EMPRESA.nombre} · ${EMPRESA.area} · Documento confidencial de uso interno · ${hoy}</div>`;
+
+  return `<div style="font-family:'Times New Roman', Times, serif;color:#0D1526;width:794px">
+    ${portada}
+    <div style="padding:0 8px 20px">
+      ${indice}
+      ${resumen}
+      ${dashboard}
+      ${analisis}
+      ${evidencias}
+      ${conclusiones}
+      ${recomendaciones}
+      ${firmas}
+      ${pie}
+    </div>
+  </div>`;
+}
+
+// ── Modal · Informe Ejecutivo ────────────────────────────────────────────────
+export function InformeEjecutivoModal({ lotes, granjas, usuario, onClose }: {
+  lotes: LoteItem[]; granjas: any[]; usuario: string; onClose: () => void;
+}) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const granjasSet = Array.from(new Set(lotes.map(l => l.data.granjaNombre).filter(Boolean)));
+  const [form, setForm] = useState({
+    numeroInforme: `IE-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
+    fechaEmision: hoy,
+    auditor: usuario,
+    directorEngorde: "",
+    oficialCumplimiento: "",
+    gerenteGeneral: "",
+  });
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  const [fase, setFase] = useState<"idle" | "fotos" | "pdf">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function exportar() {
+    if (lotes.length === 0) { setError("No hay lotes en el alcance (ajusta los filtros)."); return; }
+    if (!form.numeroInforme.trim()) { setError("Indica el número de informe."); return; }
+    setError(null);
+    try {
+      setFase("fotos");
+      const { fotosByLoteGalpon, checklistsByGranja } = await cargarDatosInforme(lotes);
+      setFase("pdf");
+      const html = construirInformeEjecutivo({ form, lotes, fotosByLoteGalpon, checklistsByGranja, usuario });
+      await generarPDF(html, `Informe-Ejecutivo-${(granjasSet[0] || "Granjas").replace(/\s+/g, "-")}-${hoy}.pdf`, { pageNumbers: true });
+      onClose();
+    } catch (e: any) {
+      setError("Error al generar el informe: " + (e?.message ?? "desconocido"));
+    } finally { setFase("idle"); }
+  }
+
+  const generando = fase !== "idle";
+  const IN = "w-full bg-[#0A111F] border border-[#1E2D4A] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/50";
+  const LBL = "text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-1.5 block";
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <header className="shrink-0 flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
+          <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-amber-400"/><h3 className="font-display font-bold text-white text-sm">Generar Informe Ejecutivo · PDF</h3></div>
+          <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
+        </header>
+
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
+          <div className="px-3 py-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20 text-[11px] text-[#94A3B8]">
+            Resumen gerencial de <strong className="text-amber-300">{lotes.length} lote(s)</strong> ({granjasSet.join(", ") || "todas las granjas"}). Incluye resumen ejecutivo, dashboard de indicadores, análisis, evidencias relevantes (selección automática por criticidad), conclusiones, recomendaciones y firmas.
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div><label className={LBL}><Hash className="w-3 h-3 inline mr-1"/>N.º de informe</label><input value={form.numeroInforme} onChange={e => set("numeroInforme", e.target.value)} className={IN}/></div>
+            <div><label className={LBL}><Calendar className="w-3 h-3 inline mr-1"/>Fecha de emisión</label><input type="date" value={form.fechaEmision} onChange={e => set("fechaEmision", e.target.value)} className={IN}/></div>
+          </div>
+
+          <div className="pt-1"><div className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide mb-2">Firmas (nombre y cargo)</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div><label className={LBL}><User className="w-3 h-3 inline mr-1"/>Auditor</label><input value={form.auditor} onChange={e => set("auditor", e.target.value)} className={IN}/></div>
+              <div><label className={LBL}>Director de Engorde</label><input value={form.directorEngorde} onChange={e => set("directorEngorde", e.target.value)} placeholder="Nombre" className={IN}/></div>
+              <div><label className={LBL}>Oficial de Cumplimiento</label><input value={form.oficialCumplimiento} onChange={e => set("oficialCumplimiento", e.target.value)} placeholder="Nombre" className={IN}/></div>
+              <div><label className={LBL}>Gerente General</label><input value={form.gerenteGeneral} onChange={e => set("gerenteGeneral", e.target.value)} placeholder="Nombre" className={IN}/></div>
+            </div>
+          </div>
+
+          {error && <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs">{error}</div>}
+          <p className="text-[10px] text-[#64748B]">Documento en formato corporativo (Times New Roman, títulos 14 pt / contenido 12 pt), con índice, numeración de páginas, márgenes y saltos inteligentes para no cortar tablas, gráficos ni imágenes. La generación puede tardar ~15–30 s.</p>
+        </div>
+
+        <footer className="shrink-0 flex items-center justify-end gap-2 px-6 py-4 border-t border-[#1E2D4A]">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs text-[#94A3B8] hover:text-white" disabled={generando}>Cancelar</button>
+          <button onClick={exportar} disabled={generando || lotes.length === 0}
+            className="px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-[#0A111F] text-xs font-bold flex items-center gap-2 disabled:opacity-40">
+            {generando ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Download className="w-3.5 h-3.5"/>}
+            {fase === "fotos" ? "Procesando evidencias…" : fase === "pdf" ? "Construyendo PDF…" : "Generar Ejecutivo"}
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
 }
 
 // ── Modal ───────────────────────────────────────────────────────────────────

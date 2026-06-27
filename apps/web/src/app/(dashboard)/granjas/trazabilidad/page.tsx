@@ -4,7 +4,7 @@ import { Header } from "@/components/layout/header";
 import { useGranjas } from "@/hooks/useGranjas";
 import { useAuthStore } from "@/store/auth.store";
 import { ChecklistSection } from "./checklists-trazabilidad";
-import { InformeGeneralModal } from "./informe-general";
+import { InformeGeneralModal, InformeEjecutivoModal } from "./informe-general";
 import {
   useLotes, useCreateLote, useUpdateLote, useDeleteLote,
   loteVacio, avanceGlobal, GALPONES,
@@ -73,6 +73,7 @@ export default function TrazabilidadPage() {
   const hayFiltros = !!(search || filterEstado || filterGranja || fechaDesde || fechaHasta);
   const [modalOpen, setModalOpen] = useState(false);
   const [informeOpen, setInformeOpen] = useState(false);
+  const [ejecutivoOpen, setEjecutivoOpen] = useState(false);
   const [editing, setEditing] = useState<LoteItem | null>(null);
   const [vista, setVista] = useState<"lotes" | "encacetamiento" | "trazabilidad7">("lotes");
 
@@ -191,9 +192,14 @@ export default function TrazabilidadPage() {
             </button>
           )}
           <button onClick={() => setInformeOpen(true)} disabled={filtrados.length === 0}
-            title="Generar Informe Ejecutivo de los lotes filtrados"
+            title="Generar Informe General de los lotes filtrados"
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#1A2540] hover:bg-[#243150] border border-cyan-500/30 text-cyan-300 text-sm font-semibold whitespace-nowrap disabled:opacity-40">
-            <FileText className="w-4 h-4"/> Generar Informe General
+            <FileText className="w-4 h-4"/> Informe General
+          </button>
+          <button onClick={() => setEjecutivoOpen(true)} disabled={filtrados.length === 0}
+            title="Generar Informe Ejecutivo (gerencial) de los lotes filtrados"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#1A2540] hover:bg-[#243150] border border-amber-500/30 text-amber-300 text-sm font-semibold whitespace-nowrap disabled:opacity-40">
+            <FileText className="w-4 h-4"/> Informe Ejecutivo
           </button>
           <button onClick={() => { setEditing(null); setModalOpen(true); }}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-sm font-bold whitespace-nowrap">
@@ -313,6 +319,15 @@ export default function TrazabilidadPage() {
           granjas={granjas}
           usuario={usuario}
           onClose={() => setInformeOpen(false)}
+        />
+      )}
+
+      {ejecutivoOpen && (
+        <InformeEjecutivoModal
+          lotes={filtrados}
+          granjas={granjas}
+          usuario={usuario}
+          onClose={() => setEjecutivoOpen(false)}
         />
       )}
     </div>
