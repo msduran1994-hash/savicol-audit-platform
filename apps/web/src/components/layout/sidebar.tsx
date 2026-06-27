@@ -28,7 +28,6 @@ const MAIN_NAV = [
 
 const GRANJAS_NAV = [
   { href: "/granjas",            label: "Dashboard",        icon: LayoutDashboard,  badge: null },
-  { href: "/granjas/ejecutivo",  label: "Dashboard Ejecutivo", icon: Sparkles,      badge: null },
   { href: "/granjas/registro",   label: "Granjas",          icon: Tractor,          badge: null },
   { href: "/granjas/auditorias", label: "Auditorías",       icon: ClipboardCheck,   badge: null },
   { href: "/granjas/hallazgos",  label: "Hallazgos",        icon: AlertTriangle,    badge: null },
