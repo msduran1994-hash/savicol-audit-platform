@@ -10,8 +10,11 @@ import {
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   RadarChart, PolarGrid, PolarAngleAxis, Radar,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from "recharts";
+import { useState, useMemo } from "react";
+import { useLotes, useChecklists, calcularCumplimiento, type LoteItem, type ChecklistData } from "@/hooks/useLotes";
+import { mortLote, statMuestreo, galponesDeLote, pesoLoteD7, stddev, MORT_RANGO_D7 } from "@/lib/trazabilidad-metrics";
 
 const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#EC4899"];
 
@@ -35,6 +38,83 @@ export default function GranjasDashboardPage() {
   const hallazgos  = useGranjasStore(useShallow((s) => s.hallazgos));
   const kpis       = useGranjasStore(useShallow((s) => s.kpis));
   const auditorias = useGranjasStore(useShallow((s) => s.auditorias));
+
+  // ─── Trazabilidad (datos reales de /documentos) ────────────────────────────
+  const { data: lotesTrz = [], isLoading: trzLoading } = useLotes();
+  const { data: encItems = [] } = useChecklists("encacetamiento");
+  const { data: trzItems = [] } = useChecklists("trazabilidad7");
+
+  const ssGet = (k: string) => (typeof window !== "undefined" ? sessionStorage.getItem(k) ?? "" : "");
+  const [fGranja, setFGranja] = useState(() => ssGet("dash-trz-granja"));
+  const [fDesde, setFDesde] = useState(() => ssGet("dash-trz-desde"));
+  const [fHasta, setFHasta] = useState(() => ssGet("dash-trz-hasta"));
+  const setF = (k: "granja" | "desde" | "hasta", v: string) => {
+    if (typeof window !== "undefined") sessionStorage.setItem(`dash-trz-${k}`, v);
+    if (k === "granja") setFGranja(v); else if (k === "desde") setFDesde(v); else setFHasta(v);
+  };
+  const limpiarTrz = () => { ["granja", "desde", "hasta"].forEach(k => { if (typeof window !== "undefined") sessionStorage.removeItem(`dash-trz-${k}`); }); setFGranja(""); setFDesde(""); setFHasta(""); };
+
+  const granjasOpts = useMemo(() => {
+    const m = new Map<string, string>();
+    lotesTrz.forEach(l => { if (l.data.granjaId) m.set(l.data.granjaId, l.data.granjaNombre || l.data.granjaId); });
+    return Array.from(m, ([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [lotesTrz]);
+
+  const trz = useMemo(() => {
+    const enRango = (f?: string) => { if (!f) return true; if (fDesde && f < fDesde) return false; if (fHasta && f > fHasta) return false; return true; };
+    const lotesF = lotesTrz.filter(l => (!fGranja || l.data.granjaId === fGranja) && enRango(l.data.fechaIngreso));
+    const chksF: ChecklistData[] = [...encItems, ...trzItems].map(c => c.data).filter(c => (!fGranja || c.granjaId === fGranja) && enRango(c.fechaVisita));
+
+    const map = new Map<string, { nombre: string; lotes: LoteItem[]; chks: ChecklistData[] }>();
+    lotesF.forEach(l => { const k = l.data.granjaId || l.data.granjaNombre || "—"; if (!map.has(k)) map.set(k, { nombre: l.data.granjaNombre || "—", lotes: [], chks: [] }); map.get(k)!.lotes.push(l); });
+    chksF.forEach(c => { const k = c.granjaId || "—"; if (map.has(k)) map.get(k)!.chks.push(c); });
+
+    const datos = Array.from(map.values()).map(g => {
+      const ms = g.lotes.map(mortLote);
+      const pob = ms.reduce((s, m) => s + m.pob, 0), muertas = ms.reduce((s, m) => s + m.totalMuertas, 0);
+      const mort = pob > 0 ? (muertas / pob) * 100 : 0;
+      const galMorts: number[] = []; g.lotes.forEach((l, i) => galponesDeLote(l).forEach(() => galMorts.push(ms[i].general)));
+      const disp = stddev(galMorts);
+      const cumplVals = g.chks.map(c => calcularCumplimiento((c.preguntas || []).map(p => p.resultado)));
+      const cumpl = cumplVals.length ? Math.round(cumplVals.reduce((a, b) => a + b, 0) / cumplVals.length) : 0;
+      const allMs = g.chks.flatMap(c => (c.muestreos || []).filter(m => (m.cantidad ?? 0) > 0 && (m.pesoTotal ?? 0) > 0));
+      const st = statMuestreo(allMs);
+      let peso = st.unit > 0 ? st.unit * 1000 : 0;
+      if (peso === 0) { const ps = g.lotes.map(l => pesoLoteD7((l.data as any).seguimiento || [])).filter(v => v > 0); peso = ps.length ? ps.reduce((a, b) => a + b, 0) / ps.length : 0; }
+      const cv = st.totalM > 0 ? st.cv : 0;
+      const noConf = g.chks.reduce((s, c) => s + (c.preguntas || []).filter(p => p.resultado === "no_cumple").length, 0);
+      let crit = 0;
+      crit += Math.min(35, (mort / MORT_RANGO_D7) * 17.5);
+      crit += Math.min(30, (100 - cumpl) * 0.3);
+      crit += cv > 12 ? 20 : cv > 8 ? 10 : 0;
+      crit += Math.min(15, noConf * 3);
+      crit = Math.round(crit);
+      return {
+        name: g.nombre, lotes: g.lotes.length,
+        mort: +mort.toFixed(2), cumpl, disp: +disp.toFixed(2), peso: Math.round(peso), cv: +cv.toFixed(1), crit,
+        mortColor: mort <= MORT_RANGO_D7 ? "#10B981" : "#EF4444",
+        cumplColor: cumpl >= 90 ? "#10B981" : cumpl >= 70 ? "#F59E0B" : "#EF4444",
+        critColor: crit >= 60 ? "#EF4444" : crit >= 35 ? "#F59E0B" : "#10B981",
+      };
+    }).sort((a, b) => b.crit - a.crit);
+
+    const totPob = lotesF.reduce((s, l) => s + mortLote(l).pob, 0);
+    const totMuertas = lotesF.reduce((s, l) => s + mortLote(l).totalMuertas, 0);
+    const allCumpl = chksF.map(c => calcularCumplimiento((c.preguntas || []).map(p => p.resultado)));
+    const allMsG = chksF.flatMap(c => (c.muestreos || []).filter(m => (m.cantidad ?? 0) > 0 && (m.pesoTotal ?? 0) > 0));
+    const stG = statMuestreo(allMsG);
+    return {
+      datos,
+      kpi: {
+        lotes: lotesF.length,
+        mort: totPob > 0 ? (totMuertas / totPob) * 100 : 0,
+        cumpl: allCumpl.length ? Math.round(allCumpl.reduce((a, b) => a + b, 0) / allCumpl.length) : 0,
+        peso: stG.unit > 0 ? Math.round(stG.unit * 1000) : 0,
+        cv: stG.totalM > 0 ? stG.cv : 0,
+        criticas: datos.filter(d => d.crit >= 60).length,
+      },
+    };
+  }, [lotesTrz, encItems, trzItems, fGranja, fDesde, fHasta]);
 
   // ─── KPIs principales ──────────────────────────────────────────────────────
   const totalHallazgos    = hallazgos.length;
@@ -128,6 +208,122 @@ export default function GranjasDashboardPage() {
       />
 
       <div className="flex-1 p-6 space-y-6">
+        {/* ═══ Trazabilidad · Resultados por Granja (datos reales de /documentos) ═══ */}
+        <div className="card-base p-5 space-y-5 border border-cyan-500/20">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display font-bold text-white text-lg flex items-center gap-2">
+                <Activity className="w-5 h-5 text-cyan-400"/> Trazabilidad · Resultados por Granja
+              </h2>
+              <p className="text-xs text-[#94A3B8] mt-0.5">Mortalidad, cumplimiento, dispersión, peso y criticidad — datos de Granjas → Trazabilidad</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={fGranja} onChange={e => setF("granja", e.target.value)}
+                className="bg-[#0A111F] border border-[#1E2D4A] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-cyan-500/50">
+                <option value="">Todas las granjas</option>
+                {granjasOpts.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+              </select>
+              <div className="flex items-center gap-1.5 bg-[#0A111F] border border-[#1E2D4A] rounded-lg px-3 py-2">
+                <span className="text-[11px] text-[#64748B] whitespace-nowrap">Fecha:</span>
+                <input type="date" value={fDesde} onChange={e => setF("desde", e.target.value)} className="bg-transparent text-xs text-white outline-none" title="Desde"/>
+                <span className="text-[#475569]">–</span>
+                <input type="date" value={fHasta} onChange={e => setF("hasta", e.target.value)} className="bg-transparent text-xs text-white outline-none" title="Hasta"/>
+              </div>
+              {(fGranja || fDesde || fHasta) && (
+                <button onClick={limpiarTrz} className="px-3 py-2 rounded-lg bg-[#1A2540] hover:bg-[#243150] text-[#94A3B8] hover:text-white text-xs">Limpiar</button>
+              )}
+            </div>
+          </div>
+
+          {trzLoading ? (
+            <p className="text-[#475569] text-sm text-center py-10">Cargando datos de trazabilidad…</p>
+          ) : trz.datos.length === 0 ? (
+            <div className="flex items-center justify-center h-[160px] text-[#475569] text-sm">Sin lotes de trazabilidad para los filtros seleccionados</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <Kpi icon={<Tractor/>} label="Lotes" value={trz.kpi.lotes} color="#06B6D4" />
+                <Kpi icon={<Skull/>} label="Mortalidad general" value={`${trz.kpi.mort.toFixed(2)}%`} color={trz.kpi.mort <= MORT_RANGO_D7 ? "#10B981" : "#EF4444"} />
+                <Kpi icon={<Target/>} label="Cumplimiento prom." value={`${trz.kpi.cumpl}%`} color={trz.kpi.cumpl >= 90 ? "#10B981" : trz.kpi.cumpl >= 70 ? "#F59E0B" : "#EF4444"} />
+                <Kpi icon={<TrendingUp/>} label="Peso promedio" value={trz.kpi.peso > 0 ? `${trz.kpi.peso} g` : "—"} color="#3B82F6" />
+                <Kpi icon={<Activity/>} label="CV muestreos" value={trz.kpi.cv > 0 ? `${trz.kpi.cv.toFixed(1)}%` : "—"} color={trz.kpi.cv === 0 ? "#94A3B8" : trz.kpi.cv <= 8 ? "#10B981" : trz.kpi.cv <= 12 ? "#F59E0B" : "#EF4444"} />
+                <Kpi icon={<AlertTriangle/>} label="Granjas críticas" value={trz.kpi.criticas} color="#EF4444" alert={trz.kpi.criticas > 0} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <ChartCard title="Mortalidad por granja (%)">
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={trz.datos} barSize={24} margin={{ top: 10, right: 16, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false}/>
+                      <XAxis dataKey="name" tick={{ fill:"#94A3B8", fontSize:10 }} angle={-20} textAnchor="end" height={56} interval={0} axisLine={false} tickLine={false}/>
+                      <YAxis tick={{ fill:"#94A3B8", fontSize:10 }} axisLine={false} tickLine={false}/>
+                      <Tooltip content={<Tip />}/>
+                      <ReferenceLine y={MORT_RANGO_D7} stroke="#EF4444" strokeDasharray="4 3" label={{ value:`máx ${MORT_RANGO_D7}%`, fill:"#EF4444", fontSize:10, position:"insideTopRight" }}/>
+                      <Bar dataKey="mort" name="Mortalidad %" radius={[3,3,0,0]}>
+                        {trz.datos.map((d, i) => <Cell key={i} fill={d.mortColor}/>)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+
+                <ChartCard title="Cumplimiento por granja (%)">
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={trz.datos} barSize={24} margin={{ top: 10, right: 16, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false}/>
+                      <XAxis dataKey="name" tick={{ fill:"#94A3B8", fontSize:10 }} angle={-20} textAnchor="end" height={56} interval={0} axisLine={false} tickLine={false}/>
+                      <YAxis domain={[0,100]} tick={{ fill:"#94A3B8", fontSize:10 }} axisLine={false} tickLine={false}/>
+                      <Tooltip content={<Tip />}/>
+                      <Bar dataKey="cumpl" name="Cumplimiento %" radius={[3,3,0,0]}>
+                        {trz.datos.map((d, i) => <Cell key={i} fill={d.cumplColor}/>)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+
+                <ChartCard title="Dispersión de mortalidad entre galpones (σ, pp)">
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={trz.datos} barSize={24} margin={{ top: 10, right: 16, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false}/>
+                      <XAxis dataKey="name" tick={{ fill:"#94A3B8", fontSize:10 }} angle={-20} textAnchor="end" height={56} interval={0} axisLine={false} tickLine={false}/>
+                      <YAxis tick={{ fill:"#94A3B8", fontSize:10 }} axisLine={false} tickLine={false}/>
+                      <Tooltip content={<Tip />}/>
+                      <Bar dataKey="disp" name="σ mortalidad (pp)" fill="#8B5CF6" radius={[3,3,0,0]}/>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+
+                <ChartCard title="Peso promedio por granja (g)">
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={trz.datos} barSize={24} margin={{ top: 10, right: 16, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false}/>
+                      <XAxis dataKey="name" tick={{ fill:"#94A3B8", fontSize:10 }} angle={-20} textAnchor="end" height={56} interval={0} axisLine={false} tickLine={false}/>
+                      <YAxis tick={{ fill:"#94A3B8", fontSize:10 }} axisLine={false} tickLine={false}/>
+                      <Tooltip content={<Tip />}/>
+                      <Bar dataKey="peso" name="Peso prom (g)" fill="#06B6D4" radius={[3,3,0,0]}/>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+              </div>
+
+              <ChartCard title="Índice de criticidad por granja (0–100 · mortalidad + cumplimiento + CV + no conformes)">
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={trz.datos} barSize={26} margin={{ top: 10, right: 16, left: 0, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false}/>
+                    <XAxis dataKey="name" tick={{ fill:"#94A3B8", fontSize:10 }} angle={-15} textAnchor="end" height={56} interval={0} axisLine={false} tickLine={false}/>
+                    <YAxis domain={[0,100]} tick={{ fill:"#94A3B8", fontSize:10 }} axisLine={false} tickLine={false}/>
+                    <Tooltip content={<Tip />}/>
+                    <ReferenceLine y={60} stroke="#EF4444" strokeDasharray="4 3" label={{ value:"Crítica", fill:"#EF4444", fontSize:10, position:"insideTopRight" }}/>
+                    <ReferenceLine y={35} stroke="#F59E0B" strokeDasharray="4 3" label={{ value:"Media", fill:"#F59E0B", fontSize:10, position:"insideTopRight" }}/>
+                    <Bar dataKey="crit" name="Índice criticidad" radius={[3,3,0,0]}>
+                      {trz.datos.map((d, i) => <Cell key={i} fill={d.critColor}/>)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </>
+          )}
+        </div>
+
         {/* Banner · Dashboard Ejecutivo Avanzado Granjas */}
         <a
           href="/granjas/ejecutivo"
