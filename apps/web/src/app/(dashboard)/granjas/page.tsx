@@ -10,6 +10,7 @@ import { useAuthStore } from "@/store/auth.store";
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart, ReferenceLine,
+  RadarChart, PolarGrid, PolarAngleAxis, Radar,
 } from "recharts";
 import {
   Tractor, AlertTriangle, ShieldCheck, Target, Users, Sparkles, Bug,
@@ -19,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useLotes, useChecklists, calcularCumplimiento, type LoteItem, type ChecklistData } from "@/hooks/useLotes";
 import { mortLote, statMuestreo, galponesDeLote, pesoLoteD7, stddev, MORT_RANGO_D7 } from "@/lib/trazabilidad-metrics";
+import { exportarDashboardPDF } from "@/lib/dashboard-pdf";
 
 const TIPOS_GRANJA = ["PROPIA", "ARRENDADA", "INTEGRADA"];
 const TIPOS_OPERATIVO = ["ENGORDE", "REPRODUCTORA"];
@@ -47,6 +49,7 @@ export default function GranjasDashboardPage() {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [aiOpen, setAiOpen]         = useState(true);
   const [aiTrigger, setAiTrigger]   = useState(false);
+  const [pdfBusy, setPdfBusy]       = useState(false);
 
   const execQ = useGranjasExecutive(filters);
   const aiQ   = useGranjasAiSummary(filters, aiTrigger);
@@ -147,6 +150,9 @@ export default function GranjasDashboardPage() {
             </button>
             <button onClick={downloadExcel} className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs font-medium text-emerald-300 flex items-center gap-2 hover:bg-emerald-500/20">
               <FileSpreadsheet className="w-3.5 h-3.5"/> Excel Hallazgos
+            </button>
+            <button onClick={async () => { setPdfBusy(true); try { await exportarDashboardPDF({ exec, trz: trzData, filters }); } catch { alert("Error al generar el PDF"); } finally { setPdfBusy(false); } }} disabled={pdfBusy || !exec} className="px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-xs font-medium text-cyan-300 flex items-center gap-2 hover:bg-cyan-500/20 disabled:opacity-50">
+              {pdfBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <FileText className="w-3.5 h-3.5"/>} {pdfBusy ? "Generando…" : "Exportar PDF"}
             </button>
           </div>
         </div>
@@ -286,6 +292,12 @@ export default function GranjasDashboardPage() {
               </ChartCard>
               <ChartCard title="Granjas por Producción" subtitle="Top 10 por capacidad de aves">
                 <ProduccionChart data={exec.charts?.granjasProduccion}/>
+              </ChartCard>
+              <ChartCard title="Radar de Riesgos por Categoría" subtitle="Concentración de hallazgos por área">
+                <RadarCategoriaChart data={exec.charts?.hallazgosPorCategoria}/>
+              </ChartCard>
+              <ChartCard title="Riesgos: Mitigados vs Activos" subtitle="Cerrados/verificados vs abiertos">
+                <MitigadosChart cerrados={exec.kpis?.hallazgosCerrados ?? 0} activos={exec.kpis?.hallazgosAbiertos ?? 0}/>
               </ChartCard>
             </div>
 
@@ -637,6 +649,35 @@ function ProduccionChart({ data }: { data: any[] }) {
         <Tooltip content={<Tip/>}/>
         <Bar dataKey="capacidad" fill="#10B981" name="Aves" radius={[0,3,3,0]}/>
       </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function RadarCategoriaChart({ data }: { data: any[] }) {
+  if (!data?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin hallazgos por categoría</p>;
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <RadarChart data={data} outerRadius="72%">
+        <PolarGrid stroke="#1E2D4A"/>
+        <PolarAngleAxis dataKey="categoria" tick={{ fill: "#94A3B8", fontSize: 9 }}/>
+        <Tooltip content={<Tip/>}/>
+        <Radar dataKey="count" stroke="#8B5CF6" fill="#8B5CF6" fillOpacity={0.4}/>
+      </RadarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function MitigadosChart({ cerrados, activos }: { cerrados: number; activos: number }) {
+  if ((cerrados + activos) === 0) return <p className="text-center text-xs text-[#475569] py-8">Sin hallazgos</p>;
+  const data = [{ name: "Mitigados", value: cerrados, color: "#10B981" }, { name: "Activos", value: activos, color: "#EF4444" }];
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <PieChart>
+        <Pie data={data} dataKey="value" cx="50%" cy="50%" innerRadius={55} outerRadius={90} label={(d: any) => `${d.name}: ${d.value}`}>
+          {data.map((d, i) => <Cell key={i} fill={d.color}/>)}
+        </Pie>
+        <Tooltip content={<Tip/>}/>
+      </PieChart>
     </ResponsiveContainer>
   );
 }
