@@ -400,6 +400,51 @@ function stackHTML(titulo: string, segs: { label: string; valor: number; color: 
   return `<div style="margin:8px 0 16px;page-break-inside:avoid"><div style="font-size:15px;font-weight:700;color:#0D1526;margin-bottom:6px">${titulo}</div><div style="display:flex;height:24px;border-radius:5px;overflow:hidden;border:1px solid #e2e8f0">${bar}</div><div style="margin-top:7px">${leg}</div></div>`;
 }
 
+// Torta/dona dibujada en canvas real → <img> (html2canvas la rasteriza sin fallar).
+function canvasPie(titulo: string, segs: { label: string; valor: number; color: string }[], opts?: { centro?: string; centroSub?: string }): string {
+  const size = 188, dpr = 2;
+  const cv = document.createElement("canvas"); cv.width = size * dpr; cv.height = size * dpr;
+  const ctx = cv.getContext("2d"); if (!ctx) return "";
+  ctx.scale(dpr, dpr);
+  const cx = size / 2, cy = size / 2, r = size / 2 - 8, rin = r * 0.6;
+  const total = segs.reduce((s, x) => s + x.valor, 0) || 1; let a0 = -Math.PI / 2;
+  segs.filter(s => s.valor > 0).forEach(s => { const a1 = a0 + (s.valor / total) * 2 * Math.PI; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, a0, a1); ctx.closePath(); ctx.fillStyle = s.color; ctx.fill(); a0 = a1; });
+  ctx.beginPath(); ctx.arc(cx, cy, rin, 0, 2 * Math.PI); ctx.fillStyle = "#fff"; ctx.fill();
+  if (opts?.centro) { ctx.fillStyle = "#0D1526"; ctx.textAlign = "center"; ctx.font = "bold 26px 'Times New Roman', serif"; ctx.fillText(opts.centro, cx, cy + 2); if (opts.centroSub) { ctx.font = "12px 'Times New Roman', serif"; ctx.fillStyle = "#64748b"; ctx.fillText(opts.centroSub, cx, cy + 18); } }
+  const img = cv.toDataURL("image/png");
+  const leg = segs.map(s => `<div style="display:flex;align-items:center;gap:7px;font-size:13px;color:#334155;margin-bottom:5px"><span style="width:12px;height:12px;border-radius:3px;background:${s.color};display:inline-block;flex-shrink:0"></span>${s.label}:&nbsp;<strong>${s.valor}</strong>&nbsp;(${Math.round((s.valor / total) * 100)}%)</div>`).join("");
+  return `<div style="margin:8px 0 14px;page-break-inside:avoid"><div style="font-size:15px;font-weight:700;color:#0D1526;margin-bottom:6px">${titulo}</div><div style="display:flex;align-items:center;gap:18px"><img src="${img}" style="width:${size}px;height:${size}px;flex-shrink:0"/><div>${leg}</div></div></div>`;
+}
+// Tendencia (línea + área con degradado) en canvas → <img>.
+function canvasLine(titulo: string, labels: string[], valores: number[], color: string, opts?: { ref?: number; refLabel?: string; unidad?: string }): string {
+  const cssW = 720, cssH = 210, dpr = 2;
+  const cv = document.createElement("canvas"); cv.width = cssW * dpr; cv.height = cssH * dpr;
+  const ctx = cv.getContext("2d"); if (!ctx) return "";
+  ctx.scale(dpr, dpr);
+  const padL = 46, padR = 18, padT = 16, padB = 30, w = cssW - padL - padR, h = cssH - padT - padB;
+  const max = Math.max(0.001, ...valores, opts?.ref ?? 0) * 1.18;
+  const X = (i: number) => padL + (valores.length <= 1 ? w / 2 : (i / (valores.length - 1)) * w);
+  const Y = (v: number) => padT + h - (v / max) * h;
+  ctx.strokeStyle = "#e2e8f0"; ctx.lineWidth = 1; ctx.fillStyle = "#94a3b8"; ctx.font = "11px 'Times New Roman', serif"; ctx.textAlign = "right";
+  for (let k = 0; k <= 4; k++) { const v = (max / 4) * k; const y = Y(v); ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + w, y); ctx.stroke(); ctx.fillText(v.toFixed(1), padL - 6, y + 3); }
+  if (opts?.ref != null) { const y = Y(opts.ref); ctx.strokeStyle = "#EF4444"; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + w, y); ctx.stroke(); ctx.setLineDash([]); }
+  const grad = ctx.createLinearGradient(0, padT, 0, padT + h); grad.addColorStop(0, color + "55"); grad.addColorStop(1, color + "08");
+  ctx.beginPath(); valores.forEach((v, i) => { const x = X(i), y = Y(v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.lineTo(X(valores.length - 1), padT + h); ctx.lineTo(X(0), padT + h); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+  ctx.beginPath(); valores.forEach((v, i) => { const x = X(i), y = Y(v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.textAlign = "center"; valores.forEach((v, i) => { const x = X(i), y = Y(v); ctx.beginPath(); ctx.arc(x, y, 3.5, 0, 2 * Math.PI); ctx.fillStyle = color; ctx.fill(); ctx.fillStyle = "#334155"; ctx.font = "bold 11px 'Times New Roman', serif"; ctx.fillText(v.toFixed(2) + (opts?.unidad || ""), x, y - 8); });
+  ctx.fillStyle = "#64748b"; ctx.font = "12px 'Times New Roman', serif"; labels.forEach((l, i) => ctx.fillText(l, X(i), padT + h + 18));
+  const img = cv.toDataURL("image/png");
+  const ref = opts?.ref != null ? `<span style="color:#EF4444;font-size:11px;margin-left:10px">— Referencia: ${opts.refLabel || opts.ref}</span>` : "";
+  return `<div style="margin:8px 0 16px;page-break-inside:avoid"><div style="font-size:15px;font-weight:700;color:#0D1526;margin-bottom:6px">${titulo}${ref}</div><img src="${img}" style="width:100%;height:auto"/></div>`;
+}
+// Heatmap / tablero semáforo por galpón (HTML/CSS puro, seguro en html2canvas).
+function heatmapHTML(titulo: string, cols: string[], rows: { label: string; sub?: string; cells: { text: string; color: string }[] }[]): string {
+  if (rows.length === 0) return "";
+  const head = `<tr><th style="text-align:left;padding:6px 8px;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0">Galpón</th>${cols.map(c => `<th style="padding:6px 8px;font-size:12px;color:#64748b;border-bottom:2px solid #e2e8f0;text-align:center">${c}</th>`).join("")}</tr>`;
+  const body = rows.map(r => `<tr><td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#0D1526"><strong>${r.label}</strong>${r.sub ? `<span style="color:#94a3b8;font-weight:400"> · ${r.sub}</span>` : ""}</td>${r.cells.map(c => `<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:center"><span style="display:inline-block;min-width:54px;padding:3px 8px;border-radius:5px;font-size:13px;font-weight:700;color:${c.color};background:${c.color}22">${c.text}</span></td>`).join("")}</tr>`).join("");
+  return `<div style="margin:8px 0 16px;page-break-inside:avoid"><div style="font-size:15px;font-weight:700;color:#0D1526;margin-bottom:6px">${titulo}</div><table style="width:100%;border-collapse:collapse">${head}${body}</table></div>`;
+}
+
 function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosByLoteGalpon: Record<string, FotoPDF[]>; checklistsByGranja: Record<string, ChecklistData[]>; usuario: string }): string {
   const { form, lotes, fotosByLoteGalpon, checklistsByGranja } = opts;
   const hoy = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
@@ -433,7 +478,7 @@ function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosBy
 
   // Riesgos / fortalezas / hallazgos (deterministas)
   const riesgos: string[] = [];
-  conD7.filter(x => !x.m.cumple).forEach(x => riesgos.push(`Lote ${x.l.data.codigo} — ${x.l.data.granjaNombre || "—"}: mortalidad ${x.m.general.toFixed(2)}% (supera el rango de ${MORT_RANGO_D7}%).`));
+  conD7.filter(x => !x.m.cumple).forEach(x => riesgos.push(`${x.l.data.codigo} — ${x.l.data.granjaNombre || "—"}: mortalidad ${x.m.general.toFixed(2)}% (supera el rango de ${MORT_RANGO_D7}%).`));
   [...enc, ...trz].forEach(c => { const p = calcularCumplimiento((c.preguntas || []).map(q => q.resultado)); if ((c.preguntas || []).length && p < 70) riesgos.push(`${TIPO_LABEL[c.tipo]} — ${c.granjaNombre || "—"}${c.galpon && c.galpon !== "TODOS" ? ` (Galpón ${c.galpon})` : ""}: cumplimiento ${p}%.`); });
   if (stMs.totalM > 0 && stMs.cv > 12) riesgos.push(`Muestreos con variación de peso significativa (CV ${stMs.cv.toFixed(1)}%), indicio de desuniformidad.`);
   if (hall.no_cumple > 0) riesgos.push(`${hall.no_cumple} ítem(s) de auditoría marcados como "No cumple" pendientes de cierre.`);
@@ -450,7 +495,7 @@ function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosBy
   const criticos: string[] = [];
   if (hall.no_cumple > 0) criticos.push(`${hall.no_cumple} ítem(s) "No cumple" en los checklists de auditoría.`);
   if (hall.parcial > 0) criticos.push(`${hall.parcial} ítem(s) con cumplimiento parcial por verificar.`);
-  conD7.filter(x => !x.m.cumple).forEach(x => criticos.push(`Mortalidad fuera de rango en lote ${x.l.data.codigo} (${x.m.general.toFixed(2)}%).`));
+  conD7.filter(x => !x.m.cumple).forEach(x => criticos.push(`Mortalidad fuera de rango en ${x.l.data.codigo} (${x.m.general.toFixed(2)}%).`));
   if (criticos.length === 0) criticos.push("Sin hallazgos críticos en el alcance evaluado.");
 
   // Evidencias relevantes (selección automática por criticidad)
@@ -508,6 +553,29 @@ function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosBy
     ${parr(`<strong>Conclusión ejecutiva:</strong> ${mortGeneral <= MORT_RANGO_D7 && cumplProm >= 90 ? "El proceso evaluado evidencia un desempeño adecuado y bajo control. Se recomienda sostener las prácticas actuales y el seguimiento sistemático." : mortGeneral <= MORT_RANGO_D7 ? "El proceso es estable en lo sanitario; conviene cerrar los puntos de auditoría pendientes para elevar el cumplimiento." : "El proceso requiere atención de la Dirección para corregir las desviaciones de mortalidad y cerrar las no conformidades identificadas."}`)}
   </div>`;
 
+  // Datos por GALPÓN: expande cada lote en sus galpones. Mortalidad atribuida del
+  // lote (se registra a nivel de lote); cumplimiento/peso/CV son del galpón real.
+  const galpones = morts.flatMap(({ l, m }) => galponesDeLote(l).map(g => {
+    const chks = checklistsGalpon(checklistsByGranja[l.data.granjaId] || [], g);
+    const cumpl = chks.length ? Math.round(chks.reduce((s, c) => s + calcularCumplimiento((c.preguntas || []).map(p => p.resultado)), 0) / chks.length) : null;
+    const ms = muestreosGalpon(checklistsByGranja[l.data.granjaId] || [], g).filter(x => (x.cantidad ?? 0) > 0 && (x.pesoTotal ?? 0) > 0);
+    const st = statMuestreo(ms);
+    const peso = st.unit > 0 ? st.unit * 1000 : pesoLote({ m });
+    return { g, lote: l.data.codigo || "—", granja: l.data.granjaNombre || "—", mort: m.general, cumple: m.cumple, tieneD7: m.tieneD7, cumpl, peso, cv: ms.length ? st.cv : null };
+  }));
+  const galConD7 = galpones.filter(x => x.tieneD7).length;
+  const galCumplen = galpones.filter(x => x.tieneD7 && x.cumple).length;
+  const galFuera = galpones.filter(x => x.tieneD7 && !x.cumple).length;
+  const galParcial = galpones.filter(x => !x.tieneD7).length;
+  const colMort = (v: number, tiene: boolean) => !tiene ? "#94A3B8" : v <= MORT_RANGO_D7 ? VERDE : ROJO;
+  const colCv = (v: number | null) => v == null ? "#94A3B8" : v <= 8 ? VERDE : v <= 12 ? NARANJA : ROJO;
+
+  // Tendencia: mortalidad acumulada promedio por día (D1–D7) sobre los lotes del alcance.
+  const tendencia = [1, 2, 3, 4, 5, 6, 7].map(d => {
+    const vals = morts.map(({ m }) => { if (m.pob <= 0) return null; let acc = 0; for (let i = 0; i < d; i++) acc += numv(m.seg[i]?.avesMuertas); return (acc / m.pob) * 100; }).filter((v): v is number => v != null);
+    return vals.length ? +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(3) : 0;
+  });
+
   // 2) Indicadores Gerenciales (dashboard)
   const dashboard = `<div style="page-break-before:always">
     ${h2("2.", "Indicadores Gerenciales")}
@@ -517,16 +585,25 @@ function construirInformeEjecutivo(opts: { form: any; lotes: LoteItem[]; fotosBy
       { label: "Mortalidad general", valor: `${mortGeneral.toFixed(2)}%`, color: mortGeneral <= MORT_RANGO_D7 ? VERDE : ROJO, sub: `Rango ≤ ${MORT_RANGO_D7}%` },
       { label: "Peso promedio", valor: pesoProm > 0 ? `${Math.round(pesoProm)} g` : "—", color: CYAN, sub: stMs.unit > 0 ? "Muestreos" : "Seguimiento D1–7" },
       { label: "CV muestreos", valor: stMs.totalM > 0 ? `${stMs.cv.toFixed(1)}%` : "—", color: stMs.totalM === 0 ? "#94A3B8" : stMs.cv <= 8 ? VERDE : stMs.cv <= 12 ? NARANJA : ROJO, sub: stMs.totalM > 0 ? stMs.estado.l : "Sin datos" },
-      { label: "Lotes en cumplimiento", valor: `${cumplenMort}/${conD7.length || 0}`, color: conD7.length > 0 && cumplenMort === conD7.length ? VERDE : NARANJA, sub: "Rango de mortalidad" },
+      { label: "Galpones en cumplimiento", valor: `${galCumplen}/${galConD7 || 0}`, color: galConD7 > 0 && galFuera === 0 ? VERDE : NARANJA, sub: "Rango de mortalidad" },
     ])}
-    ${barsHTML("Análisis de mortalidad por lote (%)", morts.map(x => ({ label: `${x.l.data.codigo}`, valor: +x.m.general.toFixed(2), color: x.m.cumple ? VERDE : x.m.tieneD7 ? ROJO : "#94A3B8", texto: `${x.m.general.toFixed(2)}%` })), { ref: { v: MORT_RANGO_D7, label: `${MORT_RANGO_D7}% máx.` }, max: Math.max(MORT_RANGO_D7 * 1.6, ...morts.map(x => x.m.general)) })}
+    ${barsHTML("Mortalidad por galpón (%)", galpones.map(x => ({ label: `G${x.g} · ${x.lote}`, valor: +x.mort.toFixed(2), color: colMort(x.mort, x.tieneD7), texto: `${x.mort.toFixed(2)}%` })), { ref: { v: MORT_RANGO_D7, label: `${MORT_RANGO_D7}% máx.` }, max: Math.max(MORT_RANGO_D7 * 1.6, ...galpones.map(x => x.mort)) })}
+    <div style="display:flex;gap:18px;flex-wrap:wrap">
+      <div style="flex:1;min-width:320px">${canvasPie("Distribución de hallazgos", [{ label: "Cumple", valor: hall.cumple, color: VERDE }, { label: "Parcial", valor: hall.parcial, color: NARANJA }, { label: "No cumple", valor: hall.no_cumple, color: ROJO }, { label: "N/A", valor: hall.na, color: "#94A3B8" }], { centro: `${hall.cumple + hall.no_cumple + hall.parcial + hall.na}`, centroSub: "ítems" })}</div>
+      <div style="flex:1;min-width:320px">${canvasPie("Estado de galpones (mortalidad)", [{ label: "En cumplimiento", valor: galCumplen, color: VERDE }, { label: "Fuera de rango", valor: galFuera, color: ROJO }, { label: "Parcial / sin D7", valor: galParcial, color: "#94A3B8" }], { centro: `${galpones.length}`, centroSub: "galpones" })}</div>
+    </div>
+    ${canvasLine("Tendencia de mortalidad acumulada (D1–D7)", ["D1", "D2", "D3", "D4", "D5", "D6", "D7"], tendencia, CYAN, { ref: MORT_RANGO_D7, refLabel: `${MORT_RANGO_D7}% máx.`, unidad: "%" })}
+    ${heatmapHTML("Tablero por galpón (semáforo)", ["Mortalidad", "Cumplimiento", "Peso", "CV"], galpones.map(x => ({ label: `Galpón ${x.g}`, sub: x.lote, cells: [
+      { text: x.tieneD7 ? `${x.mort.toFixed(2)}%` : "—", color: colMort(x.mort, x.tieneD7) },
+      { text: x.cumpl != null ? `${x.cumpl}%` : "—", color: x.cumpl == null ? "#94A3B8" : colPct(x.cumpl) },
+      { text: x.peso > 0 ? `${Math.round(x.peso)} g` : "—", color: x.peso > 0 ? CYAN : "#94A3B8" },
+      { text: x.cv != null ? `${x.cv.toFixed(1)}%` : "—", color: colCv(x.cv) },
+    ] })))}
     ${barsHTML("Cumplimiento por checklist (%)", [...enc, ...trz].map(c => { const p = calcularCumplimiento((c.preguntas || []).map(q => q.resultado)); return { label: `${(TIPO_LABEL[c.tipo] || c.tipo).replace("Checklist ", "")}${c.galpon && c.galpon !== "TODOS" ? ` · G${c.galpon}` : ""}`, valor: p, color: colPct(p), texto: `${p}%` }; }), { max: 100 })}
-    ${barsHTML("Peso promedio por lote (g)", morts.map(x => ({ label: `${x.l.data.codigo}`, valor: Math.round(pesoLote(x)), color: CYAN, texto: `${Math.round(pesoLote(x))} g` })).filter(d => d.valor > 0), {})}
-    ${stackHTML("Distribución de hallazgos de auditoría", [{ label: "Cumple", valor: hall.cumple, color: VERDE }, { label: "Parcial", valor: hall.parcial, color: NARANJA }, { label: "No cumple", valor: hall.no_cumple, color: ROJO }, { label: "N/A", valor: hall.na, color: "#94A3B8" }])}
     ${kpiCards([
       { label: "Planes de acción", valor: `${planes}`, color: planes > 0 ? NARANJA : VERDE, sub: planes > 0 ? "Registrados / por cerrar" : "Sin planes abiertos" },
       { label: "Hallazgos no conformes", valor: `${hall.no_cumple}`, color: hall.no_cumple > 0 ? ROJO : VERDE, sub: "Ítems 'No cumple'" },
-      { label: "Riesgos identificados", valor: `${riesgos[0].startsWith("No se identificaron") ? 0 : riesgos.length}`, color: riesgos[0].startsWith("No se identificaron") ? VERDE : ROJO, sub: "Ver análisis" },
+      { label: "Galpones fuera de rango", valor: `${galFuera}`, color: galFuera > 0 ? ROJO : VERDE, sub: "Mortalidad > rango" },
     ])}
   </div>`;
 
