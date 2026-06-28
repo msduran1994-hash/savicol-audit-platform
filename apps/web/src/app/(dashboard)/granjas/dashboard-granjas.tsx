@@ -120,6 +120,10 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
     const audHall = new Map<string, number>();
     hF.forEach(h => { const m = new Date(h.fechaVisita).getMonth(); if (m >= 0 && m <= 5) audHall.set(h.auditorNombre || "—", (audHall.get(h.auditorNombre || "—") ?? 0) + 1); });
     const hallPorAuditorEneJun = Array.from(audHall, ([auditorNombre, count]) => ({ auditorNombre, count })).sort((a, b) => b.count - a.count);
+    // Visitas por mes (Ene–Jun): visita = granja+fecha distinta, sobre las fechas de visita de Hallazgos
+    const visSet: Set<string>[] = [0, 1, 2, 3, 4, 5].map(() => new Set<string>());
+    hF.forEach(h => { const m = new Date(h.fechaVisita).getMonth(); if (m >= 0 && m <= 5) visSet[m].add(`${h.granjaId}|${h.fechaVisita}`); });
+    const visitasPorMes = ["Ene", "Feb", "Mar", "Abr", "May", "Jun"].map((mes, i) => ({ mes, visitas: visSet[i].size }));
     // Heatmap categoría × tipo de riesgo
     const cats = Array.from(new Set(hF.map(h => h.categoria).filter(Boolean)));
     const riesgos = Array.from(new Set(hF.flatMap(h => h.tiposRiesgo || []).filter(Boolean)));
@@ -131,16 +135,17 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
     const topRiesgo = Array.from(grR, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
     const topHall = Array.from(grH, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
     const categoriasAll = Array.from(new Set((hallazgosRaw as any[]).map(h => h.categoria).filter(Boolean))).sort();
-    return { total: hF.length, auditores, hallPorAuditorEneJun, heat, riesgos, heatMax, topRiesgo, topHall, categoriasAll };
+    return { total: hF.length, auditores, hallPorAuditorEneJun, visitasPorMes, heat, riesgos, heatMax, topRiesgo, topHall, categoriasAll };
   }, [hallazgosRaw, filters]);
 
   const exec = execQ.data;
   const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-  const auditoresOptions = useMemo(() => {
-    if (!exec) return [];
-    return Array.from(new Set((exec.charts?.auditores ?? []).map(a => a.auditorNombre)));
-  }, [exec]);
+  // Filtro de Auditor: opciones desde el módulo HALLAZGOS (el endpoint executive
+  // devuelve auditores vacío). Lista todos los auditores con hallazgos registrados.
+  const auditoresOptions = useMemo(() =>
+    Array.from(new Set((hallazgosRaw as any[]).map(h => h.auditorNombre).filter(Boolean))).sort(),
+  [hallazgosRaw]);
 
   const activeFilters = Object.values(filters).filter(v => v != null && v !== "").length - 1;
 
@@ -442,6 +447,9 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
 
         {full && hStats.total > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ChartCard title="Visitas por mes (Ene–Jun)" subtitle="Visitas a granjas según fechas del módulo Hallazgos">
+              <VisitasMesChart data={hStats.visitasPorMes}/>
+            </ChartCard>
             <ChartCard title="Hallazgos por Auditor (Ene–Jun)" subtitle="Reportes registrados de enero a junio">
               <HallazgosAuditorChart data={hStats.hallPorAuditorEneJun}/>
             </ChartCard>
@@ -458,6 +466,21 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
         )}
       </div>
     </div>
+  );
+}
+
+function VisitasMesChart({ data }: { data: { mes: string; visitas: number }[] }) {
+  if (!data?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin visitas registradas</p>;
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <BarChart data={data} barSize={36}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false}/>
+        <XAxis dataKey="mes" tick={{ fill: "#94A3B8", fontSize: 11 }}/>
+        <YAxis allowDecimals={false} tick={{ fill: "#94A3B8", fontSize: 10 }}/>
+        <Tooltip content={<Tip/>}/>
+        <Bar dataKey="visitas" name="Visitas" fill="#06B6D4" radius={[3,3,0,0]}/>
+      </BarChart>
+    </ResponsiveContainer>
   );
 }
 
