@@ -7,5 +7,5 @@
 import DashboardGranjas from "../dashboard-granjas";
 
 export default function DashboardDinamicoPage() {
-  return <DashboardGranjas />;
+  return <DashboardGranjas mode="completo" />;
 }

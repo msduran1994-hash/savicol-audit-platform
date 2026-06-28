@@ -44,9 +44,10 @@ const SEV_STYLE: Record<string, { bg: string; border: string; text: string; emoj
   INFO:     { bg: "bg-emerald-500/10", border: "border-emerald-500/30", text: "text-emerald-300", emoji: "📋" },
 };
 
-export default function DashboardGranjas() {
+export default function DashboardGranjas({ mode = "completo" }: { mode?: "resumen" | "completo" }) {
+  const full = mode === "completo"; // completo = Dashboard Dinámico (analítica total); resumen = Dashboard (ejecutivo)
   const [filters, setFilters]       = useState<GranjasFilters>({ year: 2026, estado: "ACTIVA" });
-  const [filtersOpen, setFiltersOpen] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(mode === "completo");
   const [aiOpen, setAiOpen]         = useState(true);
   const [aiTrigger, setAiTrigger]   = useState(false);
   const [pdfBusy, setPdfBusy]       = useState(false);
@@ -165,7 +166,7 @@ export default function DashboardGranjas() {
   return (
     <div className="flex flex-col min-h-full">
       <Header
-        title="Dashboard · Granjas"
+        title={full ? "Dashboard Dinámico · Granjas" : "Dashboard · Granjas"}
         subtitle={exec?.kpis
           ? `${exec.kpis.totalGranjas} granjas · ${exec.kpis.totalAuditorias} auditorías · ${exec.kpis.totalHallazgos} hallazgos · ${exec.resumenHeuristico?.estado ?? ""}`
           : "Cargando dashboard..."}
@@ -318,6 +319,7 @@ export default function DashboardGranjas() {
               <ChartCard title="Hallazgos por Categoría" subtitle="Distribución de hallazgos por área temática">
                 <CategoriaChart data={exec.charts?.hallazgosPorCategoria}/>
               </ChartCard>
+              {full && (<>
               <ChartCard title="Diagnóstico por Fecha de Reporte" subtitle="Serie temporal de hallazgos">
                 <DiagnosticoFechaChart data={exec.charts?.diagnosticoFecha}/>
               </ChartCard>
@@ -333,12 +335,13 @@ export default function DashboardGranjas() {
               <ChartCard title="Tendencia Mensual de Visitas" subtitle="Visitas · hallazgos · críticos por mes" full>
                 <TendenciaChart data={exec.charts?.tendenciaMes}/>
               </ChartCard>
+              </>)}
               <ChartCard title="Matriz de Criticidad" subtitle="Distribución por nivel">
                 <CriticidadChart data={exec.charts?.matrizCriticidad}/>
               </ChartCard>
-              <ChartCard title="Granjas por Producción" subtitle="Top 10 por capacidad de aves">
+              {full && (<ChartCard title="Granjas por Producción" subtitle="Top 10 por capacidad de aves">
                 <ProduccionChart data={exec.charts?.granjasProduccion}/>
-              </ChartCard>
+              </ChartCard>)}
               <ChartCard title="Radar de Riesgos por Categoría" subtitle="Concentración de hallazgos por área">
                 <RadarCategoriaChart data={exec.charts?.hallazgosPorCategoria}/>
               </ChartCard>
@@ -353,7 +356,7 @@ export default function DashboardGranjas() {
           </>
         )}
 
-        {trzData.datos.length > 0 && (
+        {full && trzData.datos.length > 0 && (
           <div className="card-base p-5 space-y-5 border border-cyan-500/20">
             <div>
               <h2 className="font-display font-bold text-white text-base flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400"/> Trazabilidad · Resultados por Granja</h2>
@@ -437,7 +440,7 @@ export default function DashboardGranjas() {
           </div>
         )}
 
-        {hStats.total > 0 && (
+        {full && hStats.total > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <ChartCard title="Hallazgos por Auditor (Ene–Jun)" subtitle="Reportes registrados de enero a junio">
               <HallazgosAuditorChart data={hStats.hallPorAuditorEneJun}/>

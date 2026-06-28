@@ -6,5 +6,5 @@
 import DashboardGranjas from "./dashboard-granjas";
 
 export default function GranjasDashboardPage() {
-  return <DashboardGranjas />;
+  return <DashboardGranjas mode="resumen" />;
 }
