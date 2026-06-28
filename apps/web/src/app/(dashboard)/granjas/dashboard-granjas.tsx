@@ -284,7 +284,7 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
 
         {exec && (
           <>
-            {exec.kpis && <KpiGrid kpis={exec.kpis}/>}
+            {exec.kpis && (full ? <KpiGridRich kpis={exec.kpis} tendencia={exec.charts?.tendenciaMes}/> : <KpiGrid kpis={exec.kpis}/>)}
 
             {aiTrigger && (
               <AiCard aiData={aiQ.data} heuristico={exec.resumenHeuristico} loading={aiQ.isFetching} open={aiOpen} onToggle={() => setAiOpen(!aiOpen)}/>
@@ -554,6 +554,54 @@ function KpiGrid({ kpis }: { kpis: any }) {
             <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider truncate">{c.label}</p>
           </div>
           <p className="font-display text-xl font-bold text-white">{c.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─────────────── KPI Grid enriquecido (Dashboard Dinámico): valor + % + tendencia */
+function KpiGridRich({ kpis, tendencia }: { kpis: any; tendencia?: any[] }) {
+  const k = kpis;
+  const totH = k.totalHallazgos || 0, totG = k.totalGranjas || 0;
+  const pct = (n: number, d: number) => d > 0 ? Math.round(((n || 0) / d) * 100) + "%" : "";
+  const t = tendencia ?? []; const last: any = t[t.length - 1] ?? {}, prev: any = t[t.length - 2] ?? {};
+  const tr = (cur: any, pre: any, inv = false) => {
+    if (cur == null || pre == null) return null;
+    const d = cur - pre, mejora = inv ? d < 0 : d > 0;
+    return { arrow: d > 0 ? "▲" : d < 0 ? "▼" : "—", val: Math.abs(d), color: d === 0 ? "#94A3B8" : mejora ? "#10B981" : "#EF4444" };
+  };
+  const cards: any[] = [
+    { label: "Granjas",         value: k.totalGranjas,        icon: <Tractor/>,       color: "#3B82F6" },
+    { label: "Activas",         value: k.granjasActivas,      icon: <ShieldCheck/>,   color: "#10B981", pct: pct(k.granjasActivas, totG) },
+    { label: "Cuarentena",      value: k.granjasCuarentena,   icon: <AlertTriangle/>, color: "#F59E0B", pct: pct(k.granjasCuarentena, totG) },
+    { label: "Riesgo alto",     value: k.granjasRiesgoAlto,   icon: <AlertTriangle/>, color: "#EF4444", pct: pct(k.granjasRiesgoAlto, totG) },
+    { label: "Capacidad aves",  value: (k.capacidadTotal ?? 0).toLocaleString("es-CO"), icon: <Wheat/>, color: "#06B6D4" },
+    { label: "Auditorías",      value: k.totalAuditorias,     icon: <Activity/>,      color: "#8B5CF6", trend: tr(last.Visitas, prev.Visitas, false) },
+    { label: "Auditores",       value: k.auditoresActivos,    icon: <Users/>,         color: "#EC4899" },
+    { label: "Hallazgos",       value: k.totalHallazgos,      icon: <Bug/>,           color: "#F97316", trend: tr(last.Hallazgos, prev.Hallazgos, true) },
+    { label: "Críticos",        value: k.hallazgosCriticos,   icon: <AlertTriangle/>, color: "#EF4444", pct: pct(k.hallazgosCriticos, totH), trend: tr(last.Criticos, prev.Criticos, true) },
+    { label: "Abiertos",        value: k.hallazgosAbiertos,   icon: <Bug/>,           color: "#EF4444", pct: pct(k.hallazgosAbiertos, totH) },
+    { label: "Cerrados",        value: k.hallazgosCerrados,   icon: <Award/>,         color: "#10B981", pct: pct(k.hallazgosCerrados, totH) },
+    { label: "KPIs",            value: k.totalKPIs,           icon: <Target/>,        color: "#3B82F6" },
+    { label: "Cumplim. KPI",    value: `${k.cumplimientoKPI ?? 0}%`, icon: <Gauge/>,  color: "#A855F7" },
+    { label: "Tasa resolución", value: `${k.tasaResolucion ?? 0}%`,  icon: <Target/>, color: "#10B981" },
+  ];
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3">
+      {cards.map(c => (
+        <div key={c.label} className="card-base p-3" style={{ borderColor: `${c.color}30` }}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${c.color}18`, color: c.color }}>{c.icon}</div>
+            <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider truncate">{c.label}</p>
+          </div>
+          <div className="flex items-end justify-between gap-1">
+            <p className="font-display text-xl font-bold text-white">{c.value}</p>
+            <div className="flex flex-col items-end leading-tight">
+              {c.pct && <span className="text-[10px] font-semibold" style={{ color: c.color }}>{c.pct}</span>}
+              {c.trend && <span className="text-[10px] font-bold" style={{ color: c.trend.color }}>{c.trend.arrow}{c.trend.val}</span>}
+            </div>
+          </div>
         </div>
       ))}
     </div>
