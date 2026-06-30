@@ -125,10 +125,20 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
     const audHall = new Map<string, number>();
     hF.forEach(h => { const m = Number((h.fechaVisita || "").slice(5, 7)) - 1; if (m >= 0 && m <= 5) audHall.set(h.auditorNombre || "—", (audHall.get(h.auditorNombre || "—") ?? 0) + 1); });
     const hallPorAuditorEneJun = Array.from(audHall, ([auditorNombre, count]) => ({ auditorNombre, count })).sort((a, b) => b.count - a.count);
-    // Visitas por mes (Ene–Jun): visita = granja+fecha distinta, sobre las fechas de visita de Hallazgos
+    // Visitas por mes (Ene–Jun): una VISITA = un DÍA visitado (fecha distinta), NO por hallazgo.
+    const MESES_EJ = ["Ene", "Feb", "Mar", "Abr", "May", "Jun"];
     const visSet: Set<string>[] = [0, 1, 2, 3, 4, 5].map(() => new Set<string>());
-    hF.forEach(h => { const m = Number((h.fechaVisita || "").slice(5, 7)) - 1; if (m >= 0 && m <= 5) visSet[m].add(`${h.granjaId}|${h.fechaVisita}`); });
-    const visitasPorMes = ["Ene", "Feb", "Mar", "Abr", "May", "Jun"].map((mes, i) => ({ mes, visitas: visSet[i].size }));
+    const diaMap = new Map<string, { granjas: Set<string>; hallazgos: number }>();
+    hF.forEach(h => {
+      const f = h.fechaVisita || ""; const m = Number(f.slice(5, 7)) - 1;
+      if (m >= 0 && m <= 5) {
+        visSet[m].add(f);
+        if (!diaMap.has(f)) diaMap.set(f, { granjas: new Set(), hallazgos: 0 });
+        const o = diaMap.get(f)!; o.granjas.add(h.granjaId); o.hallazgos++;
+      }
+    });
+    const visitasPorMes = MESES_EJ.map((mes, i) => ({ mes, visitas: visSet[i].size }));
+    const visitasPorDia = Array.from(diaMap, ([fecha, o]) => ({ fecha, mes: MESES_EJ[Number(fecha.slice(5, 7)) - 1], granjas: o.granjas.size, hallazgos: o.hallazgos })).sort((a, b) => a.fecha.localeCompare(b.fecha));
     // Heatmap categoría × tipo de riesgo
     const cats = Array.from(new Set(hF.map(h => h.categoria).filter(Boolean)));
     const riesgos = Array.from(new Set(hF.flatMap(h => h.tiposRiesgo || []).filter(Boolean)));
@@ -140,7 +150,7 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
     const topRiesgo = Array.from(grR, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
     const topHall = Array.from(grH, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
     const categoriasAll = Array.from(new Set((hallazgosRaw as any[]).map(h => h.categoria).filter(Boolean))).sort();
-    return { total: hF.length, auditores, hallPorAuditorEneJun, visitasPorMes, heat, riesgos, heatMax, topRiesgo, topHall, categoriasAll };
+    return { total: hF.length, auditores, hallPorAuditorEneJun, visitasPorMes, visitasPorDia, heat, riesgos, heatMax, topRiesgo, topHall, categoriasAll };
   }, [hallazgosRaw, filters]);
 
   const exec = execQ.data;
@@ -330,7 +340,7 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
                 <CategoriaChart data={exec.charts?.hallazgosPorCategoria}/>
               </ChartCard>
               {full && (<>
-              <ChartCard title="Visitas a Granjas por mes (Ene–Jun)" subtitle="Visitas reportadas desde Hallazgos (granja + fecha), según año del filtro">
+              <ChartCard title="Visitas a Granjas por mes (Ene–Jun)" subtitle="Días visitados por mes (cada fecha distinta = 1 visita), desde Hallazgos · según año del filtro">
                 <VisitasMesChart data={hStats.visitasPorMes}/>
               </ChartCard>
               <ChartCard title="Distribución de Granjas por Tipo" subtitle="Propia · Arrendada · Integrada">
@@ -452,6 +462,9 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
 
         {full && hStats.total > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ChartCard title="Detalle de visitas por día (Ene–Jun)" subtitle="Cada fila = un día visitado; nº de granjas y hallazgos de ese día" full>
+              <VisitasDiaTable rows={hStats.visitasPorDia}/>
+            </ChartCard>
             <ChartCard title="Hallazgos por Auditor (Ene–Jun)" subtitle="Reportes registrados de enero a junio">
               <HallazgosAuditorChart data={hStats.hallPorAuditorEneJun}/>
             </ChartCard>
@@ -486,6 +499,44 @@ function VisitasMesChart({ data }: { data: { mes: string; visitas: number }[] })
         </Bar>
       </BarChart>
     </ResponsiveContainer>
+  );
+}
+
+function VisitasDiaTable({ rows }: { rows: { fecha: string; mes: string; granjas: number; hallazgos: number }[] }) {
+  if (!rows?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin visitas registradas</p>;
+  const totVis = rows.length;
+  const totGr = rows.reduce((s, r) => s + r.granjas, 0);
+  const totHa = rows.reduce((s, r) => s + r.hallazgos, 0);
+  return (
+    <div className="overflow-x-auto" style={{ maxHeight: 320, overflowY: "auto" }}>
+      <table className="w-full text-sm border-collapse">
+        <thead className="sticky top-0 bg-[#0D1526] z-10">
+          <tr className="text-[10px] uppercase tracking-wider text-[#475569] border-b border-[#1E2D4A]">
+            <th className="text-left p-2 pl-3">Mes</th>
+            <th className="text-left p-2">Fecha de visita</th>
+            <th className="text-center p-2">Granjas visitadas</th>
+            <th className="text-center p-2">Hallazgos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.fecha} className="border-b border-[#1E2D4A]/40 hover:bg-[#0D1526]/60">
+              <td className="p-2 pl-3 text-cyan-300 text-xs font-semibold">{r.mes}</td>
+              <td className="p-2 text-white text-xs">{r.fecha}</td>
+              <td className="p-2 text-center text-[#94A3B8] text-xs">{r.granjas}</td>
+              <td className="p-2 text-center text-[#94A3B8] text-xs">{r.hallazgos}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t border-[#1E2D4A] text-xs font-bold text-white">
+            <td className="p-2 pl-3" colSpan={2}>{totVis} día(s) visitado(s)</td>
+            <td className="p-2 text-center">{totGr}</td>
+            <td className="p-2 text-center">{totHa}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
   );
 }
 
