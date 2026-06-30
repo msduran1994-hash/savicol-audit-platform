@@ -811,7 +811,7 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[]): string {
         ${seguAud  ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Auditor:</strong> ${seguAud}</div>` : ""}
         ${k.planAccionVeterinario && k.planAccionVeterinario !== "—" ? `
         <div class="plan-box">
-          <div class="plan-box-title">✨ Plan de Acción IA</div>
+          <div class="plan-box-title">Plan de Acción</div>
           <div class="plan-box-text">${k.planAccionVeterinario}</div>
         </div>` : ""}
       </div>`;
@@ -937,7 +937,7 @@ ${portada(`Informe Técnico de Auditoría N° ${num}`, "Evaluación Integral de 
   ${[
     ["1.","Objeto y Alcance"],["2.","Resumen Ejecutivo"],["3.","Metodología"],
     ["4.","Hallazgos Identificados"],["5.","Gestión de Planes KPI"],
-    ["6.","Planes de Acción IA"],["7.","Conclusiones y Recomendaciones"],
+    ["6.","Planes de Acción"],["7.","Conclusiones y Recomendaciones"],
     ["8.","Firma y Aprobación"],
   ].map(([n,t])=>`<div class="toc-item"><span style="font-weight:600;color:#C41230">${n}</span> ${t} <span class="toc-dots"></span> <span class="toc-num">p.${n}</span></div>`).join("")}
 </div>
@@ -1212,7 +1212,7 @@ ${portada(`Informe General de Auditoría N° ${num}`, "Evaluación Integral · T
     "I.   Resumen Ejecutivo (Modelo 1)",
     "II.  Análisis Visual Dashboard (Modelo 3)",
     "III. Hallazgos Completos — Tabla Técnica (Modelo 2)",
-    "IV.  Gestión KPI Detallada — Planes de Acción IA (Modelo 2)",
+    "IV.  Gestión KPI Detallada — Planes de Acción (Modelo 2)",
     "V.   Análisis por Granja (Modelo 4)",
     "VI.  Conclusiones y Recomendaciones",
     "VII. Firma y Certificación",
@@ -1230,7 +1230,7 @@ ${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
 ${seccionHallazgos(hallazgos, granjas, 20)}
 
 <!-- III. KPIs DETALLADOS -->
-<div class="divider">III — Gestión KPI · Planes de Acción IA</div>
+<div class="divider">III — Gestión KPI · Planes de Acción</div>
 ${seccionKPIs(kpis, granjas, hallazgos)}
 
 <!-- IV. ANÁLISIS POR GRANJA -->
@@ -2268,7 +2268,7 @@ export default function KPIPage() {
                   {k.planAccionVeterinario && k.planAccionVeterinario !== "—" && (
                     <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
                       <p className="text-xs text-amber-400 font-semibold flex items-center gap-1.5 mb-1">
-                        <Sparkles className="w-3 h-3"/>Plan de Acción IA
+                        Plan de Acción
                       </p>
                       <p className="text-xs text-[#94A3B8] leading-relaxed">{k.planAccionVeterinario}</p>
                     </div>
@@ -2769,7 +2769,7 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
               placeholder="Descripción completa del hallazgo a corregir (se autocompleta al seleccionar un hallazgo)" required/>
           </FF>
 
-          <FF label="Plan de Acción IA">
+          <FF label="Plan de Acción">
             <div className="relative">
               <textarea value={form.planAccionVeterinario ?? ""}
                 onChange={e=>setForm({...form,planAccionVeterinario:e.target.value})}
