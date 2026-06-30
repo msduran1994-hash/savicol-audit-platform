@@ -120,7 +120,7 @@ async function generarPlanIA(
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err?.error ?? `Error ${response.status} al generar el plan IA`);
+    throw new Error(err?.error ?? `Error ${response.status} al generar el plan`);
   }
   const data = await response.json();
   return data.plan ?? "No se pudo generar el plan.";
@@ -723,7 +723,7 @@ function seccionTrazabilidadKPI(
 
       <div style="font-size:10px;font-weight:700;color:#4A7AFF;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Gestión KPI</div>
       <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 10px;font-size:10px;color:#1e40af;line-height:1.6;margin-bottom:8px">
-        <strong>Plan de Acción (IA):</strong><br>${k.planAccionVeterinario && k.planAccionVeterinario !== "—" ? k.planAccionVeterinario : "Pendiente de generar."}
+        <strong>Plan de Acción:</strong><br>${k.planAccionVeterinario && k.planAccionVeterinario !== "—" ? k.planAccionVeterinario : "Pendiente de generar."}
       </div>
       <table style="width:100%;font-size:10px;margin-bottom:6px">
         <tr><td style="color:#64748b;width:30%">Responsable</td><td style="font-weight:600">${k.responsable || "—"}</td></tr>
@@ -965,7 +965,7 @@ ${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
     La auditoría fue realizada aplicando los siguientes métodos: visita de campo, revisión documental,
     entrevistas con responsables de granja, análisis de registros de bioseguridad y evaluación de
     protocolos operativos. Los hallazgos fueron clasificados por criticidad y tipo de riesgo.
-    Los planes de acción fueron generados con apoyo de Inteligencia Artificial especializada en
+    Los planes de acción fueron elaborados con apoyo de herramientas analíticas especializadas en
     bioseguridad avícola colombiana.
   </div>
 </div>
@@ -983,7 +983,7 @@ ${seccionKPIs(kpis, granjas, hallazgos)}
       <li>Los <strong>${kpis.filter(k=>k.estado==="NO_INICIADO").length}</strong> planes KPI en estado "No Iniciado" requieren asignación inmediata de responsable y fecha de inicio.</li>
       <li>Se recomienda incrementar la frecuencia de visitas de seguimiento a granjas con riesgo alto.</li>
       <li>Implementar capacitación al personal operativo en bioseguridad y protocolos de granja.</li>
-      <li>Verificar el cumplimiento de los planes de acción generados por IA en la próxima auditoría.</li>
+      <li>Verificar el cumplimiento de los planes de acción en la próxima auditoría.</li>
     </ol>
   </div>
 </div>
@@ -1281,7 +1281,7 @@ ${seccionKPIs(kpis, granjas, hallazgos)}
       <ol style="padding-left:16px">
         <li>Activar inmediatamente los <strong>${kpis.filter(k=>k.estado==="NO_INICIADO").length}</strong> planes KPI en estado "No Iniciado".</li>
         <li>Establecer seguimiento semanal a los <strong>${hallazgos.filter(h=>h.estado==="ABIERTO").length}</strong> hallazgos abiertos.</li>
-        <li>Implementar los planes de acción generados por IA en las granjas con mayor índice de riesgo.</li>
+        <li>Implementar los planes de acción en las granjas con mayor índice de riesgo.</li>
         <li>Incrementar la frecuencia de auditorías en granjas con avance inferior al 40%.</li>
         <li>Capacitar al personal operativo en protocolos de bioseguridad y manejo de registros.</li>
       </ol>
@@ -2654,7 +2654,7 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
       );
       setForm(f => ({ ...f, planAccionVeterinario: plan }));
     } catch (e: any) {
-      setLocalError("Error IA: " + (e?.message ?? "desconocido"));
+      setLocalError("Error: " + (e?.message ?? "desconocido"));
     } finally {
       setGenerando(false);
     }
@@ -2701,7 +2701,7 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
               {editing ? "Editar Plan KPI" : "Agregar Plan KPI"}
             </h2>
             <p className="text-xs text-[#94A3B8] mt-0.5">
-              Formulario inteligente · Genera plan con IA · Semaforización automática
+              Formulario inteligente · Genera el plan automáticamente · Semaforización automática
             </p>
           </div>
           <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
@@ -2774,18 +2774,18 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
               <textarea value={form.planAccionVeterinario ?? ""}
                 onChange={e=>setForm({...form,planAccionVeterinario:e.target.value})}
                 rows={3} className={INP+" resize-none pb-10"}
-                placeholder="Escribe el plan o genera uno con IA (máx. 80 palabras)…"/>
+                placeholder="Escribe el plan o genéralo automáticamente (máx. 80 palabras)…"/>
               <button type="button" onClick={handleGenerarPlanIA} disabled={generando}
                 className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-semibold hover:bg-amber-500/25 transition-colors disabled:opacity-50">
                 {generando
                   ? <><Loader2 className="w-3 h-3 animate-spin"/>Generando…</>
-                  : <><Sparkles className="w-3 h-3"/>Generar Plan IA{evidenciasActuales.length > 0 ? ` (${Math.min(evidenciasActuales.length,4)} fotos)` : ""}</>
+                  : <><Sparkles className="w-3 h-3"/>Generar Plan{evidenciasActuales.length > 0 ? ` (${Math.min(evidenciasActuales.length,4)} fotos)` : ""}</>
                 }
               </button>
             </div>
             {evidenciasActuales.length > 0 && (
               <p className="text-[10px] text-[#4A7AFF] mt-1">
-                La IA analizará {Math.min(evidenciasActuales.length, 4)} evidencia(s) fotográfica(s) del hallazgo.
+                Se analizarán {Math.min(evidenciasActuales.length, 4)} evidencia(s) fotográfica(s) del hallazgo.
               </p>
             )}
           </FF>
