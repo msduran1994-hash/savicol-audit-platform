@@ -45,7 +45,7 @@ const fmtFecha = (d?: string) => {
 export const MODELOS = [
   { id: "ejecutivo",   label: "Ejecutivo Gerencial",  icon: Award,        desc: "Resumen ejecutivo, indicadores, riesgos críticos y estado de cumplimiento" },
   { id: "operativo",   label: "Auditoría Operativa",  icon: ClipboardList, desc: "Hallazgos, planes de acción, seguimientos y evidencias" },
-  { id: "estrategico", label: "Estratégico",          icon: TrendingUp,   desc: "Tendencias, criticidad, cumplimiento y recomendaciones IA" },
+  { id: "estrategico", label: "Estratégico",          icon: TrendingUp,   desc: "Tendencias, criticidad, cumplimiento y recomendaciones" },
   { id: "corporativo", label: "Corporativo",          icon: Building2,    desc: "Consolidado por CEDIS, comparativos, riesgos y desempeño" },
   { id: "tecnico",     label: "Técnico",              icon: FileSearch,   desc: "Trazabilidad completa, historial y cumplimiento detallado" },
 ] as const;
@@ -182,7 +182,7 @@ export async function generarXLSXCedis(hallazgos: any[], cedisMap: Record<string
     "Responsable": h.responsable || "—",
     "Avance (%)": h.porcentajeAvance ?? 0,
     "Fecha Compromiso": fmtFecha(h.fechaCompromiso),
-    "Recomendación IA": (h.recomendacionIA || "").replace(/[#*]/g, "").slice(0, 300),
+    "Recomendación": (h.recomendacionIA || "").replace(/[#*]/g, "").slice(0, 300),
   }));
   const wsH = XLSX.utils.json_to_sheet(hallData);
   wsH["!cols"] = [{wch:18},{wch:28},{wch:16},{wch:16},{wch:40},{wch:12},{wch:14},{wch:14},{wch:18},{wch:10},{wch:16},{wch:40}];
@@ -494,7 +494,7 @@ export function construirInforme(modelo: ModeloId, hallazgos: any[], cedisMap: R
       cuerpo.push(`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px">
         <div style="font-size:12px;font-weight:700;color:#0D1526">${h.titulo||"—"} <span style="font-weight:400;color:#94a3b8;font-size:10px">· ${cedisMap[h.cediId]||"—"} · ${normCrit(h.criticidad)}</span></div>
         <p style="font-size:10.5px;color:#475569;margin:6px 0">${(h.descripcion||"Sin descripción").slice(0,260)}</p>
-        ${h.recomendacionIA?`<div style="font-size:10px;color:#166534;background:#f0fdf4;border-radius:6px;padding:8px;margin-top:6px"><strong>Plan/Recomendación IA:</strong> ${h.recomendacionIA.replace(/[#*]/g,"").slice(0,280)}</div>`:""}
+        ${h.recomendacionIA?`<div style="font-size:10px;color:#166534;background:#f0fdf4;border-radius:6px;padding:8px;margin-top:6px"><strong>Plan/Recomendación:</strong> ${h.recomendacionIA.replace(/[#*]/g,"").slice(0,280)}</div>`:""}
         <div style="font-size:9.5px;color:#94a3b8;margin-top:6px">Responsable: ${h.responsable||"—"} · Avance: ${h.porcentajeAvance??0}% · Estado: ${normEstado(h.estado)}</div>
       </div>`);
     });
@@ -504,14 +504,14 @@ export function construirInforme(modelo: ModeloId, hallazgos: any[], cedisMap: R
     cuerpo.push(tarjetasIndicadores(indicadoresBase));
     cuerpo.push(svgTendencia(tendenciaPorMes(hallazgos), "Tendencia de Hallazgos por Mes"));
     cuerpo.push(`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">${svgDona(barrasCrit, "Distribución por Criticidad")}${barras("Distribución por Tipo de Riesgo", barrasRiesgo)}</div>`);
-    cuerpo.push(`<h3 style="font-size:13px;margin:14px 0 10px;color:#0D1526">Recomendaciones IA Consolidadas</h3>`);
+    cuerpo.push(`<h3 style="font-size:13px;margin:14px 0 10px;color:#0D1526">Recomendaciones Consolidadas</h3>`);
     const conIA = hallazgos.filter(h => h.recomendacionIA);
     if (conIA.length) {
       conIA.slice(0,8).forEach(h => cuerpo.push(`<div style="border-left:3px solid #10B981;padding:6px 12px;margin-bottom:8px;background:#f8fafc">
         <div style="font-size:11px;font-weight:600;color:#0D1526">${h.titulo||"—"}</div>
         <p style="font-size:10px;color:#475569;margin:4px 0 0">${h.recomendacionIA.replace(/[#*]/g,"").slice(0,240)}</p></div>`));
     } else {
-      cuerpo.push(`<p style="font-size:11px;color:#94a3b8">No hay recomendaciones IA generadas para los hallazgos filtrados. Usa los botones "Recomendaciones IA" en cada plan para generarlas.</p>`);
+      cuerpo.push(`<p style="font-size:11px;color:#94a3b8">No hay recomendaciones generadas para los hallazgos filtrados. Usa los botones "Recomendaciones" en cada plan para generarlas.</p>`);
     }
   } else if (modelo === "corporativo") {
     cuerpo.push(`<h2 style="font-size:16px;border-left:4px solid #10B981;padding-left:10px;margin:0 0 16px">Consolidado Corporativo por CEDIS</h2>`);
