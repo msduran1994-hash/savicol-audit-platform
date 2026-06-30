@@ -5,7 +5,9 @@
 import { useMemo, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { useGranjasExecutive, useGranjasAiSummary, type GranjasFilters } from "@/hooks/useGranjasExecutive";
-import { useGranjas, useHallazgos } from "@/hooks/useGranjas";
+import { useGranjas } from "@/hooks/useGranjas";
+import { useGranjasStore } from "@/store/granjas.store";
+import { useShallow } from "zustand/react/shallow";
 import { useAuthStore } from "@/store/auth.store";
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
@@ -95,11 +97,13 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
   }, [lotesTrz, encItems, trzItems, filters.granjaId, filters.fechaDesde, filters.fechaHasta]);
 
   // ─── Hallazgos (módulo Hallazgos, datos reales) → auditores, heatmap, rankings ──
-  const { data: hallazgosRaw = [] } = useHallazgos();
+  // Fuente: el STORE de Granjas (mismos hallazgos que muestra el módulo Hallazgos),
+  // para que las cifras coincidan exactamente con esa hoja.
+  const hallazgosRaw = useGranjasStore(useShallow((s: any) => s.hallazgos)) as any[];
   const hStats = useMemo(() => {
     const norm = (s: any) => (s ?? "").toString().normalize("NFD").replace(/\p{Diacritic}/gu, "").toUpperCase().trim();
     const f = filters;
-    const inDate = (d?: string) => { if (!d) return true; const t = new Date(d); if (f.year && !isNaN(t.getTime()) && t.getFullYear() !== f.year) return false; if (f.fechaDesde && d < f.fechaDesde) return false; if (f.fechaHasta && d > f.fechaHasta) return false; return true; };
+    const inDate = (d?: string) => { if (!d) return true; if (f.year && Number(d.slice(0, 4)) !== f.year) return false; if (f.fechaDesde && d < f.fechaDesde) return false; if (f.fechaHasta && d > f.fechaHasta) return false; return true; };
     const hF = (hallazgosRaw as any[]).filter(h => {
       if (f.granjaId && h.granjaId !== f.granjaId) return false;
       if (f.auditorId && norm(h.auditorNombre) !== norm(f.auditorId)) return false;
@@ -119,11 +123,11 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
     const auditores = Array.from(audMap, ([auditorNombre, o]) => ({ auditorNombre, visitas: o.v.size, hallazgos: o.hallazgos, criticos: o.criticos })).sort((a, b) => b.visitas - a.visitas);
     // Hallazgos por auditor Ene–Jun (meses 0..5)
     const audHall = new Map<string, number>();
-    hF.forEach(h => { const m = new Date(h.fechaVisita).getMonth(); if (m >= 0 && m <= 5) audHall.set(h.auditorNombre || "—", (audHall.get(h.auditorNombre || "—") ?? 0) + 1); });
+    hF.forEach(h => { const m = Number((h.fechaVisita || "").slice(5, 7)) - 1; if (m >= 0 && m <= 5) audHall.set(h.auditorNombre || "—", (audHall.get(h.auditorNombre || "—") ?? 0) + 1); });
     const hallPorAuditorEneJun = Array.from(audHall, ([auditorNombre, count]) => ({ auditorNombre, count })).sort((a, b) => b.count - a.count);
     // Visitas por mes (Ene–Jun): visita = granja+fecha distinta, sobre las fechas de visita de Hallazgos
     const visSet: Set<string>[] = [0, 1, 2, 3, 4, 5].map(() => new Set<string>());
-    hF.forEach(h => { const m = new Date(h.fechaVisita).getMonth(); if (m >= 0 && m <= 5) visSet[m].add(`${h.granjaId}|${h.fechaVisita}`); });
+    hF.forEach(h => { const m = Number((h.fechaVisita || "").slice(5, 7)) - 1; if (m >= 0 && m <= 5) visSet[m].add(`${h.granjaId}|${h.fechaVisita}`); });
     const visitasPorMes = ["Ene", "Feb", "Mar", "Abr", "May", "Jun"].map((mes, i) => ({ mes, visitas: visSet[i].size }));
     // Heatmap categoría × tipo de riesgo
     const cats = Array.from(new Set(hF.map(h => h.categoria).filter(Boolean)));
