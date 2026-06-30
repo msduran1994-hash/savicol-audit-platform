@@ -352,9 +352,6 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
               <ChartCard title="Visitas por Auditor" subtitle="Ranking de auditores activos" full>
                 <AuditoresChart data={hStats.auditores}/>
               </ChartCard>
-              <ChartCard title="Tendencia Mensual de Visitas" subtitle="Visitas · hallazgos · críticos por mes" full>
-                <TendenciaChart data={exec.charts?.tendenciaMes}/>
-              </ChartCard>
               </>)}
               <ChartCard title="Matriz de Criticidad" subtitle="Distribución por nivel">
                 <CriticidadChart data={exec.charts?.matrizCriticidad}/>
@@ -369,8 +366,6 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
                 <MitigadosChart cerrados={exec.kpis?.hallazgosCerrados ?? 0} activos={exec.kpis?.hallazgosAbiertos ?? 0}/>
               </ChartCard>
             </div>
-
-            {exec.calidadDatos && <CalidadCard data={exec.calidadDatos}/>}
 
             <TrazabilidadTable rows={exec.trazabilidad ?? []}/>
           </>
