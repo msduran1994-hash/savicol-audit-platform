@@ -105,7 +105,8 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
       if (f.auditorId && norm(h.auditorNombre) !== norm(f.auditorId)) return false;
       if ((f as any).categoria && h.categoria !== (f as any).categoria) return false;
       if (f.criticidad && norm(h.criticidad) !== norm(f.criticidad)) return false;
-      if (f.estado && norm(h.estado) !== norm(f.estado)) return false;
+      // OJO: f.estado es estado de GRANJA (ACTIVA/INACTIVA/CUARENTENA), NO el estado del
+      // hallazgo (Abierto/Cerrado/...). No se filtra el hallazgo por f.estado (antes vaciaba todo).
       if (f.tipoGranja && norm(h.tipoGranja) !== norm(f.tipoGranja)) return false;
       if (f.tipoOperativo && norm(h.tipoOperativo) !== norm(f.tipoOperativo)) return false;
       if (f.tipoRiesgo && !(h.tiposRiesgo || []).some((t: string) => norm(t) === norm(f.tipoRiesgo))) return false;
