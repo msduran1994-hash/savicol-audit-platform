@@ -23,6 +23,7 @@ export default function HallazgosPage() {
   const [filtroEstado,        setFiltroEstado]        = useState("");
   const [filtroGranja,        setFiltroGranja]        = useState("");
   const [filtroTipoOperativo, setFiltroTipoOperativo] = useState("");
+  const [filtroMes,           setFiltroMes]           = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Hallazgo | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -41,6 +42,7 @@ export default function HallazgosPage() {
     if (filtroEstado        && h.estado         !== filtroEstado)        return false;
     if (filtroGranja        && h.granjaId       !== filtroGranja)        return false;
     if (filtroTipoOperativo && h.tipoOperativo  !== filtroTipoOperativo) return false;
+    if (filtroMes && (h.fechaVisita || "").slice(5, 7) !== filtroMes)    return false; // mes de visita (YYYY-MM-DD)
     return true;
   });
   return (
@@ -82,6 +84,10 @@ export default function HallazgosPage() {
           <select value={filtroTipoOperativo} onChange={(e)=>setFiltroTipoOperativo(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
             <option value="">Todos los tipos</option>
             {TIPO_OPERATIVO.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={filtroMes} onChange={(e)=>setFiltroMes(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white" title="Mes de visita">
+            <option value="">Todos los meses</option>
+            {[["01","Enero"],["02","Febrero"],["03","Marzo"],["04","Abril"],["05","Mayo"],["06","Junio"],["07","Julio"],["08","Agosto"],["09","Septiembre"],["10","Octubre"],["11","Noviembre"],["12","Diciembre"]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           <Can permiso="crear">
             <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary text-xs ml-auto bg-amber-500 hover:bg-amber-600">
