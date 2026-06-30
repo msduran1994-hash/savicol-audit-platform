@@ -325,8 +325,8 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
                 <CategoriaChart data={exec.charts?.hallazgosPorCategoria}/>
               </ChartCard>
               {full && (<>
-              <ChartCard title="Diagnóstico por Fecha de Reporte" subtitle="Serie temporal de hallazgos">
-                <DiagnosticoFechaChart data={exec.charts?.diagnosticoFecha}/>
+              <ChartCard title="Visitas a Granjas por mes (Ene–Jun)" subtitle="Visitas reportadas desde Hallazgos (granja + fecha), según año del filtro">
+                <VisitasMesChart data={hStats.visitasPorMes}/>
               </ChartCard>
               <ChartCard title="Distribución de Granjas por Tipo" subtitle="Propia · Arrendada · Integrada">
                 <DistribucionTipoChart data={exec.charts?.distribucionTipo}/>
@@ -447,9 +447,6 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
 
         {full && hStats.total > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ChartCard title="Visitas por mes (Ene–Jun)" subtitle="Visitas a granjas según fechas del módulo Hallazgos">
-              <VisitasMesChart data={hStats.visitasPorMes}/>
-            </ChartCard>
             <ChartCard title="Hallazgos por Auditor (Ene–Jun)" subtitle="Reportes registrados de enero a junio">
               <HallazgosAuditorChart data={hStats.hallPorAuditorEneJun}/>
             </ChartCard>
@@ -469,16 +466,19 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
   );
 }
 
+const MES_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4"];
 function VisitasMesChart({ data }: { data: { mes: string; visitas: number }[] }) {
   if (!data?.length) return <p className="text-center text-xs text-[#475569] py-8">Sin visitas registradas</p>;
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <BarChart data={data} barSize={36}>
+      <BarChart data={data} barSize={44}>
         <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false}/>
-        <XAxis dataKey="mes" tick={{ fill: "#94A3B8", fontSize: 11 }}/>
+        <XAxis dataKey="mes" tick={{ fill: "#94A3B8", fontSize: 12 }}/>
         <YAxis allowDecimals={false} tick={{ fill: "#94A3B8", fontSize: 10 }}/>
         <Tooltip content={<Tip/>}/>
-        <Bar dataKey="visitas" name="Visitas" fill="#06B6D4" radius={[3,3,0,0]}/>
+        <Bar dataKey="visitas" name="Visitas" radius={[4,4,0,0]} label={{ position: "top", fill: "#cbd5e1", fontSize: 11 }}>
+          {data.map((d, i) => <Cell key={i} fill={MES_COLORS[i % MES_COLORS.length]}/>)}
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );
