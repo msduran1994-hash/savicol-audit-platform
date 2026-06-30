@@ -192,7 +192,7 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
           : "Cargando dashboard..."}
       />
 
-      <div className="flex-1 p-6 space-y-6">
+      <div className="flex-1 p-6 flex flex-col gap-6">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2">
             <button onClick={() => setFiltersOpen(!filtersOpen)} className="px-3 py-1.5 rounded-lg bg-[#1A2540] border border-[#2A3F6A] text-xs font-medium text-white flex items-center gap-2 hover:bg-[#243054]">
@@ -372,7 +372,7 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
         )}
 
         {full && trzData.datos.length > 0 && (
-          <div className="card-base p-5 space-y-5 border border-cyan-500/20">
+          <div className="card-base p-5 space-y-5 border border-cyan-500/20 order-last">
             <div>
               <h2 className="font-display font-bold text-white text-base flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400"/> Trazabilidad · Resultados por Granja</h2>
               <p className="text-xs text-[#94A3B8] mt-0.5">Mortalidad, cumplimiento, dispersión, peso y criticidad — sincronizado con los filtros (Granja y Fecha)</p>
