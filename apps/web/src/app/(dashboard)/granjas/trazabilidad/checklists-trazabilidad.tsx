@@ -601,7 +601,7 @@ function MuestreosTab({ data, setData, tipo }: {
 }
 
 // ═══ PDF ejecutivo nativo del checklist (jsPDF) ═══════════════════════════════
-const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.972-5" };
+const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.974-4" };
 
 // Secciones narrativas del informe (redactadas por el endpoint de IA, sin mencionarla)
 interface SeccionesIA { resumenEjecutivo?: string; conclusiones?: string; planAccion?: string; }

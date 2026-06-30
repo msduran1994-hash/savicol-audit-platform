@@ -14,7 +14,7 @@ import { leerMetaFoto, calcularCumplimiento, type LoteItem, type ChecklistData, 
    helper de evidencias y el proxy de imágenes ya existentes.
    ════════════════════════════════════════════════════════════════════════════ */
 
-const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.972-5", area: "Control Interno y Auditoría · Trazabilidad Avícola" };
+const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.974-4", area: "Control Interno y Auditoría · Trazabilidad Avícola" };
 const CYAN = "#06B6D4", VERDE = "#22C55E", ROJO = "#EF4444", NARANJA = "#F59E0B";
 
 // Conteos de aves = enteros. Ignora separadores de miles ("13.100" o "13,100" → 13100).

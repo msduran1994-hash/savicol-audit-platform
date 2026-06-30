@@ -14,7 +14,7 @@ import { evidenciasGridHTML } from "@/lib/pdf-evidencias";
    Datos reales del store CEDIS. Sin datos ficticios.
    ════════════════════════════════════════════════════════════════════════════ */
 
-const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.972-5", area: "Control Interno y Auditoría · CEDIS" };
+const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.974-4", area: "Control Interno y Auditoría · CEDIS" };
 
 // ── Normalización de valores backend (MAYÚSCULAS) → legibles ────────────────
 const sinAcentos = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -143,7 +143,7 @@ export async function generarXLSXCedis(hallazgos: any[], cedisMap: Record<string
   // Hoja 1: Resumen Gerencial
   const resumen = [
     ["POLLOS SAVICOL S.A.S. — INFORME EJECUTIVO CEDIS"],
-    ["NIT", "860.403.972-5"],
+    ["NIT", "860.403.974-4"],
     ["Fecha de generación", new Date().toLocaleDateString("es-CO")],
     [],
     ["INDICADOR", "VALOR"],

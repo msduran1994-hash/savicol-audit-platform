@@ -1023,7 +1023,7 @@ async function generarPDFChecklist(
   setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
   doc.text("Pollos Savicol S.A.S.", M, 13);
   setText("#94A3B8"); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
-  doc.text("NIT 860.403.972-5  ·  Auditoría Interna · Trazabilidad Avícola", M, 19);
+  doc.text("NIT 860.403.974-4  ·  Auditoría Interna · Trazabilidad Avícola", M, 19);
   setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
   doc.text("Checklist de Descargue y Recepción", M, 28);
   y = 42;
