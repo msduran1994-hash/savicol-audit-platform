@@ -1,10 +1,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Granjas → Dashboard
-// Renderiza el dashboard consolidado reutilizable (dashboard-granjas.tsx), que
-// también usa "Dashboard Dinámico" (/granjas/dinamico). Sin duplicar lógica.
+// Granjas (raíz). El módulo "Dashboard" (resumen) se eliminó; el único dashboard
+// es "Dashboard Dinámico" (/granjas/dinamico). Esta raíz redirige allí.
 // ═══════════════════════════════════════════════════════════════════════════════
-import DashboardGranjas from "./dashboard-granjas";
+import { redirect } from "next/navigation";
 
-export default function GranjasDashboardPage() {
-  return <DashboardGranjas mode="resumen" />;
+export default function GranjasIndex() {
+  redirect("/granjas/dinamico");
 }
