@@ -9,8 +9,7 @@ import {
   Target, Sparkles, MapPin, TrendingUp,
 } from "lucide-react";
 import {
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  ScatterChart, Scatter, ZAxis,
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, LabelList,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
@@ -53,16 +52,21 @@ export default function RutasDashboardPage() {
 
   // ─── DATOS GRÁFICOS ────────────────────────────────────────────────────────
 
-  // Visitas por mes (últimos 6)
-  const meses = ["Dic 25", "Ene", "Feb", "Mar", "Abr", "May 26"];
-  const dataMensual = meses.map((m, i) => {
-    const monthIdx = (new Date(2025, 11 + i).getMonth());
-    const filt = acompanamientos.filter(a => new Date(a.fecha).getMonth() === monthIdx);
-    return {
-      name: m,
-      acompanamientos: filt.length,
-      hallazgos: filt.filter(a => a.estado === "Con Hallazgos").length,
-    };
+  // Visitas y registros por mes — desde el Consolidado (acompañamientos). El mes/año
+  // se lee del texto ISO (YYYY-MM) para evitar desfases de zona horaria (UTC-5).
+  // Visitas = eventos de visita distintos (ruta + fecha); Reportes = nº de registros.
+  const MESES_WIN = [
+    { name: "Dic 25", ym: "2025-12" },
+    { name: "Ene",    ym: "2026-01" },
+    { name: "Feb",    ym: "2026-02" },
+    { name: "Mar",    ym: "2026-03" },
+    { name: "Abr",    ym: "2026-04" },
+    { name: "May 26", ym: "2026-05" },
+  ];
+  const dataMensual = MESES_WIN.map(({ name, ym }) => {
+    const recs = acompanamientos.filter(a => String(a.fecha ?? "").slice(0, 7) === ym);
+    const visitas = new Set(recs.map(a => `${a.rutaId}|${a.fecha}`)).size;
+    return { name, visitas, reportes: recs.length };
   });
 
   // Ranking rutas
@@ -106,13 +110,17 @@ export default function RutasDashboardPage() {
     value: acompanamientos.filter(a => a.criticidad === c).length,
   })).filter(d => d.value > 0);
 
-  // Matriz criticidad vs impacto financiero
-  const dataMatriz = acompanamientos.map(a => ({
-    x: ["Bajo","Medio","Alto","Crítico"].indexOf(a.criticidad) + 1,
-    y: a.valorDevueltoCOP / 1_000_000,  // millones
-    z: a.cantidadKgDevueltos,
-    name: a.clienteNombre,
-  }));
+  // Ranking de clientes que más reportaron en el Consolidado (por nº de registros)
+  const dataClientesReportes = Object.values(clienteStats)
+    .map(c => ({ name: c.nombre, value: c.count }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8);
+
+  // Ranking de rutas más visitadas/reportadas en el Consolidado (por nº de registros)
+  const dataRutasVisitas = Object.values(rutaStats)
+    .map(r => ({ name: r.nombre, value: r.acomp }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8);
 
   return (
     <div className="flex flex-col min-h-full">
@@ -169,8 +177,8 @@ export default function RutasDashboardPage() {
                 <XAxis dataKey="name" tick={{ fill:"#94A3B8", fontSize:11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill:"#94A3B8", fontSize:11 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<Tip />} />
-                <Line type="monotone" dataKey="acompanamientos" name="Acompañamientos" stroke="#06B6D4" strokeWidth={2.5} dot={{ fill:"#06B6D4", r:4 }} />
-                <Line type="monotone" dataKey="hallazgos"       name="Con Hallazgos"   stroke="#F59E0B" strokeWidth={2.5} dot={{ fill:"#F59E0B", r:4 }} />
+                <Line type="monotone" dataKey="visitas"  name="Visitas"                stroke="#06B6D4" strokeWidth={2.5} dot={{ fill:"#06B6D4", r:4 }} />
+                <Line type="monotone" dataKey="reportes" name="Reportes (Consolidado)" stroke="#F59E0B" strokeWidth={2.5} dot={{ fill:"#F59E0B", r:4 }} />
               </LineChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -289,20 +297,37 @@ export default function RutasDashboardPage() {
             )}
           </ChartCard>
 
-          <ChartCard title="Matriz Criticidad vs Impacto Financiero">
-            {dataMatriz.length === 0 ? <Empty/> : (
+          <ChartCard title="Ranking de Clientes que más Reportaron">
+            {dataClientesReportes.length === 0 ? <Empty/> : (
               <ResponsiveContainer width="100%" height={260}>
-                <ScatterChart>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" />
-                  <XAxis type="number" dataKey="x" domain={[0.5, 4.5]} ticks={[1,2,3,4]}
-                         tickFormatter={(v) => ["", "Bajo","Medio","Alto","Crítico"][v]}
-                         tick={{ fill:"#94A3B8", fontSize:11 }} axisLine={false} tickLine={false} name="Criticidad" />
-                  <YAxis type="number" dataKey="y" tick={{ fill:"#94A3B8", fontSize:11 }} axisLine={false} tickLine={false}
-                         tickFormatter={(v) => `$${v}M`} name="Valor (M COP)"/>
-                  <ZAxis type="number" dataKey="z" range={[40, 200]} name="Kg" />
-                  <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<Tip />} />
-                  <Scatter data={dataMatriz} fill="#06B6D4" />
-                </ScatterChart>
+                <BarChart data={dataClientesReportes} layout="vertical" barSize={16} margin={{ top: 4, right: 28, left: 0, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} tick={{ fill:"#94A3B8", fontSize:11 }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="name" width={140} tick={{ fill:"#94A3B8", fontSize:10 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<Tip />} cursor={{ fill: "#1E2D4A33" }} />
+                  <Bar dataKey="value" name="Reportes" fill="#F59E0B" radius={[0,4,4,0]}>
+                    <LabelList dataKey="value" position="right" fill="#E2E8F0" fontSize={11} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </ChartCard>
+        </div>
+
+        {/* Ranking de rutas más visitadas/reportadas en el Consolidado */}
+        <div className="grid grid-cols-1 gap-4">
+          <ChartCard title="Ranking de Rutas más Visitadas (Consolidado)">
+            {dataRutasVisitas.length === 0 ? <Empty/> : (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={dataRutasVisitas} layout="vertical" barSize={18} margin={{ top: 4, right: 30, left: 0, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} tick={{ fill:"#94A3B8", fontSize:11 }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="name" width={150} tick={{ fill:"#94A3B8", fontSize:10 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<Tip />} cursor={{ fill: "#1E2D4A33" }} />
+                  <Bar dataKey="value" name="Registros" fill="#06B6D4" radius={[0,4,4,0]}>
+                    <LabelList dataKey="value" position="right" fill="#E2E8F0" fontSize={11} />
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             )}
           </ChartCard>
