@@ -33,8 +33,7 @@ export default function RutasDashboardPage() {
 
   // ─── KPIs ──────────────────────────────────────────────────────────────────
   const totalRutas = new Set(acompanamientos.map(a => a.rutaId)).size;
-  const totalAcomp = acompanamientos.length;
-  const totalHallazgos = acompanamientos.filter(a => a.estado === "Con Hallazgos").length;
+  const totalAcomp = acompanamientos.length;   // = registros reportados en el Consolidado
   const totalVehiculos = new Set(acompanamientos.map(a => a.vehiculoId)).size;
   const criticidadAlta = acompanamientos.filter(a => a.criticidad === "Crítico" || a.criticidad === "Alto").length;
   const clientesImpactados = new Set(acompanamientos.map(a => a.clienteId)).size;
@@ -156,7 +155,7 @@ export default function RutasDashboardPage() {
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <Kpi icon={<MapPin/>}        label="Rutas Auditadas"     value={totalRutas}                            color="#06B6D4" />
-          <Kpi icon={<AlertTriangle/>} label="Hallazgos"            value={totalHallazgos}                         color="#F59E0B" />
+          <Kpi icon={<AlertTriangle/>} label="Hallazgos"            value={totalAcomp}                             color="#F59E0B" />
           <Kpi icon={<Truck/>}         label="Vehículos Registrados"value={totalVehiculos}                         color="#10B981" />
           <Kpi icon={<Target/>}        label="Motivo Dominante"     value={motivoDominante}                        color="#8B5CF6" small />
           <Kpi icon={<AlertTriangle/>} label="Criticidad Alta"      value={criticidadAlta} alert={criticidadAlta>0} color="#EF4444" />
