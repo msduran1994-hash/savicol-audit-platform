@@ -304,7 +304,7 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
 
         {exec && (
           <>
-            {exec.kpis && (full ? <KpiGridRich kpis={exec.kpis} tendencia={exec.charts?.tendenciaMes}/> : <KpiGrid kpis={exec.kpis}/>)}
+            {exec.kpis && (full ? <KpiGridRich kpis={exec.kpis} tendencia={exec.charts?.tendenciaMes} auditoresCount={hStats.auditores.length}/> : <KpiGrid kpis={exec.kpis} auditoresCount={hStats.auditores.length}/>)}
 
             {aiTrigger && (
               <AiCard aiData={aiQ.data} heuristico={exec.resumenHeuristico} loading={aiQ.isFetching} open={aiOpen} onToggle={() => setAiOpen(!aiOpen)}/>
@@ -600,7 +600,7 @@ function F({ label, children }: { label: string; children: React.ReactNode }) {
 }
 
 /* ─────────────── KPI Grid · 14 cards */
-function KpiGrid({ kpis }: { kpis: any }) {
+function KpiGrid({ kpis, auditoresCount }: { kpis: any; auditoresCount?: number }) {
   const cards = [
     { label: "Granjas",             value: kpis.totalGranjas,                  icon: <Tractor/>,        color: "#3B82F6" },
     { label: "Activas",             value: kpis.granjasActivas,                icon: <ShieldCheck/>,    color: "#10B981" },
@@ -608,7 +608,7 @@ function KpiGrid({ kpis }: { kpis: any }) {
     { label: "Riesgo alto",         value: kpis.granjasRiesgoAlto,             icon: <AlertTriangle/>,  color: "#EF4444" },
     { label: "Capacidad aves",      value: (kpis.capacidadTotal ?? 0).toLocaleString("es-CO"), icon: <Wheat/>,   color: "#06B6D4" },
     { label: "Auditorías",          value: kpis.totalAuditorias,               icon: <Activity/>,       color: "#8B5CF6" },
-    { label: "Auditores",           value: kpis.auditoresActivos,              icon: <Users/>,          color: "#EC4899" },
+    { label: "Auditores",           value: auditoresCount || kpis.auditoresActivos, icon: <Users/>,          color: "#EC4899" },
     { label: "Hallazgos",           value: kpis.totalHallazgos,                icon: <Bug/>,            color: "#F97316" },
     { label: "Críticos",            value: kpis.hallazgosCriticos,             icon: <AlertTriangle/>,  color: "#EF4444" },
     { label: "Abiertos",            value: kpis.hallazgosAbiertos,             icon: <Bug/>,            color: "#EF4444" },
@@ -635,7 +635,7 @@ function KpiGrid({ kpis }: { kpis: any }) {
 }
 
 /* ─────────────── KPI Grid enriquecido (Dashboard Dinámico): valor + % + tendencia */
-function KpiGridRich({ kpis, tendencia }: { kpis: any; tendencia?: any[] }) {
+function KpiGridRich({ kpis, tendencia, auditoresCount }: { kpis: any; tendencia?: any[]; auditoresCount?: number }) {
   const k = kpis;
   const totH = k.totalHallazgos || 0, totG = k.totalGranjas || 0;
   const pct = (n: number, d: number) => d > 0 ? Math.round(((n || 0) / d) * 100) + "%" : "";
@@ -652,7 +652,7 @@ function KpiGridRich({ kpis, tendencia }: { kpis: any; tendencia?: any[] }) {
     { label: "Riesgo alto",     value: k.granjasRiesgoAlto,   icon: <AlertTriangle/>, color: "#EF4444", pct: pct(k.granjasRiesgoAlto, totG) },
     { label: "Capacidad aves",  value: (k.capacidadTotal ?? 0).toLocaleString("es-CO"), icon: <Wheat/>, color: "#06B6D4" },
     { label: "Auditorías",      value: k.totalAuditorias,     icon: <Activity/>,      color: "#8B5CF6", trend: tr(last.Visitas, prev.Visitas, false) },
-    { label: "Auditores",       value: k.auditoresActivos,    icon: <Users/>,         color: "#EC4899" },
+    { label: "Auditores",       value: auditoresCount || k.auditoresActivos, icon: <Users/>,         color: "#EC4899" },
     { label: "Hallazgos",       value: k.totalHallazgos,      icon: <Bug/>,           color: "#F97316", trend: tr(last.Hallazgos, prev.Hallazgos, true) },
     { label: "Críticos",        value: k.hallazgosCriticos,   icon: <AlertTriangle/>, color: "#EF4444", pct: pct(k.hallazgosCriticos, totH), trend: tr(last.Criticos, prev.Criticos, true) },
     { label: "Abiertos",        value: k.hallazgosAbiertos,   icon: <Bug/>,           color: "#EF4444", pct: pct(k.hallazgosAbiertos, totH) },
