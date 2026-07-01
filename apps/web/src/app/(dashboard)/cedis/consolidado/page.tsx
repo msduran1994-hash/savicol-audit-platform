@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Header } from "@/components/layout/header";
 import { useCedisStore, selectFilteredAuditorias } from "@/store/cedis.store";
+import { useQueryClient } from "@tanstack/react-query";
 import { useShallow } from "zustand/react/shallow";
 import {
   TIPO_RIESGO_CEDI, CRITICIDAD_CEDI, ESTADO_HALLAZGO_CEDI,
@@ -94,6 +95,13 @@ export default function ConsolidadoCedisPage() {
   const addAuditoria = useCedisStore((s) => s.addAuditoria);
   const updateAud    = useCedisStore((s) => s.updateAuditoria);
   const removeAud    = useCedisStore((s) => s.removeAuditoria);
+  // Sincroniza el Resumen/Dashboard Ejecutivo tras un CRUD: invalida las consultas
+  // React Query que consumen el Resumen Ejecutivo y los dashboards de CEDIS.
+  const qc = useQueryClient();
+  const syncDashboards = () => {
+    ["cedis-auditorias", "cedis-hallazgos", "cedis-dashboard", "cedis-executive", "cedis-ai", "cedis"]
+      .forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  };
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AuditoriaCedi | null>(null);
@@ -176,7 +184,7 @@ export default function ConsolidadoCedisPage() {
                       </button>
                       <button onClick={async () => {
                         if (!confirm(`¿Eliminar auditoría de ${a.cediNombre}?`)) return;
-                        try { await removeAud(a.id); }
+                        try { await removeAud(a.id); syncDashboards(); }
                         catch (e: any) { alert("Error al eliminar: " + (e?.response?.data?.message ?? e?.message ?? "desconocido")); }
                       }}
                               className="p-1.5 rounded hover:bg-red-950/30 text-[#94A3B8] hover:text-red-400" title="Eliminar">
@@ -232,6 +240,7 @@ export default function ConsolidadoCedisPage() {
               const enriched = { ...a, cediNombre: c?.nombre ?? a.cediNombre ?? "" };
               if (editing) await updateAud(editing.id, enriched);
               else         await addAuditoria(enriched as any);
+              syncDashboards();
               setModalOpen(false);
             } catch (e: any) {
               const raw = e?.response?.data;

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Header } from "@/components/layout/header";
 import { useRutasStore, selectFilteredAcompanamientos } from "@/store/rutas.store";
+import { useQueryClient } from "@tanstack/react-query";
 import { useShallow } from "zustand/react/shallow";
 import {
   MOTIVOS_DEVOLUCION, CRITICIDAD_OPERACIONAL, ESTADO_ACOMPANAMIENTO,
@@ -26,6 +27,12 @@ export default function ConsolidadoPage() {
   const addItem      = useRutasStore((s) => s.addAcompanamiento);
   const updateItem   = useRutasStore((s) => s.updateAcompanamiento);
   const removeItem   = useRutasStore((s) => s.removeAcompanamiento);
+  // Sincroniza el Resumen/Dashboard Ejecutivo tras un CRUD: invalida las consultas
+  // React Query que consumen el Resumen Ejecutivo y el dashboard ejecutivo de Rutas.
+  const qc = useQueryClient();
+  const syncDashboards = () => {
+    ["rutas-executive", "rutas-dashboard", "rutas-ai"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  };
 
   // Catálogos desde API (no DEMO arrays · funcionan en producción)
   const clientesQ    = useClientes();
@@ -158,7 +165,7 @@ export default function ConsolidadoPage() {
                             <button onClick={() => { setEditing(a); setModalOpen(true); }} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar">
                               <Edit2 className="w-3 h-3"/>
                             </button>
-                            <button onClick={() => { if (confirm(`¿Eliminar acompañamiento de ${a.clienteNombre}?`)) removeItem(a.id); }} className="p-1 rounded hover:bg-red-950/30 text-[#94A3B8] hover:text-red-400" title="Eliminar">
+                            <button onClick={async () => { if (confirm(`¿Eliminar acompañamiento de ${a.clienteNombre}?`)) { await removeItem(a.id); syncDashboards(); } }} className="p-1 rounded hover:bg-red-950/30 text-[#94A3B8] hover:text-red-400" title="Eliminar">
                               <Trash2 className="w-3 h-3"/>
                             </button>
                           </div>
@@ -191,6 +198,7 @@ export default function ConsolidadoPage() {
               setSaveError(null);
               if (editing) await updateItem(editing.id, a);
               else         await addItem(a as any);
+              syncDashboards();
               setModalOpen(false);
             } catch (e: any) {
               setSaveError(e?.response?.data?.message ?? e?.message ?? "Error al guardar");
