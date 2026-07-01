@@ -12,9 +12,10 @@ import {
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
+  PieChart, Pie, Cell, Legend, LabelList,
 } from "recharts";
 import { cn } from "@/lib/utils";
+import { pieValuePct, barLabelPct, sumField } from "@/lib/chart-pct";
 import { SeccionDesempenoAuditores } from "./seccion-desempeno-auditores";
 import { SeccionDiagnosticoRutas } from "./seccion-diagnostico-rutas";
 
@@ -355,6 +356,7 @@ export default function ResumenEjecutivoPage() {
                     {ind.topGranjas.map((g: any, i: number) => (
                       <Cell key={i} fill={g.riesgo === "ALTO" ? "#EF4444" : g.riesgo === "MEDIO" ? "#F59E0B" : "#22C55E"}/>
                     ))}
+                    <LabelList content={barLabelPct(sumField(ind.topGranjas, "hallazgos"), { horizontal: true })}/>
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -369,7 +371,7 @@ export default function ResumenEjecutivoPage() {
             </div>
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
-                <Pie data={ind.distSanitario} dataKey="valor" nameKey="estado" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2}>
+                <Pie data={ind.distSanitario} dataKey="valor" nameKey="estado" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} label={pieValuePct}>
                   {ind.distSanitario.map((d: any, i: number) => <Cell key={i} fill={d.color}/>)}
                 </Pie>
                 <Tooltip contentStyle={{ background: "#0D1526", border: "1px solid #1E2D4A", borderRadius: 8, fontSize: 12 }}/>
@@ -394,6 +396,7 @@ export default function ResumenEjecutivoPage() {
                   {ind.distRiesgo.map((d: any, i: number) => (
                     <Cell key={i} fill={d.nivel === "Alto" ? "#EF4444" : d.nivel === "Medio" ? "#F59E0B" : "#22C55E"}/>
                   ))}
+                  <LabelList content={barLabelPct(sumField(ind.distRiesgo, "valor"))}/>
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -408,11 +411,12 @@ export default function ResumenEjecutivoPage() {
             <div className="space-y-2.5">
               {ind.distRegion.map((r: any, i: number) => {
                 const maxVal = Math.max(...ind.distRegion.map((x: any) => x.valor), 1);
+                const totReg = ind.distRegion.reduce((s: number, x: any) => s + (x.valor || 0), 0);
                 return (
                   <div key={i}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-[#cbd5e1]">{r.region}</span>
-                      <span className="text-xs font-bold text-white">{r.valor}</span>
+                      <span className="text-xs font-bold text-white">{r.valor} · {totReg > 0 ? Math.round((r.valor / totReg) * 100) : 0}%</span>
                     </div>
                     <div className="h-1.5 bg-[#1E2D4A] rounded-full overflow-hidden">
                       <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(r.valor / maxVal) * 100}%` }}/>
@@ -472,6 +476,7 @@ export default function ResumenEjecutivoPage() {
                   {ind.distCriticidadCedi.map((d: any, i: number) => (
                     <Cell key={i} fill={d.criticidad === "Critica" ? "#EF4444" : d.criticidad === "Alta" ? "#F97316" : d.criticidad === "Media" ? "#F59E0B" : "#22C55E"}/>
                   ))}
+                  <LabelList content={barLabelPct(sumField(ind.distCriticidadCedi, "valor"))}/>
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

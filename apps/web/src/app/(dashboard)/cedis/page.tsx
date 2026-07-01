@@ -15,6 +15,7 @@ import {
   RadarChart, PolarGrid, PolarAngleAxis, Radar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
+import { pieValuePct, barLabelPct, sumField } from "@/lib/chart-pct";
 
 // Un color por mes para las barras de visitas (estética consistente con Granjas)
 const MES_COLORS = ["#10B981","#3B82F6","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899","#F97316","#14B8A6","#A855F7","#0EA5E9","#84CC16"];
@@ -188,7 +189,7 @@ export default function CedisDashboardPage() {
                 <Tooltip content={<Tip />} cursor={{ fill: "#1E2D4A33" }} />
                 <Bar dataKey="visitas" name="Visitas" radius={[4,4,0,0]} maxBarSize={46}>
                   {dataVisitasMes.map((_, i) => <Cell key={i} fill={MES_COLORS[i % 12]} />)}
-                  <LabelList dataKey="visitas" position="top" fill="#E2E8F0" fontSize={11} formatter={(v: any) => (v > 0 ? v : "")} />
+                  <LabelList content={barLabelPct(sumField(dataVisitasMes, "visitas"))}/>
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -198,7 +199,7 @@ export default function CedisDashboardPage() {
             {dataCategorias.length === 0 ? <Empty/> : (
               <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
-                  <Pie data={dataCategorias} dataKey="value" nameKey="name" outerRadius={80} innerRadius={40} label={(d:any)=>d.value}>
+                  <Pie data={dataCategorias} dataKey="value" nameKey="name" outerRadius={80} innerRadius={40} label={pieValuePct}>
                     {dataCategorias.map((_, i) => <Cell key={i} fill={["#10B981","#3B82F6","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899"][i % 7]} />)}
                   </Pie>
                   <Tooltip content={<Tip />} />
@@ -237,7 +238,9 @@ export default function CedisDashboardPage() {
                   <XAxis type="number" tick={{ fill:"#94A3B8", fontSize:11 }} axisLine={false} tickLine={false} />
                   <YAxis type="category" dataKey="name" width={100} tick={{ fill:"#94A3B8", fontSize:11 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<Tip />} />
-                  <Bar dataKey="value" fill="#EF4444" radius={[0,4,4,0]} />
+                  <Bar dataKey="value" fill="#EF4444" radius={[0,4,4,0]}>
+                    <LabelList content={barLabelPct(sumField(dataRiesgos, "value"), { horizontal: true })}/>
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -254,7 +257,9 @@ export default function CedisDashboardPage() {
                   <XAxis dataKey="name" tick={{ fill:"#94A3B8", fontSize:9 }} angle={-25} textAnchor="end" height={50} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill:"#94A3B8", fontSize:10 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<Tip />} />
-                  <Bar dataKey="value" fill="#10B981" radius={[3,3,0,0]} />
+                  <Bar dataKey="value" fill="#10B981" radius={[3,3,0,0]}>
+                    <LabelList content={barLabelPct(sumField(dataAuditores, "value"))}/>
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -264,7 +269,7 @@ export default function CedisDashboardPage() {
             {dataCriticidad.length === 0 ? <Empty/> : (
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
-                  <Pie data={dataCriticidad} dataKey="value" nameKey="name" outerRadius={70} label={(d:any)=>d.name}>
+                  <Pie data={dataCriticidad} dataKey="value" nameKey="name" outerRadius={70} label={pieValuePct}>
                     {dataCriticidad.map((_, i) => <Cell key={i} fill={["#EF4444","#F59E0B","#3B82F6","#94A3B8"][["Crítica","Alta","Media","Baja"].indexOf(dataCriticidad[i].name)]} />)}
                   </Pie>
                   <Tooltip content={<Tip />} />

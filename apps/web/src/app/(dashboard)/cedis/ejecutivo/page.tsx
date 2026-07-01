@@ -11,6 +11,7 @@ import {
   ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
 } from "recharts";
+import { barLabelPct, sumField } from "@/lib/chart-pct";
 import {
   Warehouse, Activity, AlertTriangle, ShieldCheck, Target, Users, Sparkles,
   Filter, RefreshCw, FileSpreadsheet, FileText, Loader2,
@@ -524,7 +525,7 @@ function ReportesItemChart({ data }: { data: any[] }) {
         <Tooltip content={<Tip/>} cursor={{ fill: "#1E2D4A33" }}/>
         <Bar dataKey="count" name="Reportes" radius={[4,4,0,0]}>
           {sorted.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]}/>)}
-          <LabelList dataKey="count" position="top" fill="#E2E8F0" fontSize={11}/>
+          <LabelList content={barLabelPct(sumField(sorted, "count"))}/>
         </Bar>
       </BarChart>
     </ResponsiveContainer>
@@ -540,7 +541,9 @@ function RecurrentesChart({ data }: { data: any[] }) {
         <XAxis type="number" tick={{ fill: "#94A3B8", fontSize: 10 }}/>
         <YAxis type="category" dataKey="titulo" width={200} tick={{ fill: "#94A3B8", fontSize: 9 }}/>
         <Tooltip content={<Tip/>}/>
-        <Bar dataKey="count" fill="#A855F7" radius={[0,3,3,0]}/>
+        <Bar dataKey="count" fill="#A855F7" radius={[0,3,3,0]}>
+          <LabelList content={barLabelPct(sumField(data, "count"), { horizontal: true })}/>
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );
@@ -552,7 +555,7 @@ function CategoriasChart({ data }: { data: any[] }) {
   return (
     <ResponsiveContainer width="100%" height={260}>
       <PieChart>
-        <Pie data={data} dataKey="count" cx="50%" cy="50%" innerRadius={60} outerRadius={100} label={(d: any) => `${d.categoria}: ${d.count}`}>
+        <Pie data={data} dataKey="count" cx="50%" cy="50%" innerRadius={60} outerRadius={100} label={(d: any) => `${d.categoria}: ${d.count} · ${d.percent != null ? Math.round(d.percent * 100) : 0}%`}>
           {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]}/>)}
         </Pie>
         <Tooltip content={<Tip/>}/>

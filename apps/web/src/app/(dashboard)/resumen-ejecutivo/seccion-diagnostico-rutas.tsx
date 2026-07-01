@@ -5,8 +5,9 @@ import { useRutasStore } from "@/store/rutas.store";
 import { useShallow } from "zustand/react/shallow";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, Cell, Legend,
+  LineChart, Line, Cell, Legend, LabelList,
 } from "recharts";
+import { barLabelPct, sumField } from "@/lib/chart-pct";
 import {
   Route, Loader2, Users2, AlertTriangle, CheckCircle2,
   Truck, MapPin, Info, Building2, ShieldAlert, ClipboardList,
@@ -145,6 +146,7 @@ export function SeccionDiagnosticoRutas() {
                     <Tooltip contentStyle={tooltipStyle} />
                     <Bar dataKey="count" name="Hallazgos" radius={[4, 4, 0, 0]}>
                       {motivos.map((m, i) => <Cell key={m.motivo ?? i} fill={COLORS[i % COLORS.length]} />)}
+                      <LabelList content={barLabelPct(sumField(motivos, "count"))}/>
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -161,6 +163,7 @@ export function SeccionDiagnosticoRutas() {
                     <Tooltip contentStyle={tooltipStyle} />
                     <Bar dataKey="total" name="Acompañamientos" radius={[0, 4, 4, 0]}>
                       {auditores.map((a, i) => <Cell key={a.auditorId ?? i} fill={COLORS[i % COLORS.length]} />)}
+                      <LabelList content={barLabelPct(sumField(auditores, "total"), { horizontal: true })}/>
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>

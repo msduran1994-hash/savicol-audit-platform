@@ -9,8 +9,9 @@ import { useAuthStore } from "@/store/auth.store";
 import { useClientes, useRutasCat } from "@/hooks/useRutas";
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, ComposedChart,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell, Pie, PieChart,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell, Pie, PieChart, LabelList,
 } from "recharts";
+import { barLabelPct, sumField } from "@/lib/chart-pct";
 import {
   Truck, Building2, MapPin, AlertTriangle, Target, Users, Sparkles,
   Filter, RefreshCw, Download, FileSpreadsheet, FileText, Loader2,
@@ -538,7 +539,9 @@ function ParetoMotivosChart({ data }: { data: any[] }) {
         <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fill: "#94A3B8", fontSize: 10 }}/>
         <Tooltip content={<Tip/>}/>
         <Legend wrapperStyle={{ fontSize: "11px", color: "#94A3B8" }}/>
-        <Bar yAxisId="left" dataKey="count" fill="#06B6D4" name="Eventos" radius={[3,3,0,0]}/>
+        <Bar yAxisId="left" dataKey="count" fill="#06B6D4" name="Eventos" radius={[3,3,0,0]}>
+          <LabelList content={barLabelPct(sumField(data, "count"))}/>
+        </Bar>
         <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke="#F59E0B" strokeWidth={2} dot={{ r: 4 }} name="% Acumulado"/>
       </ComposedChart>
     </ResponsiveContainer>
@@ -599,7 +602,7 @@ function MatrizCriticidadChart({ data }: { data: any[] }) {
   return (
     <ResponsiveContainer width="100%" height={260}>
       <PieChart>
-        <Pie data={data} cx="50%" cy="50%" innerRadius={50} outerRadius={90} dataKey="count" label={(d: any) => `${d.impactoLabel}: ${d.count}`}>
+        <Pie data={data} cx="50%" cy="50%" innerRadius={50} outerRadius={90} dataKey="count" label={(d: any) => `${d.impactoLabel}: ${d.count} · ${d.percent != null ? Math.round(d.percent * 100) : 0}%`}>
           {data.map((d, i) => <Cell key={i} fill={CRITICIDAD_COLOR[d.criticidad] ?? "#64748B"}/>)}
         </Pie>
         <Tooltip content={<Tip/>}/>

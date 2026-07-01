@@ -12,6 +12,7 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, LabelList,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
+import { pieValuePct, barLabelPct, sumField } from "@/lib/chart-pct";
 
 const Tip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
@@ -186,7 +187,7 @@ export default function RutasDashboardPage() {
             {dataMotivos.length === 0 ? <Empty/> : (
               <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
-                  <Pie data={dataMotivos} dataKey="value" nameKey="name" outerRadius={80} innerRadius={40} label={(d:any)=>`${d.value}`}>
+                  <Pie data={dataMotivos} dataKey="value" nameKey="name" outerRadius={80} innerRadius={40} label={pieValuePct}>
                     {dataMotivos.map((_, i) => <Cell key={i} fill={["#06B6D4","#3B82F6","#8B5CF6","#F59E0B","#10B981","#EC4899","#EF4444","#94A3B8"][i % 8]} />)}
                   </Pie>
                   <Tooltip content={<Tip />} />
@@ -225,7 +226,9 @@ export default function RutasDashboardPage() {
                   <XAxis type="number" tick={{ fill:"#94A3B8", fontSize:11 }} axisLine={false} tickLine={false} />
                   <YAxis type="category" dataKey="name" width={100} tick={{ fill:"#94A3B8", fontSize:11 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<Tip />} />
-                  <Bar dataKey="value" fill="#EF4444" radius={[0,4,4,0]} />
+                  <Bar dataKey="value" fill="#EF4444" radius={[0,4,4,0]}>
+                    <LabelList content={barLabelPct(sumField(dataRiesgos, "value"), { horizontal: true })}/>
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -238,7 +241,7 @@ export default function RutasDashboardPage() {
             {dataVehiculos.length === 0 ? <Empty/> : (
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
-                  <Pie data={dataVehiculos} dataKey="value" nameKey="name" outerRadius={70} label={(d:any)=>d.name}>
+                  <Pie data={dataVehiculos} dataKey="value" nameKey="name" outerRadius={70} label={pieValuePct}>
                     {dataVehiculos.map((_, i) => <Cell key={i} fill={["#06B6D4","#3B82F6","#8B5CF6","#10B981","#F59E0B","#EF4444"][i]} />)}
                   </Pie>
                   <Tooltip content={<Tip />} />
@@ -255,7 +258,9 @@ export default function RutasDashboardPage() {
                   <XAxis dataKey="name" tick={{ fill:"#94A3B8", fontSize:9 }} angle={-25} textAnchor="end" height={50} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill:"#94A3B8", fontSize:10 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<Tip />} />
-                  <Bar dataKey="value" fill="#06B6D4" radius={[3,3,0,0]} />
+                  <Bar dataKey="value" fill="#06B6D4" radius={[3,3,0,0]}>
+                    <LabelList content={barLabelPct(sumField(dataAuditores, "value"))}/>
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -265,7 +270,7 @@ export default function RutasDashboardPage() {
             {dataCriticidad.length === 0 ? <Empty/> : (
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
-                  <Pie data={dataCriticidad} dataKey="value" nameKey="name" outerRadius={70} label={(d:any)=>d.name}>
+                  <Pie data={dataCriticidad} dataKey="value" nameKey="name" outerRadius={70} label={pieValuePct}>
                     {dataCriticidad.map((_, i) => <Cell key={i} fill={["#94A3B8","#3B82F6","#F59E0B","#EF4444"][["Bajo","Medio","Alto","Crítico"].indexOf(dataCriticidad[i].name)]} />)}
                   </Pie>
                   <Tooltip content={<Tip />} />
@@ -305,7 +310,7 @@ export default function RutasDashboardPage() {
                   <YAxis type="category" dataKey="name" width={140} tick={{ fill:"#94A3B8", fontSize:10 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<Tip />} cursor={{ fill: "#1E2D4A33" }} />
                   <Bar dataKey="value" name="Reportes" fill="#F59E0B" radius={[0,4,4,0]}>
-                    <LabelList dataKey="value" position="right" fill="#E2E8F0" fontSize={11} />
+                    <LabelList content={barLabelPct(sumField(dataClientesReportes, "value"), { horizontal: true })}/>
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -324,7 +329,7 @@ export default function RutasDashboardPage() {
                   <YAxis type="category" dataKey="name" width={150} tick={{ fill:"#94A3B8", fontSize:10 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<Tip />} cursor={{ fill: "#1E2D4A33" }} />
                   <Bar dataKey="value" name="Registros" fill="#06B6D4" radius={[0,4,4,0]}>
-                    <LabelList dataKey="value" position="right" fill="#E2E8F0" fontSize={11} />
+                    <LabelList content={barLabelPct(sumField(dataRutasVisitas, "value"), { horizontal: true })}/>
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>

@@ -12,8 +12,9 @@ import { useAuthStore } from "@/store/auth.store";
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ComposedChart, ReferenceLine,
-  RadarChart, PolarGrid, PolarAngleAxis, Radar,
+  RadarChart, PolarGrid, PolarAngleAxis, Radar, LabelList,
 } from "recharts";
+import { barLabelPct, sumField } from "@/lib/chart-pct";
 import {
   Tractor, AlertTriangle, ShieldCheck, Target, Users, Sparkles, Bug,
   Filter, RefreshCw, FileSpreadsheet, FileText, Loader2,
@@ -489,8 +490,9 @@ function VisitasMesChart({ data }: { data: { mes: string; visitas: number }[] })
         <XAxis dataKey="mes" tick={{ fill: "#94A3B8", fontSize: 12 }}/>
         <YAxis allowDecimals={false} tick={{ fill: "#94A3B8", fontSize: 10 }}/>
         <Tooltip content={<Tip/>}/>
-        <Bar dataKey="visitas" name="Visitas" radius={[4,4,0,0]} label={{ position: "top", fill: "#cbd5e1", fontSize: 11 }}>
+        <Bar dataKey="visitas" name="Visitas" radius={[4,4,0,0]}>
           {data.map((d, i) => <Cell key={i} fill={MES_COLORS[i % MES_COLORS.length]}/>)}
+          <LabelList content={barLabelPct(sumField(data, "visitas"))}/>
         </Bar>
       </BarChart>
     </ResponsiveContainer>
@@ -544,7 +546,9 @@ function HallazgosAuditorChart({ data }: { data: { auditorNombre: string; count:
         <XAxis type="number" tick={{ fill: "#94A3B8", fontSize: 10 }}/>
         <YAxis type="category" dataKey="auditorNombre" width={150} tick={{ fill: "#94A3B8", fontSize: 10 }}/>
         <Tooltip content={<Tip/>}/>
-        <Bar dataKey="count" name="Hallazgos" fill="#F59E0B" radius={[0,3,3,0]}/>
+        <Bar dataKey="count" name="Hallazgos" fill="#F59E0B" radius={[0,3,3,0]}>
+          <LabelList content={barLabelPct(sumField(data, "count"), { horizontal: true })}/>
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );
@@ -559,7 +563,9 @@ function TopGranjasChart({ data, color, name }: { data: { name: string; value: n
         <XAxis type="number" tick={{ fill: "#94A3B8", fontSize: 10 }}/>
         <YAxis type="category" dataKey="name" width={150} tick={{ fill: "#94A3B8", fontSize: 9 }}/>
         <Tooltip content={<Tip/>}/>
-        <Bar dataKey="value" name={name} fill={color} radius={[0,3,3,0]}/>
+        <Bar dataKey="value" name={name} fill={color} radius={[0,3,3,0]}>
+          <LabelList content={barLabelPct(sumField(data, "value"), { horizontal: true })}/>
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );
@@ -774,7 +780,9 @@ function CategoriaChart({ data }: { data: any[] }) {
         <XAxis type="number" tick={{ fill: "#94A3B8", fontSize: 10 }}/>
         <YAxis type="category" dataKey="categoria" width={130} tick={{ fill: "#94A3B8", fontSize: 9 }}/>
         <Tooltip content={<Tip/>}/>
-        <Bar dataKey="count" fill="#F97316" radius={[0,3,3,0]}/>
+        <Bar dataKey="count" fill="#F97316" radius={[0,3,3,0]}>
+          <LabelList content={barLabelPct(sumField(data, "count"), { horizontal: true })}/>
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );
@@ -806,7 +814,7 @@ function DistribucionTipoChart({ data }: { data: any[] }) {
   return (
     <ResponsiveContainer width="100%" height={260}>
       <PieChart>
-        <Pie data={data} dataKey="count" cx="50%" cy="50%" innerRadius={50} outerRadius={90} label={(d: any) => `${d.tipo}: ${d.count}`}>
+        <Pie data={data} dataKey="count" cx="50%" cy="50%" innerRadius={50} outerRadius={90} label={(d: any) => `${d.tipo}: ${d.count} · ${d.percent != null ? Math.round(d.percent * 100) : 0}%`}>
           {data.map((d, i) => <Cell key={i} fill={d.color}/>)}
         </Pie>
         <Tooltip content={<Tip/>}/>
@@ -826,6 +834,7 @@ function LineaProductivaChart({ data }: { data: any[] }) {
         <Tooltip content={<Tip/>}/>
         <Bar dataKey="count" radius={[3,3,0,0]}>
           {data.map((d, i) => <Cell key={i} fill={d.color}/>)}
+          <LabelList content={barLabelPct(sumField(data, "count"))}/>
         </Bar>
       </BarChart>
     </ResponsiveContainer>
@@ -872,7 +881,7 @@ function CriticidadChart({ data }: { data: any[] }) {
   return (
     <ResponsiveContainer width="100%" height={260}>
       <PieChart>
-        <Pie data={data} dataKey="count" cx="50%" cy="50%" innerRadius={50} outerRadius={90} label={(d: any) => `${d.criticidad}: ${d.count}`}>
+        <Pie data={data} dataKey="count" cx="50%" cy="50%" innerRadius={50} outerRadius={90} label={(d: any) => `${d.criticidad}: ${d.count} · ${d.percent != null ? Math.round(d.percent * 100) : 0}%`}>
           {data.map((d, i) => <Cell key={i} fill={CRIT_COLOR[d.criticidad] ?? "#64748B"}/>)}
         </Pie>
         <Tooltip content={<Tip/>}/>
@@ -890,7 +899,9 @@ function ProduccionChart({ data }: { data: any[] }) {
         <XAxis type="number" tick={{ fill: "#94A3B8", fontSize: 10 }}/>
         <YAxis type="category" dataKey="nombre" width={160} tick={{ fill: "#94A3B8", fontSize: 9 }}/>
         <Tooltip content={<Tip/>}/>
-        <Bar dataKey="capacidad" fill="#10B981" name="Aves" radius={[0,3,3,0]}/>
+        <Bar dataKey="capacidad" fill="#10B981" name="Aves" radius={[0,3,3,0]}>
+          <LabelList content={barLabelPct(sumField(data, "capacidad"), { horizontal: true })}/>
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );
@@ -916,7 +927,7 @@ function MitigadosChart({ cerrados, activos }: { cerrados: number; activos: numb
   return (
     <ResponsiveContainer width="100%" height={260}>
       <PieChart>
-        <Pie data={data} dataKey="value" cx="50%" cy="50%" innerRadius={55} outerRadius={90} label={(d: any) => `${d.name}: ${d.value}`}>
+        <Pie data={data} dataKey="value" cx="50%" cy="50%" innerRadius={55} outerRadius={90} label={(d: any) => `${d.name}: ${d.value} · ${d.percent != null ? Math.round(d.percent * 100) : 0}%`}>
           {data.map((d, i) => <Cell key={i} fill={d.color}/>)}
         </Pie>
         <Tooltip content={<Tip/>}/>
