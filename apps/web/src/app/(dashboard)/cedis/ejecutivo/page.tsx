@@ -8,8 +8,8 @@ import { useCedisExecutive, useCedisAiSummary, type CedisFilters } from "@/hooks
 import { useAuthStore } from "@/store/auth.store";
 import { useCedis } from "@/hooks/useCedis";
 import {
-  ResponsiveContainer, BarChart, Bar, LineChart, Line, ComposedChart, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
 } from "recharts";
 import {
   Warehouse, Activity, AlertTriangle, ShieldCheck, Target, Users, Sparkles,
@@ -258,8 +258,8 @@ export default function CedisEjecutivoPage() {
               <ChartCard title="Heatmap · Subtema × CEDI" subtitle="Concentración de hallazgos" full>
                 <HeatmapSubtemaCedi data={exec.charts.heatmap}/>
               </ChartCard>
-              <ChartCard title="Tendencia mensual" subtitle="Auditorías · hallazgos · críticos">
-                <TendenciaChart data={exec.charts.tendenciaMes}/>
+              <ChartCard title="Reportes por Ítem" subtitle="Inventario · Cartera · Logística · Bioseguridad · Infraestructura · Caja">
+                <ReportesItemChart data={exec.charts.hallazgosPorCategoria}/>
               </ChartCard>
               <ChartCard title="Hallazgos recurrentes" subtitle="Top 10 por frecuencia">
                 <RecurrentesChart data={exec.charts.hallazgosRecurrentes}/>
@@ -509,19 +509,24 @@ function HeatmapSubtemaCedi({ data }: { data: any[] }) {
   );
 }
 
-function TendenciaChart({ data }: { data: any[] }) {
+// Reportes (hallazgos) por ítem/categoría — barras verticales ordenadas, un color
+// por ítem y etiqueta de valor. Reemplaza la antigua "Tendencia mensual".
+function ReportesItemChart({ data }: { data: any[] }) {
+  if (!data || data.length === 0) return <p className="text-center text-xs text-[#475569] py-8">Sin reportes por ítem</p>;
+  const COLORS = ["#06B6D4", "#F97316", "#10B981", "#8B5CF6", "#EF4444", "#F59E0B", "#3B82F6", "#EC4899", "#A855F7"];
+  const sorted = [...data].sort((a, b) => (b.count ?? 0) - (a.count ?? 0));
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <ComposedChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A"/>
-        <XAxis dataKey="mes" tick={{ fill: "#94A3B8", fontSize: 10 }}/>
-        <YAxis tick={{ fill: "#94A3B8", fontSize: 10 }}/>
-        <Tooltip content={<Tip/>}/>
-        <Legend wrapperStyle={{ fontSize: "11px", color: "#94A3B8" }}/>
-        <Bar dataKey="Auditorias" fill="#06B6D4" radius={[3,3,0,0]}/>
-        <Bar dataKey="Hallazgos"  fill="#F97316" radius={[3,3,0,0]}/>
-        <Line type="monotone" dataKey="Criticos" stroke="#EF4444" strokeWidth={2} dot={{ r: 3 }}/>
-      </ComposedChart>
+      <BarChart data={sorted} barSize={34} margin={{ top: 20, right: 8, left: 0, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false}/>
+        <XAxis dataKey="categoria" tick={{ fill: "#94A3B8", fontSize: 10 }} interval={0} angle={-25} textAnchor="end" height={64}/>
+        <YAxis allowDecimals={false} tick={{ fill: "#94A3B8", fontSize: 10 }}/>
+        <Tooltip content={<Tip/>} cursor={{ fill: "#1E2D4A33" }}/>
+        <Bar dataKey="count" name="Reportes" radius={[4,4,0,0]}>
+          {sorted.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]}/>)}
+          <LabelList dataKey="count" position="top" fill="#E2E8F0" fontSize={11}/>
+        </Bar>
+      </BarChart>
     </ResponsiveContainer>
   );
 }

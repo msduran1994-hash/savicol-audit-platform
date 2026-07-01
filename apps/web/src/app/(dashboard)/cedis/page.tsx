@@ -11,10 +11,13 @@ import {
   Building2, Users, Sparkles, MapPin,
 } from "lucide-react";
 import {
-  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  BarChart, Bar, PieChart, Pie, Cell, LabelList,
   RadarChart, PolarGrid, PolarAngleAxis, Radar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
+
+// Un color por mes para las barras de visitas (estética consistente con Granjas)
+const MES_COLORS = ["#10B981","#3B82F6","#F59E0B","#8B5CF6","#EF4444","#06B6D4","#EC4899","#F97316","#14B8A6","#A855F7","#0EA5E9","#84CC16"];
 
 const Tip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
@@ -53,11 +56,20 @@ export default function CedisDashboardPage() {
 
   // ─── DATOS PARA GRÁFICOS ───────────────────────────────────────────────────
 
-  const meses = ["Dic 25", "Ene", "Feb", "Mar", "Abr", "May 26"];
-  const dataMensual = meses.map((m, i) => {
-    const monthIdx = (new Date(2025, 11 + i).getMonth());
-    const f = auditorias.filter(a => new Date(a.fechaVisita).getMonth() === monthIdx);
-    return { name: m, visitas: f.length, hallazgos: hallazgos.filter(h => new Date(h.createdAt).getMonth() === monthIdx).length };
+  // Visitas a CEDIS por mes — desde el módulo Consolidado (auditorías). El mes/año
+  // se lee del texto ISO (YYYY-MM) para evitar desfases de zona horaria (UTC-5).
+  const MESES_ABBR = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  const anioVisitas = (() => {
+    const ys = auditorias.map(a => String(a.fechaVisita ?? "").slice(0, 4)).filter(s => s.length === 4);
+    return ys.length ? ys.sort().reverse()[0] : String(new Date().getFullYear());
+  })();
+  const dataVisitasMes = MESES_ABBR.map((m, i) => {
+    const mm = String(i + 1).padStart(2, "0");
+    const visitas = auditorias.filter(a => {
+      const f = String(a.fechaVisita ?? "");
+      return f.slice(0, 4) === anioVisitas && f.slice(5, 7) === mm;
+    }).length;
+    return { name: m, visitas };
   });
 
   // Hallazgos por categoría
@@ -167,16 +179,18 @@ export default function CedisDashboardPage() {
 
         {/* Tendencia mensual + Distribución porcentual */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <ChartCard title="CEDIS Visitados por Mes" colSpan="lg:col-span-2">
+          <ChartCard title={`CEDIS Visitados por Mes · ${anioVisitas}`} colSpan="lg:col-span-2">
             <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={dataMensual}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" />
+              <BarChart data={dataVisitasMes} margin={{ top: 18, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false} />
                 <XAxis dataKey="name" tick={{ fill:"#94A3B8", fontSize:11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill:"#94A3B8", fontSize:11 }} axisLine={false} tickLine={false} />
-                <Tooltip content={<Tip />} />
-                <Line type="monotone" dataKey="visitas"   name="Visitas"   stroke="#10B981" strokeWidth={2.5} dot={{ fill:"#10B981", r:4 }} />
-                <Line type="monotone" dataKey="hallazgos" name="Hallazgos" stroke="#F59E0B" strokeWidth={2.5} dot={{ fill:"#F59E0B", r:4 }} />
-              </LineChart>
+                <YAxis allowDecimals={false} tick={{ fill:"#94A3B8", fontSize:11 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<Tip />} cursor={{ fill: "#1E2D4A33" }} />
+                <Bar dataKey="visitas" name="Visitas" radius={[4,4,0,0]} maxBarSize={46}>
+                  {dataVisitasMes.map((_, i) => <Cell key={i} fill={MES_COLORS[i % 12]} />)}
+                  <LabelList dataKey="visitas" position="top" fill="#E2E8F0" fontSize={11} formatter={(v: any) => (v > 0 ? v : "")} />
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </ChartCard>
 
