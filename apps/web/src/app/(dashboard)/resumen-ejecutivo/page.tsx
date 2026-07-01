@@ -282,25 +282,7 @@ export default function ResumenEjecutivoPage() {
           <KpiCard label="Auditorías ejecutadas" value={fNum(ind.totalAuditorias)} sub={`${ind.totalCedis} CEDIS evaluados`} icon={ClipboardCheck} color="#4A7AFF"/>
         </div>
 
-        {/* Bloque Auditoría / CEDIS */}
-        <section className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
-          <BloqueTitulo icon={ShieldCheck} titulo="Auditoría · CEDIS" sub="Hallazgos y cumplimiento de centros de distribución" color="#4A7AFF"/>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-            <div className="space-y-3">
-              <SemBar label="Cumplimiento (hallazgos cerrados)" pct={ind.cumplimientoAud} extra={`${ind.hallCerrados}/${ind.hallAbiertos + ind.hallCerrados}`}/>
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                <div className="bg-[#0D1526] rounded-lg py-2 text-center"><p className="text-lg font-bold text-white">{fNum(ind.totalAuditorias)}</p><p className="text-[9px] text-[#64748B]">Auditorías</p></div>
-                <div className="bg-[#0D1526] rounded-lg py-2 text-center"><p className="text-lg font-bold text-amber-400">{fNum(ind.hallAbiertos)}</p><p className="text-[9px] text-[#64748B]">Abiertos</p></div>
-                <div className="bg-[#0D1526] rounded-lg py-2 text-center"><p className="text-lg font-bold text-emerald-400">{fNum(ind.hallCerrados)}</p><p className="text-[9px] text-[#64748B]">Cerrados</p></div>
-              </div>
-            </div>
-            <div className="flex items-center justify-around">
-              <div className="text-center"><p className="text-3xl font-bold text-red-400">{fNum(ind.riesgosCriticos)}</p><p className="text-[10px] text-[#64748B] mt-1">Riesgos críticos/altos</p></div>
-              <div className="text-center"><p className="text-3xl font-bold text-white">{fNum(ind.totalCedis)}</p><p className="text-[10px] text-[#64748B] mt-1">CEDIS evaluados</p></div>
-            </div>
-          </div>
-        </section>
-
+        {/* ═══════════════ GRANJAS ═══════════════ */}
         {/* Bloque Granjas */}
         <section className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
           <BloqueTitulo icon={Tractor} titulo="Granjas" sub="Estado sanitario, hallazgos y KPIs" color="#22C55E"/>
@@ -342,14 +324,14 @@ export default function ResumenEjecutivoPage() {
           </div>
         </section>
 
-        {/* ── Gráficos ejecutivos y rankings (Fase 2) ── */}
+        {/* Analítica · Granjas */}
         <div className="flex items-center gap-2.5 pt-2">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#4A7AFF]1A text-[#4A7AFF]" style={{ background: "#4A7AFF1A", color: "#4A7AFF" }}>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#22C55E1A", color: "#22C55E" }}>
             <BarChart3 className="w-4.5 h-4.5"/>
           </div>
           <div>
-            <h2 className="text-sm font-bold text-white">Analítica Ejecutiva</h2>
-            <p className="text-[11px] text-[#64748B]">Rankings, distribuciones y comparativos corporativos</p>
+            <h2 className="text-sm font-bold text-white">Analítica · Granjas</h2>
+            <p className="text-[11px] text-[#64748B]">Rankings, estado sanitario y distribución por riesgo/región</p>
           </div>
         </div>
 
@@ -417,49 +399,7 @@ export default function ResumenEjecutivoPage() {
             </ResponsiveContainer>
           </div>
 
-          {/* Hallazgos CEDIS por criticidad */}
-          <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <AlertTriangle className="w-4 h-4 text-amber-400"/>
-              <h3 className="text-sm font-bold text-white">Hallazgos CEDIS por criticidad</h3>
-            </div>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={ind.distCriticidadCedi} margin={{ left: -15, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false}/>
-                <XAxis dataKey="criticidad" stroke="#94A3B8" fontSize={11}/>
-                <YAxis stroke="#64748B" fontSize={11} allowDecimals={false}/>
-                <Tooltip contentStyle={{ background: "#0D1526", border: "1px solid #1E2D4A", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "#fff" }} cursor={{ fill: "#1E2D4A33" }}/>
-                <Bar dataKey="valor" radius={[4, 4, 0, 0]}>
-                  {ind.distCriticidadCedi.map((d: any, i: number) => (
-                    <Cell key={i} fill={d.criticidad === "Critica" ? "#EF4444" : d.criticidad === "Alta" ? "#F97316" : d.criticidad === "Media" ? "#F59E0B" : "#22C55E"}/>
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Rankings en tablas */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Ranking CEDIS */}
-          <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Trophy className="w-4 h-4 text-[#4A7AFF]"/>
-              <h3 className="text-sm font-bold text-white">Ranking CEDIS por hallazgos</h3>
-            </div>
-            <div className="space-y-2">
-              {ind.rankingCedis.length === 0 ? <p className="text-xs text-[#64748B] py-4 text-center">Sin datos</p> :
-                ind.rankingCedis.map((c: any, i: number) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <span className="w-5 h-5 rounded-full bg-[#1A2540] text-[10px] font-bold text-white flex items-center justify-center shrink-0">{i + 1}</span>
-                    <span className="text-sm text-white flex-1">{c.nombre}</span>
-                    <span className="text-xs font-bold text-amber-400">{c.hallazgos} hallazgos</span>
-                  </div>
-                ))}
-            </div>
-          </div>
-
-          {/* Distribución por región */}
+          {/* Granjas por región */}
           <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-3">
               <Tractor className="w-4 h-4 text-emerald-400"/>
@@ -480,6 +420,78 @@ export default function ResumenEjecutivoPage() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+
+        {/* ═══════════════ CEDIS (debajo de Granjas) ═══════════════ */}
+        {/* Bloque Auditoría · CEDIS */}
+        <section className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
+          <BloqueTitulo icon={ShieldCheck} titulo="Auditoría · CEDIS" sub="Hallazgos y cumplimiento de centros de distribución" color="#4A7AFF"/>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+            <div className="space-y-3">
+              <SemBar label="Cumplimiento (hallazgos cerrados)" pct={ind.cumplimientoAud} extra={`${ind.hallCerrados}/${ind.hallAbiertos + ind.hallCerrados}`}/>
+              <div className="grid grid-cols-3 gap-2 pt-1">
+                <div className="bg-[#0D1526] rounded-lg py-2 text-center"><p className="text-lg font-bold text-white">{fNum(ind.totalAuditorias)}</p><p className="text-[9px] text-[#64748B]">Auditorías</p></div>
+                <div className="bg-[#0D1526] rounded-lg py-2 text-center"><p className="text-lg font-bold text-amber-400">{fNum(ind.hallAbiertos)}</p><p className="text-[9px] text-[#64748B]">Abiertos</p></div>
+                <div className="bg-[#0D1526] rounded-lg py-2 text-center"><p className="text-lg font-bold text-emerald-400">{fNum(ind.hallCerrados)}</p><p className="text-[9px] text-[#64748B]">Cerrados</p></div>
+              </div>
+            </div>
+            <div className="flex items-center justify-around">
+              <div className="text-center"><p className="text-3xl font-bold text-red-400">{fNum(ind.riesgosCriticos)}</p><p className="text-[10px] text-[#64748B] mt-1">Riesgos críticos/altos</p></div>
+              <div className="text-center"><p className="text-3xl font-bold text-white">{fNum(ind.totalCedis)}</p><p className="text-[10px] text-[#64748B] mt-1">CEDIS evaluados</p></div>
+            </div>
+          </div>
+        </section>
+
+        {/* Analítica · CEDIS */}
+        <div className="flex items-center gap-2.5 pt-2">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "#4A7AFF1A", color: "#4A7AFF" }}>
+            <BarChart3 className="w-4.5 h-4.5"/>
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-white">Analítica · CEDIS</h2>
+            <p className="text-[11px] text-[#64748B]">Distribución de criticidad y ranking de centros de distribución</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Hallazgos CEDIS por criticidad */}
+          <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle className="w-4 h-4 text-amber-400"/>
+              <h3 className="text-sm font-bold text-white">Hallazgos CEDIS por criticidad</h3>
+            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={ind.distCriticidadCedi} margin={{ left: -15, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false}/>
+                <XAxis dataKey="criticidad" stroke="#94A3B8" fontSize={11}/>
+                <YAxis stroke="#64748B" fontSize={11} allowDecimals={false}/>
+                <Tooltip contentStyle={{ background: "#0D1526", border: "1px solid #1E2D4A", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "#fff" }} cursor={{ fill: "#1E2D4A33" }}/>
+                <Bar dataKey="valor" radius={[4, 4, 0, 0]}>
+                  {ind.distCriticidadCedi.map((d: any, i: number) => (
+                    <Cell key={i} fill={d.criticidad === "Critica" ? "#EF4444" : d.criticidad === "Alta" ? "#F97316" : d.criticidad === "Media" ? "#F59E0B" : "#22C55E"}/>
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Ranking CEDIS por hallazgos */}
+          <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Trophy className="w-4 h-4 text-[#4A7AFF]"/>
+              <h3 className="text-sm font-bold text-white">Ranking CEDIS por hallazgos</h3>
+            </div>
+            <div className="space-y-2">
+              {ind.rankingCedis.length === 0 ? <p className="text-xs text-[#64748B] py-4 text-center">Sin datos</p> :
+                ind.rankingCedis.map((c: any, i: number) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className="w-5 h-5 rounded-full bg-[#1A2540] text-[10px] font-bold text-white flex items-center justify-center shrink-0">{i + 1}</span>
+                    <span className="text-sm text-white flex-1">{c.nombre}</span>
+                    <span className="text-xs font-bold text-amber-400">{c.hallazgos} hallazgos</span>
+                  </div>
+                ))}
             </div>
           </div>
         </div>
