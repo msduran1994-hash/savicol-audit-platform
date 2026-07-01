@@ -89,7 +89,7 @@ export function SeccionDiagnosticoRutas() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
             <Kpi label="Acompañamientos" value={fNum(k?.totalAcompanamientos)} sub={`${fNum(k?.completados)} completados`} icon={Truck} color="#06B6D4" />
             <Kpi label="Cumplimiento general" value={`${k?.tasaResolucion ?? 0}%`} sub={`${fNum(k?.cerrados)} hallazgos cerrados`} icon={CheckCircle2} color={semColor(k?.tasaResolucion ?? 0)} />
-            <Kpi label="Hallazgos" value={fNum(k?.conHallazgos)} sub={`${fNum(k?.criticos)} críticos · ${fNum(k?.altos)} altos`} icon={AlertTriangle} color="#F59E0B" />
+            <Kpi label="Hallazgos" value={fNum(k?.totalAcompanamientos)} sub={`${fNum(k?.criticos)} críticos · ${fNum(k?.altos)} altos`} icon={AlertTriangle} color="#F59E0B" />
             <Kpi label="Índice criticidad" value={fNum(k?.indiceCriticidad)} sub="Ponderado por severidad" icon={ShieldAlert} color="#EF4444" />
             <Kpi label="Clientes visitados" value={fNum(k?.clientesUnicos)} sub={`${fNum(k?.rutasUnicas)} rutas únicas`} icon={MapPin} color="#4A7AFF" />
             <Kpi label="Auditores activos" value={fNum(k?.auditoresActivos)} icon={Users2} color="#A78BFA" />
