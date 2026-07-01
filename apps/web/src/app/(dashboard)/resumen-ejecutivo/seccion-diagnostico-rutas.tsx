@@ -1,6 +1,8 @@
 "use client";
 import type { ReactNode } from "react";
 import { useRutasExecutive } from "@/hooks/useRutasExecutive";
+import { useRutasStore } from "@/store/rutas.store";
+import { useShallow } from "zustand/react/shallow";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, Cell, Legend,
@@ -54,9 +56,27 @@ export function SeccionDiagnosticoRutas() {
   // Resumen son de Granjas/CEDIS y no aplican 1:1 a Rutas).
   const { data, isLoading } = useRutasExecutive({});
 
+  // Visitas y registros por mes desde el Consolidado (misma fuente que la hoja
+  // Rutas). Visitas = eventos distintos (ruta+fecha); Registros = nº de acompañamientos.
+  // El mes/año se lee del texto ISO (YYYY-MM) para evitar desfases de zona horaria.
+  const acompRutas = useRutasStore(useShallow((s) => s.acompanamientos));
+  const MESES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  const anioRutas = (() => {
+    const ys = acompRutas.map((a) => String(a.fecha ?? "").slice(0, 4)).filter((s) => s.length === 4);
+    return ys.length ? ys.sort().reverse()[0] : String(new Date().getFullYear());
+  })();
+  const visitasRegistrosMes = MESES_ABBR.map((m, i) => {
+    const mm = String(i + 1).padStart(2, "0");
+    const recs = acompRutas.filter((a) => {
+      const f = String(a.fecha ?? "");
+      return f.slice(0, 4) === anioRutas && f.slice(5, 7) === mm;
+    });
+    const visitas = new Set(recs.map((a) => `${a.rutaId}|${a.fecha}`)).size;
+    return { mes: m, Visitas: visitas, Registros: recs.length };
+  });
+
   const k = data?.kpis;
   const charts = data?.charts;
-  const tendencia = charts?.tendenciaMes ?? [];
   const motivos = (charts?.paretoMotivos ?? []).slice(0, 8);
   const auditores = (charts?.auditores ?? []).slice(0, 6);
   const clientes = (charts?.clientesRanking ?? []).slice(0, 5);
@@ -99,17 +119,17 @@ export function SeccionDiagnosticoRutas() {
 
           {/* Visualizaciones */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-            <Card title="Tendencia mensual">
+            <Card title={`Visitas y registros por mes · ${anioRutas}`}>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={tendencia} margin={{ top: 6, right: 12, left: -18, bottom: 0 }}>
+                  <LineChart data={visitasRegistrosMes} margin={{ top: 6, right: 12, left: -18, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" />
                     <XAxis dataKey="mes" tick={{ fill: "#64748B", fontSize: 10 }} />
-                    <YAxis tick={{ fill: "#64748B", fontSize: 10 }} />
+                    <YAxis allowDecimals={false} tick={{ fill: "#64748B", fontSize: 10 }} />
                     <Tooltip contentStyle={tooltipStyle} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Line type="monotone" dataKey="Acompañamientos" stroke="#06B6D4" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="Criticos" name="Críticos" stroke="#EF4444" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="Visitas" name="Visitas" stroke="#06B6D4" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="Registros" name="Registros reportados" stroke="#F59E0B" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
