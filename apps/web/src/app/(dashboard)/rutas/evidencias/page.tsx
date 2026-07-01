@@ -12,7 +12,7 @@ import {
 } from "@/hooks/useEvidencias";
 import {
   Camera, FileText, FileSpreadsheet, Image as ImageIcon, Video, FolderOpen,
-  Plus, ExternalLink, Trash2, X, AlertCircle, Loader2, Search, UploadCloud, Download, Link2,
+  Plus, ExternalLink, Trash2, X, AlertCircle, Loader2, Search, UploadCloud, Download, Link2, Maximize2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -196,55 +196,67 @@ export default function EvidenciasRutasPage() {
                     <p className="text-[#475569] text-xs">Click en "Cargar Evidencia" para subir una foto o archivo</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className={cn("grid gap-3", evid.length === 1 ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2")}>
                     {evid.map(e => {
                       const Icon = ICONO_TIPO[e.tipo] ?? FolderOpen;
                       const color = COLOR_TIPO[e.tipo] ?? "#94A3B8";
                       const img = esImagen(e);
+                      // Imagen grande a primera vista: un solo registro ocupa todo el ancho;
+                      // con varios, galería de 2 columnas. object-contain para ver la foto completa.
+                      const alturaImg = evid.length === 1 ? "h-[28rem]" : "h-64";
                       return (
-                        <div key={e.id} className="bg-[#1A2540] border border-[#2A3F6A] rounded-lg p-2.5 flex items-center gap-3">
+                        <div key={e.id} className="bg-[#1A2540] border border-[#2A3F6A] rounded-lg overflow-hidden flex flex-col">
                           {img ? (
-                            <button onClick={() => setLightbox(e.url)} className="shrink-0" title="Ver imagen">
-                              <EvidThumb url={e.url} alt={e.nombre} className="w-12 h-12 object-cover rounded-md border border-[#2A3F6A]"/>
+                            <button
+                              onClick={() => setLightbox(e.url)}
+                              className={cn("relative group block w-full bg-[#0A111F]", alturaImg)}
+                              title="Ampliar imagen a pantalla completa"
+                            >
+                              <EvidThumb url={e.url} alt={e.nombre} className={cn("w-full object-contain", alturaImg)}/>
+                              <span className="absolute top-2 right-2 flex items-center gap-1 rounded-md bg-black/55 px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Maximize2 className="w-3 h-3"/> Ampliar
+                              </span>
                             </button>
                           ) : (
-                            <div className="w-12 h-12 rounded-md bg-[#0D1526] border border-[#2A3F6A] flex items-center justify-center shrink-0">
-                              <Icon className="w-5 h-5" style={{ color }}/>
+                            <div className={cn("flex items-center justify-center bg-[#0D1526] border-b border-[#2A3F6A]", alturaImg)}>
+                              <Icon className="w-14 h-14" style={{ color }}/>
                             </div>
                           )}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-white truncate">{e.nombre}</p>
-                            <p className="text-[10px] text-[#94A3B8] mt-0.5 truncate">
-                              {e.tipo} · {e.categoria ?? "—"} · {new Date(e.uploadedAt).toLocaleDateString("es-CO")}
-                            </p>
-                          </div>
-                          {img ? (
-                            <button onClick={() => setLightbox(e.url)}
-                              className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400 shrink-0" title="Ver">
-                              <ImageIcon className="w-3.5 h-3.5"/>
+                          <div className="p-3 flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-white truncate">{e.nombre}</p>
+                              <p className="text-[11px] text-[#94A3B8] mt-0.5 truncate">
+                                {e.tipo} · {e.categoria ?? "—"} · {new Date(e.uploadedAt).toLocaleDateString("es-CO")}
+                              </p>
+                            </div>
+                            {img ? (
+                              <button onClick={() => setLightbox(e.url)}
+                                className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400 shrink-0" title="Ver a pantalla completa">
+                                <Maximize2 className="w-4 h-4"/>
+                              </button>
+                            ) : /^data:/i.test(e.url) ? (
+                              <a href={e.url} download={e.nombre}
+                                className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400 shrink-0" title="Descargar">
+                                <Download className="w-4 h-4"/>
+                              </a>
+                            ) : (
+                              <a href={e.url} target="_blank" rel="noopener noreferrer"
+                                className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400 shrink-0" title="Abrir">
+                                <ExternalLink className="w-4 h-4"/>
+                              </a>
+                            )}
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`¿Eliminar evidencia "${e.nombre}"?`)) return;
+                                try { await removeEv.mutateAsync(e.id); }
+                                catch (err: any) { alert("Error: " + (err?.response?.data?.message ?? err?.message)); }
+                              }}
+                              className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400 shrink-0"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="w-4 h-4"/>
                             </button>
-                          ) : /^data:/i.test(e.url) ? (
-                            <a href={e.url} download={e.nombre}
-                              className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400 shrink-0" title="Descargar">
-                              <Download className="w-3.5 h-3.5"/>
-                            </a>
-                          ) : (
-                            <a href={e.url} target="_blank" rel="noopener noreferrer"
-                              className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400 shrink-0" title="Abrir">
-                              <ExternalLink className="w-3.5 h-3.5"/>
-                            </a>
-                          )}
-                          <button
-                            onClick={async () => {
-                              if (!confirm(`¿Eliminar evidencia "${e.nombre}"?`)) return;
-                              try { await removeEv.mutateAsync(e.id); }
-                              catch (err: any) { alert("Error: " + (err?.response?.data?.message ?? err?.message)); }
-                            }}
-                            className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400 shrink-0"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-3.5 h-3.5"/>
-                          </button>
+                          </div>
                         </div>
                       );
                     })}
