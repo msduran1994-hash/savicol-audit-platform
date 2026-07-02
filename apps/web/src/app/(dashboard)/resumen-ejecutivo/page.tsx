@@ -18,6 +18,8 @@ import { cn } from "@/lib/utils";
 import { pieValuePct, barLabelPct, sumField } from "@/lib/chart-pct";
 import { SeccionDesempenoAuditores } from "./seccion-desempeno-auditores";
 import { SeccionDiagnosticoRutas } from "./seccion-diagnostico-rutas";
+import { SeccionInventarios } from "./seccion-inventarios";
+import { useInventarios } from "@/hooks/useInventarios";
 
 // ─── Resumen Ejecutivo · portada corporativa · Fase 1 ──────────────────────────
 // Consolida indicadores REALES de Auditoría/CEDIS, Granjas y Trazabilidad.
@@ -100,8 +102,26 @@ export default function ResumenEjecutivoPage() {
   const lotesQ = useLotes();
   const chkEncQ = useChecklists("encacetamiento");
   const chkTrzQ = useChecklists("trazabilidad7");
+  const invItemsQ = useInventarios({});
 
   const cargando = granjasQ.isLoading || hallazgosCediQ.isLoading || auditoriasCediQ.isLoading;
+
+  // Resumen de la hoja Inventarios (Fase 9) — misma fuente, para el PDF ejecutivo.
+  const invResumen = useMemo(() => {
+    const rows = invItemsQ.data ?? [];
+    const AUD = ["Auditado", "Conciliado", "Cerrado"], PEN = ["Registrado", "En conteo"];
+    const total = rows.length;
+    const auditados = rows.filter(r => AUD.includes(r.estado)).length;
+    return {
+      total,
+      valorTotal: Math.round(rows.reduce((s, r) => s + (r.valorTotal || 0), 0)),
+      auditados,
+      pendientes: rows.filter(r => PEN.includes(r.estado)).length,
+      conDif: rows.filter(r => r.diferencia != null && r.diferencia !== 0).length,
+      cumplimiento: total ? Math.round(auditados / total * 100) : 0,
+      valorRiesgo: Math.round(rows.filter(r => r.diferencia != null && r.diferencia !== 0).reduce((s, r) => s + Math.abs(r.diferencia || 0) * (r.costoUnitario || 0), 0)),
+    };
+  }, [invItemsQ.data]);
 
   // ── Filtros globales (Fase 3) ──
   const [fRegion, setFRegion] = useState("");
@@ -257,7 +277,7 @@ export default function ResumenEjecutivoPage() {
                 <XCircle className="w-3.5 h-3.5"/> Limpiar
               </button>
             )}
-            <button onClick={() => generarInformeEjecutivo(ind, { fRegion, fRiesgo, fSanitario, fCriticidad })}
+            <button onClick={() => generarInformeEjecutivo(ind, { fRegion, fRiesgo, fSanitario, fCriticidad }, invResumen)}
               className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-sm font-bold flex items-center gap-2 whitespace-nowrap">
               <FileDown className="w-4 h-4"/> Generar Informe
             </button>
@@ -504,6 +524,9 @@ export default function ResumenEjecutivoPage() {
         {/* Diagnóstico Ejecutivo de Rutas (FASE 1) */}
         <SeccionDiagnosticoRutas />
 
+        {/* Inventarios (Fase 9 — integración con la hoja Inventarios) */}
+        <SeccionInventarios />
+
         {/* Desempeño de Auditores (consolidado) */}
         <SeccionDesempenoAuditores />
 
@@ -516,8 +539,6 @@ export default function ResumenEjecutivoPage() {
           <p className="text-[11px] text-[#64748B] mb-3">Estos módulos aún no tienen origen de datos conectado. Se mostrarán con indicadores reales en cuanto se integren, evitando cifras ficticias.</p>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
-              { label: "Inventarios", icon: Package },
-              { label: "Rutas", icon: Route },
               { label: "Operaciones", icon: Warehouse },
               { label: "Financiero", icon: DollarSign },
               { label: "Mercadeo", icon: Megaphone },
@@ -544,7 +565,7 @@ export default function ResumenEjecutivoPage() {
 // ─── Informe Ejecutivo PDF (consolida los indicadores visibles) ────────────────
 const EMPRESA_RE = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.972-4" };
 
-async function generarInformeEjecutivo(ind: any, filtros: { fRegion: string; fRiesgo: string; fSanitario: string; fCriticidad: string }) {
+async function generarInformeEjecutivo(ind: any, filtros: { fRegion: string; fRiesgo: string; fSanitario: string; fCriticidad: string }, inv?: any) {
   const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
   const PW = doc.internal.pageSize.getWidth();
@@ -629,6 +650,15 @@ async function generarInformeEjecutivo(ind: any, filtros: { fRegion: string; fRi
     ["Lotes registrados", String(ind.totalLotes)],
     ["Checklists realizados", String(ind.totalChecklists)],
     ["Cumplimiento promedio checklists", `${ind.cumplChecklists}%`],
+  ]);
+  if (inv) bloque("Inventarios", [
+    ["Total de ítems", String(inv.total)],
+    ["Ítems auditados", String(inv.auditados)],
+    ["Pendientes de auditoría", String(inv.pendientes)],
+    ["Hallazgos (diferencia)", String(inv.conDif)],
+    ["Cumplimiento (auditados)", `${inv.cumplimiento}%`],
+    ["Valor total", `$ ${(inv.valorTotal ?? 0).toLocaleString("es-CO")}`],
+    ["Valor en riesgo", `$ ${(inv.valorRiesgo ?? 0).toLocaleString("es-CO")}`],
   ]);
 
   // Ranking top granjas
