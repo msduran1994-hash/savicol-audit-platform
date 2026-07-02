@@ -21,6 +21,8 @@ import {
 import { useGranjas } from "@/hooks/useGranjas";
 import { useCedis } from "@/hooks/useCedis";
 import { AUDITORS } from "@/lib/constants";
+import { useInventariosFiltros, filtrarInventario } from "@/store/inventarios-filtros.store";
+import { InventariosFiltros } from "./filtros-inventario";
 import { procesarArchivo, imgSrc, esImagen, fmtSize } from "@/lib/evidencias-upload";
 import type {
   InventarioAuditado, InventarioPayload, MovimientoInventario,
@@ -59,25 +61,19 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
   const [evidenciasFor, setEvidenciasFor] = useState<InventarioAuditado | null>(null);
   const [historialFor, setHistorialFor] = useState<InventarioAuditado | null>(null);
   const [search, setSearch] = useState("");
-  const [fEstado, setFEstado] = useState("");
-  const [fCategoria, setFCategoria] = useState("");
+  const { filtros, reset: resetFiltros } = useInventariosFiltros();
 
-  const categorias = useMemo(
-    () => Array.from(new Set(rows.map(r => (r.categoria || "").trim()).filter(Boolean))).sort(),
-    [rows],
-  );
+  const catOpts = useMemo(() => Array.from(new Set(rows.map(r => (r.categoria || "").trim()).filter(Boolean))).sort() as string[], [rows]);
+  const respOpts = useMemo(() => Array.from(new Set(rows.map(r => (r.responsable || "").trim()).filter(Boolean))).sort() as string[], [rows]);
 
-  const filtered = useMemo(() => rows.filter(r => {
-    if (fEstado && r.estado !== fEstado) return false;
-    if (fCategoria && (r.categoria || "") !== fCategoria) return false;
-    if (search) {
-      const s = search.toLowerCase();
-      const hay = [r.consecutivo, r.nombre, r.categoria, r.ubicacion, r.responsable, r.cediNombre, r.granjaNombre]
-        .some(v => (v || "").toLowerCase().includes(s));
-      if (!hay) return false;
-    }
-    return true;
-  }), [rows, search, fEstado, fCategoria]);
+  // Filtros globales (store, sincronizados con el dashboard) + búsqueda local.
+  const filtered = useMemo(() => {
+    const base = filtrarInventario(rows, filtros, { ignoreModulo: true });
+    if (!search) return base;
+    const s = search.toLowerCase();
+    return base.filter(r => [r.consecutivo, r.nombre, r.categoria, r.ubicacion, r.responsable, r.cediNombre, r.granjaNombre]
+      .some(v => (v || "").toLowerCase().includes(s)));
+  }, [rows, filtros, search]);
 
   const kpis = useMemo(() => {
     const conDif = filtered.filter(r => r.diferencia != null && r.diferencia !== 0).length;
@@ -102,6 +98,9 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
           <MiniCard icon={<Hash className="w-4 h-4" />}          label="Auditados"      value={nfmt(kpis.auditados)}                 color="#10B981" />
         </div>
 
+        {/* Filtros globales sincronizados (dashboard + módulos) */}
+        <InventariosFiltros categorias={catOpts} responsables={respOpts} />
+
         {/* Toolbar */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative">
@@ -109,15 +108,6 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar…"
                    className="pl-8 pr-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white w-52" />
           </div>
-          <span className="text-xs text-[#94A3B8] flex items-center gap-1.5"><Filter className="w-3.5 h-3.5" /></span>
-          <select value={fEstado} onChange={e => setFEstado(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
-            <option value="">Todos los estados</option>
-            {ESTADO_INVENTARIO.map(e => <option key={e} value={e}>{e}</option>)}
-          </select>
-          <select value={fCategoria} onChange={e => setFCategoria(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
-            <option value="">Toda categoría</option>
-            {categorias.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
           <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary text-xs ml-auto flex items-center gap-1.5">
             <Plus className="w-3.5 h-3.5" />Nuevo registro
           </button>
@@ -138,7 +128,7 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
             <div className="py-16 flex flex-col items-center justify-center text-center">
               <Filter className="w-10 h-10 text-[#1E2D4A] mb-4" />
               <p className="text-white font-semibold mb-1">Sin resultados con los filtros</p>
-              <button onClick={() => { setSearch(""); setFEstado(""); setFCategoria(""); }} className="btn-primary text-xs mt-2">Limpiar filtros</button>
+              <button onClick={() => { setSearch(""); resetFiltros(); }} className="btn-primary text-xs mt-2">Limpiar filtros</button>
             </div>
           ) : (
             <div className="overflow-x-auto">

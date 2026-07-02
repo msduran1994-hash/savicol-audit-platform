@@ -10,6 +10,8 @@ import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { useInventarios } from "@/hooks/useInventarios";
 import { INVENTARIO_MODULOS, ESTADO_INVENTARIO_COLOR, type ModuloInventario } from "@/lib/inventarios.constants";
+import { useInventariosFiltros, filtrarInventario } from "@/store/inventarios-filtros.store";
+import { InventariosFiltros } from "./filtros-inventario";
 import { pieValuePct, barLabelPct, sumField } from "@/lib/chart-pct";
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -28,7 +30,13 @@ const moduloCorto = (k: string) => (INVENTARIO_MODULOS.find(m => m.key === k)?.l
 
 export default function DashboardInventariosPage() {
   const q = useInventarios({});
-  const rows = q.data ?? [];
+  const allRows = q.data ?? [];
+  const { filtros } = useInventariosFiltros();
+  const rows = useMemo(() => filtrarInventario(allRows, filtros), [allRows, filtros]);
+  const filtroOpts = useMemo(() => ({
+    cats: Array.from(new Set(allRows.map(r => (r.categoria || "").trim()).filter(Boolean))).sort() as string[],
+    resp: Array.from(new Set(allRows.map(r => (r.responsable || "").trim()).filter(Boolean))).sort() as string[],
+  }), [allRows]);
 
   const d = useMemo(() => {
     const total = rows.length;
@@ -76,6 +84,8 @@ export default function DashboardInventariosPage() {
       <Header title="Dashboard Inventarios" subtitle="Hoja Inventarios · Consolidado ejecutivo de los 7 módulos" />
 
       <div className="flex-1 p-6 space-y-6">
+        <InventariosFiltros showModulo categorias={filtroOpts.cats} responsables={filtroOpts.resp} />
+
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Kpi icon={<Boxes />}        label="Total ítems"     value={nfmt(d.total)}                 color="#8B5CF6" />
@@ -107,8 +117,8 @@ export default function DashboardInventariosPage() {
         ) : d.total === 0 ? (
           <div className="card-base py-16 text-center">
             <Boxes className="w-10 h-10 text-[#1E2D4A] mx-auto mb-3" />
-            <p className="text-white font-semibold mb-1">Aún no hay ítems de inventario</p>
-            <p className="text-[#475569] text-sm">Registra ítems en los módulos para ver el consolidado ejecutivo.</p>
+            <p className="text-white font-semibold mb-1">{allRows.length === 0 ? "Aún no hay ítems de inventario" : "Sin resultados con los filtros"}</p>
+            <p className="text-[#475569] text-sm">{allRows.length === 0 ? "Registra ítems en los módulos para ver el consolidado ejecutivo." : "Ajusta o limpia los filtros globales."}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -208,7 +218,7 @@ export default function DashboardInventariosPage() {
           <h3 className="text-sm font-bold text-white mb-3">Módulos</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
             {INVENTARIO_MODULOS.map(m => {
-              const n = rows.filter(r => r.modulo === (m.key as ModuloInventario)).length;
+              const n = allRows.filter(r => r.modulo === (m.key as ModuloInventario)).length;
               return (
                 <Link key={m.key} href={m.href} className="card-base group flex flex-col gap-1 hover:border-violet-500/40 transition-colors py-3">
                   <span className="text-[11px] text-white font-semibold leading-tight flex items-center justify-between">{moduloCorto(m.key)}<ArrowRight className="w-3 h-3 text-[#475569] group-hover:text-violet-400" /></span>
