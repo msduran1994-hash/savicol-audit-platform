@@ -2,7 +2,9 @@ import {
   Controller, Get, Post, Patch, Delete,
   Body, Param, Query, UseGuards, Req, HttpCode, HttpStatus,
 } from "@nestjs/common";
-import { InventariosService, CreateInventarioItemDto, CreateMovimientoDto } from "./inventarios.service";
+import {
+  InventariosService, CreateInventarioItemDto, CreateMovimientoDto, CreateEvidenciaInventarioDto,
+} from "./inventarios.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 
 interface AuthRequest extends Request {
@@ -40,6 +42,29 @@ export class InventariosController {
   @HttpCode(HttpStatus.OK)
   removeMovimiento(@Param("id") id: string, @Req() req: AuthRequest) {
     return this.svc.removeMovimiento(id, req.user?.name ?? req.user?.email);
+  }
+
+  // ── Evidencias (antes de :id para no colisionar) ──
+  @Get("evidencias")
+  findEvidencias(@Query("itemId") itemId: string) {
+    return this.svc.findEvidencias(itemId);
+  }
+
+  @Post("evidencias")
+  createEvidencia(@Body() dto: CreateEvidenciaInventarioDto, @Req() req: AuthRequest) {
+    return this.svc.createEvidencia(dto, req.user?.name ?? req.user?.email);
+  }
+
+  @Delete("evidencias/:id")
+  @HttpCode(HttpStatus.OK)
+  removeEvidencia(@Param("id") id: string, @Req() req: AuthRequest) {
+    return this.svc.removeEvidencia(id, req.user?.name ?? req.user?.email);
+  }
+
+  // ── Auditoría / historial ──
+  @Get("auditoria")
+  findAuditoria(@Query("itemId") itemId: string) {
+    return this.svc.findAuditoria(itemId);
   }
 
   @Get(":id")

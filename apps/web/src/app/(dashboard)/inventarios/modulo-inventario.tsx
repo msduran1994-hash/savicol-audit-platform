@@ -4,24 +4,33 @@
 // Fase 3 = formulario dinámico + tabla + filtros básicos (editable, trazable).
 // Kardex de movimientos, evidencias, auditoría y dashboard llegan en fases próximas.
 // ═══════════════════════════════════════════════════════════════════════════════
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Header } from "@/components/layout/header";
 import {
   moduloByKey, type ModuloInventario,
   ESTADO_INVENTARIO, ESTADO_INVENTARIO_COLOR, UNIDADES_MEDIDA,
   MOVIMIENTO_TIPOS, MOVIMIENTO_COLOR,
+  EVIDENCIA_TIPOS, EVIDENCIA_CATEGORIAS, INVENTARIO_CAMPO_LABELS,
 } from "@/lib/inventarios.constants";
 import {
   useInventarios, useCreateInventario, useUpdateInventario, useDeleteInventario,
   useMovimientos, useCreateMovimiento, useDeleteMovimiento,
+  useEvidenciasInventario, useCreateEvidenciaInventario, useDeleteEvidenciaInventario,
+  useAuditoriaInventario,
 } from "@/hooks/useInventarios";
 import { useGranjas } from "@/hooks/useGranjas";
 import { useCedis } from "@/hooks/useCedis";
 import { AUDITORS } from "@/lib/constants";
-import type { InventarioAuditado, InventarioPayload, MovimientoInventario } from "@/lib/inventarios.types";
+import { procesarArchivo, imgSrc, esImagen, fmtSize } from "@/lib/evidencias-upload";
+import type {
+  InventarioAuditado, InventarioPayload, MovimientoInventario,
+  EvidenciaInventario, AuditoriaInventario, CambioCampoInv,
+} from "@/lib/inventarios.types";
 import {
   Boxes, Hash, Loader2, Plus, X, Edit2, Trash2, Search, Filter,
   Save, AlertTriangle, DollarSign, ArrowLeftRight, Wallet,
+  Camera, History, UploadCloud, Link2, Download, ExternalLink, Maximize2, FileText,
+  PlusCircle, PencilLine, ArrowRightLeft,
 } from "lucide-react";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -47,6 +56,8 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<InventarioAuditado | null>(null);
   const [kardexFor, setKardexFor] = useState<InventarioAuditado | null>(null);
+  const [evidenciasFor, setEvidenciasFor] = useState<InventarioAuditado | null>(null);
+  const [historialFor, setHistorialFor] = useState<InventarioAuditado | null>(null);
   const [search, setSearch] = useState("");
   const [fEstado, setFEstado] = useState("");
   const [fCategoria, setFCategoria] = useState("");
@@ -171,6 +182,8 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
                         <td className="p-2.5">
                           <div className="flex gap-1 justify-center">
                             <button onClick={() => setKardexFor(r)} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-violet-400" title="Kardex de movimientos"><ArrowLeftRight className="w-3 h-3" /></button>
+                            <button onClick={() => setEvidenciasFor(r)} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-cyan-400" title="Evidencias"><Camera className="w-3 h-3" /></button>
+                            <button onClick={() => setHistorialFor(r)} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-violet-400" title="Historial de cambios"><History className="w-3 h-3" /></button>
                             <button onClick={() => { setEditing(r); setModalOpen(true); }} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar"><Edit2 className="w-3 h-3" /></button>
                             <button onClick={async () => { if (confirm(`¿Eliminar "${r.nombre}" (${r.consecutivo})?`)) { try { await removeItem.mutateAsync(r.id); } catch (e: any) { alert("Error: " + (e?.response?.data?.message ?? e?.message)); } } }} className="p-1 rounded hover:bg-red-950/30 text-[#94A3B8] hover:text-red-400" title="Eliminar"><Trash2 className="w-3 h-3" /></button>
                           </div>
@@ -191,6 +204,14 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
 
       {kardexFor && (
         <KardexModal item={kardexFor} onClose={() => setKardexFor(null)} />
+      )}
+
+      {evidenciasFor && (
+        <EvidenciasModal item={evidenciasFor} onClose={() => setEvidenciasFor(null)} />
+      )}
+
+      {historialFor && (
+        <HistorialModal item={historialFor} onClose={() => setHistorialFor(null)} />
       )}
     </div>
   );
@@ -490,6 +511,220 @@ function KardexModal({ item, onClose }: { item: InventarioAuditado; onClose: () 
                 </tbody>
               </table>
             </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODAL · Evidencias (fotos/PDF/Excel/enlaces) — reutiliza evidencias-upload
+// ═══════════════════════════════════════════════════════════════════════════════
+function EvidenciasModal({ item, onClose }: { item: InventarioAuditado; onClose: () => void }) {
+  const q = useEvidenciasInventario(item.id);
+  const evid = q.data ?? [];
+  const create = useCreateEvidenciaInventario();
+  const remove = useDeleteEvidenciaInventario();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [modo, setModo] = useState<"subir" | "enlace">("subir");
+  const [procesando, setProcesando] = useState(false);
+  const [preview, setPreview] = useState("");
+  const [form, setForm] = useState({ tipo: "Foto", nombre: "", categoria: EVIDENCIA_CATEGORIAS[0] as string, url: "", size: 0, dataUrl: "" });
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const setF = (k: string, v: any) => setForm(p => ({ ...p, [k]: v }));
+
+  const onPick = async (file?: File) => {
+    if (!file) return;
+    setError(""); setProcesando(true);
+    try {
+      const { dataUrl, size, tipo } = await procesarArchivo(file);
+      setForm(p => ({ ...p, dataUrl, size, tipo, nombre: p.nombre || file.name, url: "" }));
+      setPreview(tipo === "Foto" ? dataUrl : "");
+    } catch (e: any) { setError(e?.message ?? "No se pudo procesar el archivo."); }
+    finally { setProcesando(false); }
+  };
+
+  const guardar = async () => {
+    const url = modo === "subir" ? form.dataUrl : form.url.trim();
+    if (!url) { setError(modo === "subir" ? "Selecciona un archivo." : "Pega un enlace válido."); return; }
+    if (!form.nombre.trim()) { setError("Indica un nombre para la evidencia."); return; }
+    setError("");
+    try {
+      await create.mutateAsync({ itemId: item.id, tipo: form.tipo, nombre: form.nombre.trim(), url, size: form.size || 0, categoria: form.categoria });
+      setForm({ tipo: "Foto", nombre: "", categoria: EVIDENCIA_CATEGORIAS[0] as string, url: "", size: 0, dataUrl: "" });
+      setPreview(""); if (fileRef.current) fileRef.current.value = "";
+    } catch (e: any) { setError(e?.response?.data?.message ?? e?.message ?? "No se pudo guardar."); }
+  };
+
+  const TAB = (id: "subir" | "enlace", label: string, Icon: any) => (
+    <button onClick={() => setModo(id)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 ${modo === id ? "bg-[#1A2540] text-white" : "text-[#94A3B8]"}`}><Icon className="w-3.5 h-3.5" />{label}</button>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col shadow-card">
+        <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
+          <div>
+            <h2 className="font-display font-bold text-white text-lg flex items-center gap-2"><Camera className="w-5 h-5 text-cyan-400" />Evidencias</h2>
+            <p className="text-xs text-[#94A3B8] mt-0.5">{item.nombre} · {item.consecutivo} · {evid.length} archivo(s)</p>
+          </div>
+          <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5" /></button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {/* Cargar */}
+          <div className="rounded-xl border border-[#1E2D4A] bg-[#0A111F] p-3 space-y-3">
+            <div className="flex gap-2">{TAB("subir", "Subir archivo", UploadCloud)}{TAB("enlace", "Pegar enlace", Link2)}</div>
+            {modo === "subir" ? (
+              <div>
+                <input ref={fileRef} type="file" accept="image/*,application/pdf,.xlsx,.xls,.csv,video/*" className="hidden" onChange={e => onPick(e.target.files?.[0])} />
+                {preview ? (
+                  <img src={preview} alt="Vista previa" className="w-full max-h-56 object-contain rounded-lg border border-[#1E2D4A] bg-[#0A111F]" />
+                ) : (
+                  <button type="button" onClick={() => fileRef.current?.click()} disabled={procesando} className="w-full border-2 border-dashed border-[#1E2D4A] hover:border-cyan-500/50 rounded-lg py-6 flex flex-col items-center gap-2 text-[#94A3B8] hover:text-cyan-300">
+                    {procesando ? <Loader2 className="w-6 h-6 animate-spin" /> : <UploadCloud className="w-6 h-6" />}
+                    <span className="text-sm font-medium">{procesando ? "Procesando…" : "Haz clic para seleccionar un archivo"}</span>
+                    <span className="text-[10px]">Imágenes (se optimizan), PDF, Excel · máx. 10 MB</span>
+                  </button>
+                )}
+                {form.dataUrl && !preview && <p className="text-[11px] text-emerald-400 mt-2">Archivo listo ({form.tipo} · {fmtSize(form.size)})</p>}
+              </div>
+            ) : (
+              <input value={form.url} onChange={e => setF("url", e.target.value)} placeholder="https://…" className="w-full bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2 text-xs text-white" />
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <F label="Nombre" value={form.nombre} onChange={v => setF("nombre", v)} placeholder="Nombre de la evidencia" />
+              <Sel label="Tipo" value={form.tipo} onChange={v => setF("tipo", v)} options={EVIDENCIA_TIPOS as unknown as string[]} />
+              <Sel label="Categoría" value={form.categoria} onChange={v => setF("categoria", v)} options={EVIDENCIA_CATEGORIAS as unknown as string[]} />
+            </div>
+            {error && <p className="text-xs text-red-400 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" />{error}</p>}
+            <div className="flex justify-end">
+              <button onClick={guardar} disabled={create.isPending} className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50">
+                {create.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}Agregar evidencia
+              </button>
+            </div>
+          </div>
+
+          {/* Galería */}
+          {q.isLoading ? (
+            <div className="py-10 flex items-center justify-center text-[#475569]"><Loader2 className="w-5 h-5 animate-spin" /></div>
+          ) : evid.length === 0 ? (
+            <div className="py-10 text-center text-[#475569] text-sm">Sin evidencias. Agrega la primera arriba.</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {evid.map(e => {
+                const img = esImagen({ tipo: e.tipo, url: e.url });
+                return (
+                  <div key={e.id} className="rounded-xl border border-[#1E2D4A] bg-[#0A111F] overflow-hidden">
+                    {img ? (
+                      <button onClick={() => setLightbox(imgSrc(e.url))} className="block w-full relative group">
+                        <img src={imgSrc(e.url)} alt={e.nombre} className="w-full h-40 object-cover" />
+                        <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100"><Maximize2 className="w-5 h-5 text-white" /></span>
+                      </button>
+                    ) : (
+                      <div className="w-full h-40 flex items-center justify-center bg-[#0D1526]"><FileText className="w-10 h-10 text-[#475569]" /></div>
+                    )}
+                    <div className="p-2.5 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs text-white truncate">{e.nombre}</p>
+                        <p className="text-[10px] text-[#94A3B8]">{e.categoria || e.tipo}{e.size ? ` · ${fmtSize(e.size)}` : ""}</p>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <a href={imgSrc(e.url)} target="_blank" rel="noreferrer" className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-cyan-400" title="Abrir"><ExternalLink className="w-3.5 h-3.5" /></a>
+                        <a href={imgSrc(e.url)} download={e.nombre} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Descargar"><Download className="w-3.5 h-3.5" /></a>
+                        <button onClick={async () => { if (confirm(`¿Eliminar "${e.nombre}"?`)) { try { await remove.mutateAsync(e.id); } catch (er: any) { alert("Error: " + (er?.message)); } } }} className="p-1 rounded hover:bg-red-950/30 text-[#94A3B8] hover:text-red-400" title="Eliminar"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {lightbox && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[60] flex items-center justify-center p-6" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="Evidencia" className="max-w-full max-h-full object-contain rounded-lg" />
+          <button className="absolute top-4 right-4 text-white/80 hover:text-white" onClick={() => setLightbox(null)}><X className="w-6 h-6" /></button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODAL · Historial de cambios (auditoría)
+// ═══════════════════════════════════════════════════════════════════════════════
+const ACCION_META_INV: Record<string, { color: string; icon: any }> = {
+  "Creación":            { color: "#22C55E", icon: PlusCircle },
+  "Edición":             { color: "#3B82F6", icon: PencilLine },
+  "Cambio de estado":    { color: "#F59E0B", icon: ArrowRightLeft },
+  "Movimiento":          { color: "#8B5CF6", icon: ArrowLeftRight },
+  "Evidencia agregada":  { color: "#06B6D4", icon: Camera },
+  "Evidencia eliminada": { color: "#EF4444", icon: Trash2 },
+};
+
+function HistorialModal({ item, onClose }: { item: InventarioAuditado; onClose: () => void }) {
+  const q = useAuditoriaInventario(item.id);
+  const eventos = q.data ?? [];
+  const fmt = (iso: string) => { const d = new Date(iso); return isNaN(d.getTime()) ? "—" : d.toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" }); };
+  const parse = (json?: string | null): CambioCampoInv[] => { try { return json ? JSON.parse(json) : []; } catch { return []; } };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-hidden flex flex-col shadow-card">
+        <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
+          <div>
+            <h2 className="font-display font-bold text-white text-lg flex items-center gap-2"><History className="w-5 h-5 text-violet-400" />Historial de cambios</h2>
+            <p className="text-xs text-[#94A3B8] mt-0.5">{item.nombre} · {item.consecutivo} · {eventos.length} evento(s)</p>
+          </div>
+          <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5" /></button>
+        </header>
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {q.isLoading ? (
+            <div className="py-16 flex items-center justify-center text-[#475569]"><Loader2 className="w-5 h-5 animate-spin" /></div>
+          ) : eventos.length === 0 ? (
+            <div className="py-16 flex flex-col items-center justify-center text-center">
+              <History className="w-10 h-10 text-[#1E2D4A] mb-3" />
+              <p className="text-white font-semibold mb-1">Sin eventos registrados</p>
+              <p className="text-[#475569] text-sm">Los cambios sobre este ítem se irán registrando aquí.</p>
+            </div>
+          ) : (
+            <ol className="relative border-l border-[#1E2D4A] ml-2 space-y-4">
+              {eventos.map(ev => {
+                const meta = ACCION_META_INV[ev.accion] ?? { color: "#94A3B8", icon: History };
+                const Icon = meta.icon;
+                const cambios = parse(ev.cambiosJSON);
+                return (
+                  <li key={ev.id} className="ml-5">
+                    <span className="absolute -left-[9px] flex items-center justify-center w-[18px] h-[18px] rounded-full" style={{ background: `${meta.color}22`, border: `1px solid ${meta.color}` }}>
+                      <Icon className="w-2.5 h-2.5" style={{ color: meta.color }} />
+                    </span>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-sm font-semibold" style={{ color: meta.color }}>{ev.accion}</span>
+                      <span className="text-[10px] text-[#64748B] font-mono">{fmt(ev.createdAt)}</span>
+                    </div>
+                    {ev.detalle && <p className="text-xs text-[#94A3B8] mt-0.5">{ev.detalle}</p>}
+                    {ev.usuario && <p className="text-[10px] text-[#475569] mt-0.5">por {ev.usuario}</p>}
+                    {cambios.length > 0 && (
+                      <div className="mt-2 rounded-lg border border-[#1E2D4A] bg-[#0A111F] divide-y divide-[#1E2D4A]/60">
+                        {cambios.map((c, i) => (
+                          <div key={i} className="px-3 py-1.5 text-[11px] flex items-center gap-2 flex-wrap">
+                            <span className="text-[#94A3B8] min-w-[120px]">{INVENTARIO_CAMPO_LABELS[c.campo] ?? c.campo}</span>
+                            <span className="text-red-300/80 line-through break-all">{c.antes}</span>
+                            <ArrowRightLeft className="w-3 h-3 text-[#475569] shrink-0" />
+                            <span className="text-emerald-300 break-all">{c.despues}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
           )}
         </div>
       </div>

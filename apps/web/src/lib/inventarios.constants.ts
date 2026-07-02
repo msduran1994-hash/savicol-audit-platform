@@ -56,3 +56,12 @@ export const EVIDENCIA_CATEGORIAS = [
   "Acta de inventario", "Conteo físico", "Factura", "Remisión",
   "Foto del ítem", "Etiqueta / serial", "Documento", "Otro",
 ] as const;
+
+// ─── Auditoría (Fase 5): etiquetas legibles de los campos para el diff ─────────
+export const INVENTARIO_CAMPO_LABELS: Record<string, string> = {
+  nombre: "Nombre", descripcion: "Descripción", categoria: "Categoría",
+  ubicacion: "Ubicación", cediId: "CEDI (id)", cediNombre: "CEDI", granjaId: "Granja (id)", granjaNombre: "Granja",
+  unidadMedida: "Unidad de medida", cantidad: "Cantidad", saldo: "Saldo", cantidadContada: "Cantidad contada",
+  diferencia: "Diferencia", costoUnitario: "Costo unitario", valorTotal: "Valor total",
+  estado: "Estado", responsable: "Responsable", auditor: "Auditor", fecha: "Fecha", observaciones: "Observaciones",
+};

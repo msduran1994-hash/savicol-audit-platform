@@ -37,6 +37,16 @@ export interface CreateMovimientoDto {
   fecha?: string;
 }
 
+// DTO de evidencia (foto/PDF/Excel/enlace) de un ítem.
+export interface CreateEvidenciaInventarioDto {
+  itemId: string;
+  tipo: string;
+  nombre: string;
+  url: string;
+  size?: number;
+  categoria?: string;
+}
+
 // Prefijos de consecutivo por módulo (folio: INV-<prefijo>-<año>-<seq>).
 const MODULO_PREFIJO: Record<string, string> = {
   PRODUCTO: "PROD", TINAS: "TINA", INSUMOS: "INS",
@@ -63,6 +73,25 @@ function sanitize(dto: any): any {
   // Diferencia de inventario = cantidad (teórica) − cantidad contada (física).
   if (out.cantidadContada != null && out.cantidad != null) {
     out.diferencia = Math.round((out.cantidad - out.cantidadContada) * 100) / 100;
+  }
+  return out;
+}
+
+// ── Auditoría (Fase 5): formateo y diff de campos antes→después ───────────────
+function fmtVal(v: any): string {
+  if (v == null || v === "") return "—";
+  if (v instanceof Date) {
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())} ${p(v.getHours())}:${p(v.getMinutes())}`;
+  }
+  return String(v);
+}
+function diffCampos(prev: any, data: any, exclude: string[]): { campo: string; antes: string; despues: string }[] {
+  const norm = (v: any) => v instanceof Date ? v.getTime() : (v == null ? null : v);
+  const out: { campo: string; antes: string; despues: string }[] = [];
+  for (const k of Object.keys(data)) {
+    if (exclude.includes(k)) continue;
+    if (norm(prev?.[k]) !== norm(data[k])) out.push({ campo: k, antes: fmtVal(prev?.[k]), despues: fmtVal(data[k]) });
   }
   return out;
 }
@@ -100,9 +129,11 @@ export class InventariosService {
     for (let intento = 0; intento < 4; intento++) {
       const consecutivo = await this.generarConsecutivo(data.modulo);
       try {
-        return await this.prisma.inventarioAuditado.create({
+        const rec = await this.prisma.inventarioAuditado.create({
           data: { ...data, consecutivo, saldo, createdBy: userName ?? null, updatedBy: userName ?? null },
         });
+        await this.auditar(rec.id, "Creación", userName, `Ítem registrado — ${rec.nombre} (${rec.consecutivo})`);
+        return rec;
       } catch (e: any) {
         if (e?.code === "P2002" && intento < 3) continue;
         throw e;
@@ -112,10 +143,20 @@ export class InventariosService {
 
   async update(id: string, dto: Partial<CreateInventarioItemDto>, userName?: string) {
     const data = sanitize(dto);
-    return this.prisma.inventarioAuditado.update({
+    const prev = await this.prisma.inventarioAuditado.findUnique({ where: { id } });
+    const rec = await this.prisma.inventarioAuditado.update({
       where: { id },
       data: { ...data, updatedBy: userName ?? null },
     });
+    if (prev) {
+      if (data.estado !== undefined && data.estado !== prev.estado) {
+        await this.auditar(id, "Cambio de estado", userName, `Estado: ${prev.estado ?? "—"} → ${data.estado}`,
+          [{ campo: "estado", antes: fmtVal(prev.estado), despues: fmtVal(data.estado) }]);
+      }
+      const cambios = diffCampos(prev, data, ["estado", "diferencia"]);
+      if (cambios.length) await this.auditar(id, "Edición", userName, `${cambios.length} campo(s) modificado(s)`, cambios);
+    }
+    return rec;
   }
 
   remove(id: string) {
@@ -161,6 +202,7 @@ export class InventariosService {
       patch.diferencia = Math.round((saldoAnterior - cantidad) * 100) / 100;
     }
     await this.prisma.inventarioAuditado.update({ where: { id: dto.itemId }, data: patch });
+    await this.auditar(dto.itemId, "Movimiento", userName, `${dto.tipo} ${cantidad} · saldo ${saldoAnterior} → ${saldoResultante}`);
     return mov;
   }
 
@@ -193,5 +235,41 @@ export class InventariosService {
     const patch: any = { saldo, updatedBy: userName ?? null };
     if (ultimoConteo != null) { patch.cantidadContada = ultimoConteo; patch.diferencia = difConteo; }
     await this.prisma.inventarioAuditado.update({ where: { id: itemId }, data: patch });
+  }
+
+  // ── Auditoría / historial de cambios (Fase 5) ──
+  private async auditar(itemId: string, accion: string, usuario?: string, detalle?: string, cambios?: any) {
+    try {
+      await this.prisma.auditoriaInventario.create({
+        data: { itemId, accion, usuario: usuario ?? null, detalle: detalle ?? null, cambiosJSON: cambios ? JSON.stringify(cambios) : null },
+      });
+    } catch { /* la auditoría nunca debe romper la operación principal */ }
+  }
+
+  findAuditoria(itemId: string) {
+    return this.prisma.auditoriaInventario.findMany({ where: { itemId }, orderBy: { createdAt: "desc" } });
+  }
+
+  // ── Evidencias ──
+  findEvidencias(itemId: string) {
+    return this.prisma.evidenciaInventario.findMany({ where: { itemId }, orderBy: { uploadedAt: "desc" } });
+  }
+
+  async createEvidencia(dto: CreateEvidenciaInventarioDto, userName?: string) {
+    const ev = await this.prisma.evidenciaInventario.create({
+      data: {
+        itemId: dto.itemId, tipo: dto.tipo, nombre: dto.nombre, url: dto.url,
+        size: dto.size ?? 0, categoria: dto.categoria ?? null, uploadedBy: userName ?? null,
+      },
+    });
+    await this.auditar(dto.itemId, "Evidencia agregada", userName, `${dto.categoria ?? dto.tipo}: ${dto.nombre}`);
+    return ev;
+  }
+
+  async removeEvidencia(id: string, userName?: string) {
+    const ev = await this.prisma.evidenciaInventario.findUnique({ where: { id } });
+    const res = await this.prisma.evidenciaInventario.delete({ where: { id } });
+    if (ev) await this.auditar(ev.itemId, "Evidencia eliminada", userName, `${ev.categoria ?? ev.tipo}: ${ev.nombre}`);
+    return res;
   }
 }
