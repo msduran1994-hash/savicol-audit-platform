@@ -62,7 +62,7 @@ const fmtFecha = (d?: string) => {
   return isNaN(t.getTime()) ? "—" : t.toLocaleDateString("es-CO", { day:"2-digit", month:"2-digit", year:"numeric" });
 };
 
-const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.974-4", area: "Control Interno y Auditoría" };
+const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.972-4", area: "Control Interno y Auditoría" };
 const COLOR = { primary:"#0D1526", accent:"#4A7AFF", ok:"#22C55E", warn:"#F59E0B", danger:"#EF4444", purple:"#8B5CF6" };
 
 // ── Carga dinámica de SheetJS (XLSX) desde CDN — sin agregar dependencias ──
@@ -303,7 +303,7 @@ async function generarXLSX(opts: {
   const cumpl = totalKpi>0 ? Math.round(kpiComp/totalKpi*100) : 0;
   const resumen = [
     ["POLLOS SAVICOL S.A.S. — REPORTE EJECUTIVO DE AUDITORÍA"],
-    ["NIT", "860.403.974-4"],
+    ["NIT", "860.403.972-4"],
     ["Fecha de generación", new Date().toLocaleDateString("es-CO")],
     [],
     ["INDICADOR", "VALOR"],

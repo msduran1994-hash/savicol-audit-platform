@@ -542,7 +542,7 @@ export default function ResumenEjecutivoPage() {
 }
 
 // ─── Informe Ejecutivo PDF (consolida los indicadores visibles) ────────────────
-const EMPRESA_RE = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.974-4" };
+const EMPRESA_RE = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.972-4" };
 
 async function generarInformeEjecutivo(ind: any, filtros: { fRegion: string; fRiesgo: string; fSanitario: string; fCriticidad: string }) {
   const { default: jsPDF } = await import("jspdf");

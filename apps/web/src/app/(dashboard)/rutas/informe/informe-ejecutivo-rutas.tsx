@@ -23,7 +23,7 @@ interface RefEvidencia  { nombre: string; tipo: string; fecha: string; relacion:
    con respaldo determinista. Gráficas SVG con datos reales. Sin datos ficticios.
    ════════════════════════════════════════════════════════════════════════════ */
 
-const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.974-4", area: "Control Interno y Auditoría · Acompañamiento a Rutas" };
+const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.972-4", area: "Control Interno y Auditoría · Acompañamiento a Rutas" };
 const VERDE = "#22C55E", NARANJA = "#F59E0B", ROJO = "#EF4444", AZUL = "#4A7AFF", MORADO = "#8B5CF6", CYAN = "#06B6D4";
 
 const fmtFecha = (d?: string) => {

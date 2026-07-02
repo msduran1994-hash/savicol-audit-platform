@@ -11,7 +11,7 @@ import { evidenciasGridHTML } from "@/lib/pdf-evidencias";
    Gráficas con datos reales (Hallazgos y Cumplimiento). Sin datos ficticios.
    ════════════════════════════════════════════════════════════════════════════ */
 
-const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.974-4", area: "Control Interno y Auditoría · CEDIS" };
+const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.972-4", area: "Control Interno y Auditoría · CEDIS" };
 
 const sinAcentos = (s: string) => (s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 const normCrit = (c: string): "Crítica"|"Alta"|"Media"|"Baja"|"—" => {

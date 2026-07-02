@@ -14,7 +14,7 @@ import { esImagen, imgSrc } from "@/lib/evidencias-upload";
 import { LOGO_SAVICOL } from "@/app/(dashboard)/cedis/cumplimiento/savicol-logo";
 
 // ─── Empresa / membrete ──────────────────────────────────────────────────────
-const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.974-4", area: "Control Interno y Auditoría" };
+const EMPRESA = { nombre: "Pollos Savicol S.A.S.", nit: "860.403.972-4", area: "Control Interno y Auditoría" };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const esc = (v: any): string => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
