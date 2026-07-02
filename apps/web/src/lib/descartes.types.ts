@@ -49,6 +49,7 @@ export interface DescarteAve {
   ruta?: string | null;
   // Otros
   observaciones?: string | null;
+  checklistJSON?: string | null;
   // Auditoría
   createdBy?: string | null;
   updatedBy?: string | null;

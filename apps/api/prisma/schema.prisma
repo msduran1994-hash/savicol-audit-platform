@@ -684,6 +684,7 @@ model DescarteAve {
   ruta                   String?
   // Otros
   observaciones          String?
+  checklistJSON          String?   // respuestas del checklist de trazabilidad (JSON)
   // Auditoría
   createdBy              String?
   updatedBy              String?

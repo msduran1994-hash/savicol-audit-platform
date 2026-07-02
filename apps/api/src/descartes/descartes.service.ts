@@ -59,6 +59,7 @@ const ALLOWED = [
   "responsableDespacho", "responsableRecepcion", "medicoVeterinario",
   "horaInicioCargue", "horaFinCargue", "horaSalidaGranja", "horaLlegadaPlanta", "horaInicioDescarga", "horaFinDescarga",
   "gpsSalidaLat", "gpsSalidaLng", "gpsLlegadaLat", "gpsLlegadaLng", "distanciaKm", "ruta", "observaciones",
+  "checklistJSON",
 ];
 
 function sanitize(dto: any): any {

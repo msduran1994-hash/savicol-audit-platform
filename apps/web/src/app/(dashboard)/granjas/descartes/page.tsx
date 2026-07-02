@@ -13,11 +13,13 @@ import { AUDITORS } from "@/lib/constants";
 import {
   TIPO_DESCARTE, MOTIVO_DESCARTE, CLASIFICACION_SANITARIA, NIVEL_RIESGO_DESCARTE,
   ESTADO_DESCARTE, DESTINO_DESCARTE, RIESGO_COLOR, ESTADO_DESCARTE_COLOR, TIEMPO_OBJETIVO_MIN,
+  CHECKLIST_DESCARTE, CHECKLIST_ESTADOS, CHECKLIST_TOTAL_ITEMS, checklistStats,
+  type ChecklistRespuesta, type ChecklistRespuestas,
 } from "@/lib/descartes.constants";
 import type { DescarteAve, DescartePayload } from "@/lib/descartes.types";
 import {
   Bird, Plus, X, Loader2, AlertTriangle, Trash2, Edit2, Filter,
-  Clock, Scale, Save, MapPin, CheckCircle2,
+  Clock, Scale, Save, MapPin, CheckCircle2, ClipboardCheck,
 } from "lucide-react";
 
 // ─── Helpers de fecha/tiempo ─────────────────────────────────────────────────
@@ -49,6 +51,7 @@ export default function DescartesPage() {
   const [filtroMotivo, setFiltroMotivo] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<DescarteAve | null>(null);
+  const [checklistFor, setChecklistFor] = useState<DescarteAve | null>(null);
 
   const descQ = useDescartes({
     estado: filtroEstado || undefined,
@@ -130,8 +133,9 @@ export default function DescartesPage() {
                     <th className="text-left p-2.5">Planta</th>
                     <th className="text-center p-2.5">Riesgo</th>
                     <th className="text-center p-2.5">Estado</th>
+                    <th className="text-center p-2.5">Checklist</th>
                     <th className="text-right p-2.5">T. total</th>
-                    <th className="text-center p-2.5 w-16">Acción</th>
+                    <th className="text-center p-2.5 w-20">Acción</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -156,9 +160,15 @@ export default function DescartesPage() {
                         <td className="p-2.5 text-center">
                           <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: `${ec}18`, color: ec, border: `1px solid ${ec}30` }}>{r.estado}</span>
                         </td>
+                        <td className="p-2.5 text-center">
+                          {(() => { const cs = checklistStats(r.checklistJSON); return cs.respondidos === 0
+                            ? <span className="text-[10px] text-[#475569]">—</span>
+                            : <span className="text-[10px] font-mono" style={{ color: cs.pct >= 90 ? "#10B981" : cs.pct >= 70 ? "#F59E0B" : "#EF4444" }}>{cs.pct}%<span className="text-[#64748B]"> ({cs.respondidos}/{cs.total})</span></span>; })()}
+                        </td>
                         <td className="p-2.5 text-right font-mono text-xs" style={{ color: tTotal != null && tTotal > TIEMPO_OBJETIVO_MIN ? "#EF4444" : "#94A3B8" }}>{fmtDur(tTotal)}</td>
                         <td className="p-2.5">
                           <div className="flex gap-1 justify-center">
+                            <button onClick={() => setChecklistFor(r)} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-emerald-400" title="Checklist de trazabilidad"><ClipboardCheck className="w-3 h-3"/></button>
                             <button onClick={() => { setEditing(r); setModalOpen(true); }} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar"><Edit2 className="w-3 h-3"/></button>
                             <button onClick={async () => { if (confirm(`¿Eliminar el descarte de ${r.granjaNombre} (galpón ${r.galpon})?`)) { try { await removeD.mutateAsync(r.id); } catch (e:any) { alert("Error: " + (e?.response?.data?.message ?? e?.message)); } } }} className="p-1 rounded hover:bg-red-950/30 text-[#94A3B8] hover:text-red-400" title="Eliminar"><Trash2 className="w-3 h-3"/></button>
                           </div>
@@ -178,6 +188,14 @@ export default function DescartesPage() {
           item={editing}
           onClose={() => setModalOpen(false)}
           onSaved={() => setModalOpen(false)}
+        />
+      )}
+
+      {checklistFor && (
+        <ChecklistModal
+          descarte={checklistFor}
+          onClose={() => setChecklistFor(null)}
+          onSaved={() => setChecklistFor(null)}
         />
       )}
     </div>
@@ -497,6 +515,150 @@ function Calc({ label, v, alert }: { label: string; v: string; alert?: boolean }
     <div className={`rounded-lg border px-2 py-1.5 text-center ${alert ? "border-red-500/40 bg-red-500/5" : "border-[#1E2D4A] bg-[#0A111F]"}`}>
       <p className={`font-mono text-sm font-bold ${alert ? "text-red-300" : "text-white"}`}>{v}</p>
       <p className="text-[9px] text-[#64748B] uppercase tracking-wider">{label}</p>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODAL · Checklist de trazabilidad (por descarte)
+// ═══════════════════════════════════════════════════════════════════════════════
+function ChecklistModal({ descarte, onClose, onSaved }: {
+  descarte: DescarteAve;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const updateD = useUpdateDescarte();
+  const [ans, setAns] = useState<ChecklistRespuestas>(() => {
+    try { return descarte.checklistJSON ? JSON.parse(descarte.checklistJSON) : {}; } catch { return {}; }
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const setItem = (id: string, patch: Partial<ChecklistRespuesta>) =>
+    setAns(prev => ({ ...prev, [id]: { estado: "", ...prev[id], ...patch } }));
+
+  const stats = useMemo(() => {
+    let cumple = 0, noCumple = 0, noAplica = 0, respondidos = 0, noCumpleSinObs = 0;
+    for (const cat of CHECKLIST_DESCARTE) for (const it of cat.items) {
+      const r = ans[it.id]; if (!r || !r.estado) continue;
+      respondidos++;
+      if (r.estado === "Cumple") cumple++;
+      else if (r.estado === "No cumple") { noCumple++; if (!r.obs?.trim()) noCumpleSinObs++; }
+      else if (r.estado === "No aplica") noAplica++;
+    }
+    const base = cumple + noCumple;
+    return {
+      respondidos, total: CHECKLIST_TOTAL_ITEMS, cumple, noCumple, noAplica,
+      pendientes: CHECKLIST_TOTAL_ITEMS - respondidos,
+      pct: base > 0 ? Math.round((cumple / base) * 100) : 0, noCumpleSinObs,
+    };
+  }, [ans]);
+
+  const estColor = (e: string) =>
+    e === "Cumple" ? "#10B981" : e === "No cumple" ? "#EF4444" : e === "No aplica" ? "#94A3B8" : "#1E2D4A";
+
+  async function persist(cerrar: boolean) {
+    setError(null);
+    if (cerrar) {
+      if (stats.pendientes > 0) return setError(`Faltan ${stats.pendientes} ítem(s) por responder para cerrar el proceso.`);
+      if (stats.noCumpleSinObs > 0) return setError(`Hay ${stats.noCumpleSinObs} ítem(s) "No cumple" sin observación.`);
+    }
+    setSaving(true);
+    try {
+      await updateD.mutateAsync({ id: descarte.id, patch: { checklistJSON: JSON.stringify(ans), ...(cerrar ? { estado: "Cerrado" } : {}) } });
+      onSaved();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? e?.message ?? "Error al guardar el checklist");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const avancePct = stats.total ? Math.round((stats.respondidos / stats.total) * 100) : 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col shadow-card">
+        <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
+          <div>
+            <h2 className="font-display font-bold text-white text-lg">Checklist de trazabilidad</h2>
+            <p className="text-xs text-[#94A3B8] mt-0.5">{descarte.granjaNombre} · Galpón {descarte.galpon} · Lote {descarte.lote}</p>
+          </div>
+          <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
+        </header>
+
+        <div className="px-6 pt-3">
+          <div className="flex justify-between text-[11px] text-[#94A3B8] mb-1">
+            <span>Avance {stats.respondidos}/{stats.total} · Cumplimiento <span className="font-bold text-white">{stats.pct}%</span></span>
+            <span>{stats.cumple} cumple · {stats.noCumple} no cumple · {stats.noAplica} N/A</span>
+          </div>
+          <div className="h-1.5 bg-[#1A2540] rounded-full overflow-hidden">
+            <div className="h-full rounded-full transition-all" style={{ width: `${avancePct}%`, background: "#10B981" }}/>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {CHECKLIST_DESCARTE.map(cat => (
+            <div key={cat.categoria}>
+              <p className="text-xs uppercase tracking-wider text-amber-400 font-semibold mb-2">{cat.categoria}</p>
+              <div className="space-y-2">
+                {cat.items.map(it => {
+                  const r = ans[it.id] ?? { estado: "" as const };
+                  return (
+                    <div key={it.id} className="rounded-lg border border-[#1E2D4A] bg-[#0A111F] p-3">
+                      <p className="text-sm text-white mb-2">{it.pregunta}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {CHECKLIST_ESTADOS.map(e => {
+                          const active = r.estado === e;
+                          const c = estColor(e);
+                          return (
+                            <button key={e} type="button" onClick={() => setItem(it.id, { estado: e })}
+                              className="text-[11px] px-2.5 py-1 rounded-lg border font-semibold transition-colors"
+                              style={{ background: active ? `${c}22` : "transparent", color: active ? c : "#94A3B8", borderColor: active ? `${c}66` : "#2A3F6A" }}>
+                              {e}
+                            </button>
+                          );
+                        })}
+                        {r.estado === "No cumple" && (
+                          <select value={r.criticidad ?? "Medio"} onChange={e => setItem(it.id, { criticidad: e.target.value })}
+                            className="text-[11px] px-2 py-1 rounded-lg bg-[#0D1526] border border-[#2A3F6A] text-white ml-auto">
+                            {NIVEL_RIESGO_DESCARTE.map(n => <option key={n} value={n}>{n}</option>)}
+                          </select>
+                        )}
+                      </div>
+                      {r.estado && (
+                        <input value={r.obs ?? ""} onChange={e => setItem(it.id, { obs: e.target.value })}
+                          placeholder={r.estado === "No cumple" ? "Observación (obligatoria para cerrar)…" : "Observación (opcional)…"}
+                          className="input-base mt-2 text-xs"/>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {error && (
+          <div className="mx-6 mb-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>{error}</span>
+          </div>
+        )}
+        <footer className="flex items-center justify-between px-6 py-3 border-t border-[#1E2D4A]">
+          <p className="text-[11px] text-[#475569]">
+            {descarte.estado === "Cerrado" ? "Proceso cerrado" : `${stats.pendientes} pendiente(s)`}
+          </p>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="btn-ghost text-xs" disabled={saving}>Cancelar</button>
+            <button onClick={() => persist(false)} disabled={saving} className="btn-secondary text-xs flex items-center gap-2">
+              {saving ? <Loader2 className="w-3 h-3 animate-spin"/> : <Save className="w-3 h-3"/>}Guardar avance
+            </button>
+            <button onClick={() => persist(true)} disabled={saving} className="btn-primary text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-3 h-3"/>Guardar y cerrar
+            </button>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }
