@@ -23,6 +23,7 @@ import { useCedis } from "@/hooks/useCedis";
 import { AUDITORS } from "@/lib/constants";
 import { useInventariosFiltros, filtrarInventario } from "@/store/inventarios-filtros.store";
 import { InventariosFiltros } from "./filtros-inventario";
+import { FormularioEvaluativo } from "./evaluacion-producto";
 import { exportarInventarioXLSX, exportarInventarioEjecutivoPDF, exportarInventarioTecnicoPDF, describirFiltrosInventario } from "@/lib/inventarios-reportes";
 import { procesarArchivo, imgSrc, esImagen, fmtSize } from "@/lib/evidencias-upload";
 import type {
@@ -115,8 +116,8 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
           <MiniCard icon={<Hash className="w-4 h-4" />}          label="Auditados"      value={nfmt(kpis.auditados)}                 color="#10B981" />
         </div>
 
-        {/* Filtros globales sincronizados (dashboard + módulos) */}
-        <InventariosFiltros categorias={catOpts} responsables={respOpts} />
+        {/* Filtros globales sincronizados (dashboard + módulos) + Formulario Evaluativo (solo Producto) */}
+        <InventariosFiltros categorias={catOpts} responsables={respOpts} rightSlot={modulo === "PRODUCTO" ? <FormularioEvaluativo /> : undefined} />
 
         {/* Toolbar */}
         <div className="flex items-center gap-3 flex-wrap">

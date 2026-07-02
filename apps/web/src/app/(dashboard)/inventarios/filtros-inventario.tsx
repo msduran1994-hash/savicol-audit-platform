@@ -10,8 +10,8 @@ import { useGranjas } from "@/hooks/useGranjas";
 import { AUDITORS } from "@/lib/constants";
 import { Filter, X } from "lucide-react";
 
-export function InventariosFiltros({ showModulo = false, categorias = [], responsables = [] }: {
-  showModulo?: boolean; categorias?: string[]; responsables?: string[];
+export function InventariosFiltros({ showModulo = false, categorias = [], responsables = [], rightSlot }: {
+  showModulo?: boolean; categorias?: string[]; responsables?: string[]; rightSlot?: React.ReactNode;
 }) {
   const { filtros: f, setFiltro, reset } = useInventariosFiltros();
   const [open, setOpen] = useState(false);
@@ -29,6 +29,7 @@ export function InventariosFiltros({ showModulo = false, categorias = [], respon
           <button onClick={reset} className="text-xs text-[#94A3B8] hover:text-white flex items-center gap-1"><X className="w-3 h-3" />Limpiar</button>
         )}
         <span className="text-[10px] text-[#475569]">Sincronizados: dashboard + módulos</span>
+        {rightSlot && <div className="ml-auto">{rightSlot}</div>}
       </div>
 
       {open && (

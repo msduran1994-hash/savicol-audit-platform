@@ -15,6 +15,7 @@ import { InventariosFiltros } from "./filtros-inventario";
 import { useCedis } from "@/hooks/useCedis";
 import { useGranjas } from "@/hooks/useGranjas";
 import { exportarInventarioXLSX, exportarInventarioEjecutivoPDF, exportarInventarioTecnicoPDF, describirFiltrosInventario } from "@/lib/inventarios-reportes";
+import { useEvaluaciones } from "@/hooks/useEvaluaciones";
 import { pieValuePct, barLabelPct, sumField } from "@/lib/chart-pct";
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -22,7 +23,7 @@ import {
 } from "recharts";
 import {
   Boxes, DollarSign, CheckCircle2, Clock, Lock, AlertTriangle, Target, Flame,
-  BarChart3, ArrowRight, FileSpreadsheet, FileText, Loader2,
+  BarChart3, ArrowRight, FileSpreadsheet, FileText, Loader2, ClipboardList,
 } from "lucide-react";
 
 const PALETA = ["#8B5CF6", "#06B6D4", "#F59E0B", "#10B981", "#EF4444", "#3B82F6", "#EC4899", "#A3E635"];
@@ -55,6 +56,20 @@ export default function DashboardInventariosPage() {
     } catch (e: any) { alert("No se pudo generar el reporte: " + (e?.message ?? e)); }
     finally { setExp(""); }
   };
+
+  // Integración (Fase 7): evaluaciones del formulario evaluativo de Producto.
+  const evals = useEvaluaciones("PRODUCTO").data ?? [];
+  const evalKpi = useMemo(() => {
+    const total = evals.length;
+    const promPct = total ? Math.round(evals.reduce((s, e) => s + (e.porcentaje || 0), 0) / total) : 0;
+    return {
+      total, promPct,
+      buenos: evals.filter(e => e.calificacion === "Bueno").length,
+      aceptables: evals.filter(e => e.calificacion === "Aceptable").length,
+      insat: evals.filter(e => e.calificacion === "Insatisfactorio").length,
+      ultima: evals[0],
+    };
+  }, [evals]);
 
   const d = useMemo(() => {
     const total = rows.length;
@@ -244,6 +259,25 @@ export default function DashboardInventariosPage() {
           </div>
         )}
 
+        {/* Evaluaciones · Inventario de Producto (Fase 7 — integración con el Formulario Evaluativo) */}
+        <div className="card-base">
+          <div className="flex items-center gap-2 mb-3">
+            <ClipboardList className="w-4 h-4 text-violet-400" />
+            <h3 className="text-sm font-bold text-white">Evaluaciones · Inventario de Producto</h3>
+          </div>
+          {evalKpi.total === 0 ? (
+            <p className="text-xs text-[#64748B]">Sin evaluaciones registradas. Créalas con "Formulario Evaluativo" en el módulo Inventario de Producto.</p>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <MiniStat label="Evaluaciones" value={String(evalKpi.total)} color="#8B5CF6" />
+              <MiniStat label="Cumplimiento prom." value={`${evalKpi.promPct}%`} color="#06B6D4" />
+              <MiniStat label="Bueno" value={String(evalKpi.buenos)} color="#10B981" />
+              <MiniStat label="Aceptable" value={String(evalKpi.aceptables)} color="#F59E0B" />
+              <MiniStat label="Insatisfactorio" value={String(evalKpi.insat)} color="#EF4444" />
+            </div>
+          )}
+        </div>
+
         {/* Acceso rápido a módulos */}
         <div>
           <h3 className="text-sm font-bold text-white mb-3">Módulos</h3>
@@ -288,4 +322,13 @@ function ChartBox({ title, children }: { title: string; children: React.ReactNod
 
 function Empty() {
   return <div className="h-[260px] flex items-center justify-center text-[#475569] text-sm">Sin datos para esta gráfica.</div>;
+}
+
+function MiniStat({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="bg-[#0A111F] border border-[#1E2D4A] rounded-lg py-2.5 text-center">
+      <p className="text-lg font-bold" style={{ color }}>{value}</p>
+      <p className="text-[10px] text-[#64748B] uppercase tracking-wider">{label}</p>
+    </div>
+  );
 }

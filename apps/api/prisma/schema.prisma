@@ -845,6 +845,63 @@ model AuditoriaInventario {
   @@index([createdAt])
 }
 
+// Formulario Evaluativo del módulo Inventario de Producto (transcripción del
+// FORMATO EVALUACIÓN AUDITORIA INVENTARIO DE PRODUCTOS). Las 22 respuestas viven
+// en respuestasJSON; los totales se guardan para dashboard/reportes.
+model EvaluacionInventario {
+  id                 String   @id @default(cuid())
+  modulo             String   @default("PRODUCTO")
+  bodega             String?
+  auditores          String?
+  coordinador        String?
+  director           String?
+  colaboradores      String?
+  fecha              DateTime @default(now())
+  hora               String?
+  estadoEvaluacion   String   @default("En proceso")
+  respuestasJSON     String?
+  bitacoraJSON       String?
+  observacionGeneral String?
+  conclusion         String?
+  planAccion         String?
+  puntajeObtenido    Float?   @default(0)
+  contestadas        Int?     @default(0)
+  puntajeMaximo      Int?     @default(110)
+  promedio           Float?   @default(0)
+  porcentaje         Float?   @default(0)
+  calificacion       String?
+  createdBy          String?
+  updatedBy          String?
+  isDemo             Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  evidencias         EvidenciaEvaluacion[]
+
+  @@index([modulo])
+  @@index([fecha])
+}
+
+// Evidencias del formulario evaluativo. preguntaId nulo = evidencia general;
+// con valor (7.x) = evidencia por pregunta.
+model EvidenciaEvaluacion {
+  id           String   @id @default(cuid())
+  evaluacionId String
+  preguntaId   String?
+  tipo         String
+  nombre       String
+  url          String
+  size         Int      @default(0)
+  categoria    String?
+  uploadedAt   DateTime @default(now())
+  uploadedBy   String?
+  isDemo       Boolean  @default(false)
+
+  evaluacion EvaluacionInventario @relation(fields: [evaluacionId], references: [id], onDelete: Cascade)
+
+  @@index([evaluacionId])
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MÓDULO SETTINGS · Configuración global key/value
 // ═══════════════════════════════════════════════════════════════════════════════
