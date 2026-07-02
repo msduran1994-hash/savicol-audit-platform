@@ -85,6 +85,25 @@ function sanitize(dto: any): any {
   return out;
 }
 
+// ── Auditoría (Fase 7): formateo y diff de campos antes→después ───────────────
+function fmtVal(v: any): string {
+  if (v == null || v === "") return "—";
+  if (v instanceof Date) {
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${v.getFullYear()}-${p(v.getMonth() + 1)}-${p(v.getDate())} ${p(v.getHours())}:${p(v.getMinutes())}`;
+  }
+  return String(v);
+}
+function diffCampos(prev: any, data: any, exclude: string[]): { campo: string; antes: string; despues: string }[] {
+  const norm = (v: any) => v instanceof Date ? v.getTime() : (v == null ? null : v);
+  const out: { campo: string; antes: string; despues: string }[] = [];
+  for (const k of Object.keys(data)) {
+    if (exclude.includes(k)) continue;
+    if (norm(prev?.[k]) !== norm(data[k])) out.push({ campo: k, antes: fmtVal(prev?.[k]), despues: fmtVal(data[k]) });
+  }
+  return out;
+}
+
 @Injectable()
 export class DescartesService {
   constructor(private prisma: PrismaService) {}
@@ -103,23 +122,55 @@ export class DescartesService {
     return this.prisma.descarteAve.findUnique({ where: { id } });
   }
 
-  create(dto: CreateDescarteDto, userName?: string) {
+  async create(dto: CreateDescarteDto, userName?: string) {
     const data = sanitize(dto);
-    return this.prisma.descarteAve.create({
+    const rec = await this.prisma.descarteAve.create({
       data: { ...data, createdBy: userName ?? null, updatedBy: userName ?? null },
     });
+    await this.auditar(rec.id, "Creación", userName, `Descarte registrado — ${rec.granjaNombre} · galpón ${rec.galpon} · lote ${rec.lote}`);
+    return rec;
   }
 
-  update(id: string, dto: Partial<CreateDescarteDto>, userName?: string) {
+  async update(id: string, dto: Partial<CreateDescarteDto>, userName?: string) {
     const data = sanitize(dto);
-    return this.prisma.descarteAve.update({
+    const prev = await this.prisma.descarteAve.findUnique({ where: { id } });
+    const rec = await this.prisma.descarteAve.update({
       where: { id },
       data: { ...data, updatedBy: userName ?? null },
     });
+    if (prev) {
+      // Cambio de estado — evento propio
+      if (data.estado !== undefined && data.estado !== prev.estado) {
+        await this.auditar(id, "Cambio de estado", userName, `Estado: ${prev.estado ?? "—"} → ${data.estado}`,
+          [{ campo: "estado", antes: fmtVal(prev.estado), despues: fmtVal(data.estado) }]);
+      }
+      // Checklist de trazabilidad — evento propio
+      if (data.checklistJSON !== undefined && data.checklistJSON !== prev.checklistJSON) {
+        await this.auditar(id, "Checklist", userName, "Checklist de trazabilidad actualizado");
+      }
+      // Edición del resto de campos (con diff antes→después)
+      const cambios = diffCampos(prev, data, ["estado", "checklistJSON"]);
+      if (cambios.length) await this.auditar(id, "Edición", userName, `${cambios.length} campo(s) modificado(s)`, cambios);
+    }
+    return rec;
   }
 
   remove(id: string) {
+    // La auditoría se borra en cascada con el registro (no se audita la eliminación).
     return this.prisma.descarteAve.delete({ where: { id } });
+  }
+
+  // ── Auditoría / historial de cambios (Fase 7) ──
+  private async auditar(descarteId: string, accion: string, usuario?: string, detalle?: string, cambios?: any) {
+    try {
+      await this.prisma.auditoriaDescarte.create({
+        data: { descarteId, accion, usuario: usuario ?? null, detalle: detalle ?? null, cambiosJSON: cambios ? JSON.stringify(cambios) : null },
+      });
+    } catch { /* la auditoría nunca debe romper la operación principal */ }
+  }
+
+  findAuditoria(descarteId: string) {
+    return this.prisma.auditoriaDescarte.findMany({ where: { descarteId }, orderBy: { createdAt: "desc" } });
   }
 
   // ── Evidencias ──
@@ -127,8 +178,8 @@ export class DescartesService {
     return this.prisma.evidenciaDescarte.findMany({ where: { descarteId }, orderBy: { uploadedAt: "desc" } });
   }
 
-  createEvidencia(dto: CreateEvidenciaDescarteDto, userName?: string) {
-    return this.prisma.evidenciaDescarte.create({
+  async createEvidencia(dto: CreateEvidenciaDescarteDto, userName?: string) {
+    const ev = await this.prisma.evidenciaDescarte.create({
       data: {
         descarteId: dto.descarteId,
         tipo: dto.tipo,
@@ -139,9 +190,14 @@ export class DescartesService {
         uploadedBy: userName ?? null,
       },
     });
+    await this.auditar(dto.descarteId, "Evidencia agregada", userName, `${dto.categoria ?? dto.tipo}: ${dto.nombre}`);
+    return ev;
   }
 
-  removeEvidencia(id: string) {
-    return this.prisma.evidenciaDescarte.delete({ where: { id } });
+  async removeEvidencia(id: string, userName?: string) {
+    const ev = await this.prisma.evidenciaDescarte.findUnique({ where: { id } });
+    const res = await this.prisma.evidenciaDescarte.delete({ where: { id } });
+    if (ev) await this.auditar(ev.descarteId, "Evidencia eliminada", userName, `${ev.categoria ?? ev.tipo}: ${ev.nombre}`);
+    return res;
   }
 }

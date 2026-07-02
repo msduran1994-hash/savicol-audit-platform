@@ -693,6 +693,7 @@ model DescarteAve {
   updatedAt              DateTime  @updatedAt
 
   evidencias             EvidenciaDescarte[]
+  auditorias             AuditoriaDescarte[]
 
   @@index([granjaId])
   @@index([estado])
@@ -716,6 +717,24 @@ model EvidenciaDescarte {
   descarte DescarteAve @relation(fields: [descarteId], references: [id], onDelete: Cascade)
 
   @@index([descarteId])
+}
+
+// Auditoría / historial de cambios de un descarte (Fase 7). Un registro por evento:
+// creación, edición (con diff de campos), cambio de estado, checklist y evidencias.
+// cambiosJSON = [{ campo, antes, despues }]. Se borra en cascada con el descarte.
+model AuditoriaDescarte {
+  id          String   @id @default(cuid())
+  descarteId  String
+  accion      String      // Creación | Edición | Cambio de estado | Checklist | Evidencia agregada | Evidencia eliminada
+  detalle     String?     // resumen legible del evento
+  cambiosJSON String?     // JSON con los campos cambiados (antes → después)
+  usuario     String?     // nombre/email del actor
+  createdAt   DateTime @default(now())
+
+  descarte DescarteAve @relation(fields: [descarteId], references: [id], onDelete: Cascade)
+
+  @@index([descarteId])
+  @@index([createdAt])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

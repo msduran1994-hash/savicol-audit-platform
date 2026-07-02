@@ -87,3 +87,15 @@ export interface EvidenciaDescartePayload {
   size: number;
   categoria?: string;
 }
+
+// Auditoría / historial de cambios (Fase 7)
+export interface CambioCampo { campo: string; antes: string; despues: string; }
+export interface AuditoriaDescarte {
+  id: string;
+  descarteId: string;
+  accion: string;            // Creación | Edición | Cambio de estado | Checklist | Evidencia agregada | Evidencia eliminada
+  detalle?: string | null;
+  cambiosJSON?: string | null; // JSON de CambioCampo[]
+  usuario?: string | null;
+  createdAt: string;
+}

@@ -43,6 +43,23 @@ export const ESTADO_DESCARTE_COLOR: Record<string, string> = {
 // Objetivo logístico (minutos) para semáforo de cumplimiento del tiempo total.
 export const TIEMPO_OBJETIVO_MIN = 180;
 
+// ─── Auditoría (Fase 7): etiquetas legibles de los campos para el diff ─────────
+export const CAMPO_LABELS: Record<string, string> = {
+  fechaHoraDescarte: "Fecha/hora del descarte", granjaId: "Granja (id)", granjaNombre: "Granja",
+  empresa: "Empresa", integracion: "Integración", galpon: "Galpón", lote: "Lote",
+  lineaGenetica: "Línea genética", loteEdadDias: "Edad del lote (días)", tipoDescarte: "Tipo de descarte",
+  motivo: "Motivo", clasificacionSanitaria: "Clasificación sanitaria", nivelRiesgo: "Nivel de riesgo", estado: "Estado",
+  cantidadAves: "Cantidad de aves", pesoPromedioKg: "Peso promedio (kg)", pesoTotalKg: "Peso total (kg)",
+  mortalidadTraslado: "Mortalidad en traslado", destino: "Destino", plantaDestino: "Planta de destino",
+  transportadora: "Transportadora", vehiculoPlaca: "Vehículo / placa", conductor: "Conductor",
+  responsableDespacho: "Responsable de despacho", responsableRecepcion: "Responsable de recepción",
+  medicoVeterinario: "Médico veterinario", horaInicioCargue: "Inicio de cargue", horaFinCargue: "Fin de cargue",
+  horaSalidaGranja: "Salida de granja", horaLlegadaPlanta: "Llegada a planta", horaInicioDescarga: "Inicio de descarga",
+  horaFinDescarga: "Fin de descarga", gpsSalidaLat: "GPS salida (lat)", gpsSalidaLng: "GPS salida (lng)",
+  gpsLlegadaLat: "GPS llegada (lat)", gpsLlegadaLng: "GPS llegada (lng)", distanciaKm: "Distancia (km)",
+  ruta: "Ruta", observaciones: "Observaciones",
+};
+
 // ─── Evidencias ──────────────────────────────────────────────────────────────
 export const EVIDENCIA_TIPOS = ["Foto", "PDF", "Excel", "Video", "Otro"] as const;
 export const EVIDENCIA_CATEGORIAS = [

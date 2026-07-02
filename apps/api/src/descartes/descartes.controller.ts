@@ -38,8 +38,14 @@ export class DescartesController {
 
   @Delete("evidencias/:id")
   @HttpCode(HttpStatus.OK)
-  removeEvidencia(@Param("id") id: string) {
-    return this.svc.removeEvidencia(id);
+  removeEvidencia(@Param("id") id: string, @Req() req: AuthRequest) {
+    return this.svc.removeEvidencia(id, req.user?.name ?? req.user?.email);
+  }
+
+  // ── Auditoría / historial (antes de :id para no colisionar) ──
+  @Get("auditoria")
+  findAuditoria(@Query("descarteId") descarteId: string) {
+    return this.svc.findAuditoria(descarteId);
   }
 
   @Get(":id")

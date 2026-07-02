@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
 import type {
   DescarteAve, DescartePayload, DescartesFilters,
-  EvidenciaDescarte, EvidenciaDescartePayload,
+  EvidenciaDescarte, EvidenciaDescartePayload, AuditoriaDescarte,
 } from "@/lib/descartes.types";
 
 export function useDescartes(filters: DescartesFilters = {}) {
@@ -22,7 +22,7 @@ export function useCreateDescarte() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (dto: DescartePayload) => apiPost<DescarteAve>("/descartes", dto),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ["descartes"] }),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ["descartes"] }); qc.invalidateQueries({ queryKey: ["descartes-auditoria"] }); },
   });
 }
 
@@ -31,7 +31,17 @@ export function useUpdateDescarte() {
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: DescartePayload }) =>
       apiPatch<DescarteAve>(`/descartes/${id}`, patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["descartes"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["descartes"] }); qc.invalidateQueries({ queryKey: ["descartes-auditoria"] }); },
+  });
+}
+
+// ─── Auditoría / historial de cambios (Fase 7) ───────────────────────────────
+export function useAuditoriaDescarte(descarteId: string | null) {
+  return useQuery({
+    queryKey: ["descartes-auditoria", descarteId],
+    queryFn:  () => apiGet<AuditoriaDescarte[]>(`/descartes/auditoria?descarteId=${descarteId}`),
+    enabled:  !!descarteId,
+    staleTime: 15_000,
   });
 }
 
@@ -57,7 +67,7 @@ export function useCreateEvidenciaDescarte() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (dto: EvidenciaDescartePayload) => apiPost<EvidenciaDescarte>("/descartes/evidencias", dto),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ["descartes-evidencias"] }),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ["descartes-evidencias"] }); qc.invalidateQueries({ queryKey: ["descartes-auditoria"] }); },
   });
 }
 
@@ -65,6 +75,6 @@ export function useDeleteEvidenciaDescarte() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiDelete(`/descartes/evidencias/${id}`),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ["descartes-evidencias"] }),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ["descartes-evidencias"] }); qc.invalidateQueries({ queryKey: ["descartes-auditoria"] }); },
   });
 }

@@ -8,6 +8,7 @@ import { Header } from "@/components/layout/header";
 import {
   useDescartes, useCreateDescarte, useUpdateDescarte, useDeleteDescarte,
   useEvidenciasDescarte, useCreateEvidenciaDescarte, useDeleteEvidenciaDescarte,
+  useAuditoriaDescarte,
 } from "@/hooks/useDescartes";
 import { procesarArchivo, imgSrc, fmtSize, esImagen } from "@/lib/evidencias-upload";
 import { useGranjas } from "@/hooks/useGranjas";
@@ -16,16 +17,16 @@ import {
   TIPO_DESCARTE, MOTIVO_DESCARTE, CLASIFICACION_SANITARIA, NIVEL_RIESGO_DESCARTE,
   ESTADO_DESCARTE, DESTINO_DESCARTE, RIESGO_COLOR, ESTADO_DESCARTE_COLOR, TIEMPO_OBJETIVO_MIN,
   CHECKLIST_DESCARTE, CHECKLIST_ESTADOS, CHECKLIST_TOTAL_ITEMS, checklistStats, checklistCategoriaPct,
-  EVIDENCIA_TIPOS, EVIDENCIA_CATEGORIAS,
+  EVIDENCIA_TIPOS, EVIDENCIA_CATEGORIAS, CAMPO_LABELS,
   type ChecklistRespuesta, type ChecklistRespuestas,
 } from "@/lib/descartes.constants";
-import type { DescarteAve, DescartePayload, EvidenciaDescarte } from "@/lib/descartes.types";
+import type { DescarteAve, DescartePayload, EvidenciaDescarte, AuditoriaDescarte, CambioCampo } from "@/lib/descartes.types";
 import {
   Bird, Plus, X, Loader2, AlertTriangle, Trash2, Edit2, Filter,
   Clock, Scale, Save, MapPin, CheckCircle2, ClipboardCheck,
   Camera, UploadCloud, Link2, Download, ExternalLink, Image as ImageIcon, Maximize2, FolderOpen,
   LayoutDashboard, List, Gauge, TrendingUp, Building2, Truck, Trophy,
-  FileSpreadsheet, FileText, Printer,
+  FileSpreadsheet, FileText, Printer, History, PlusCircle, PencilLine, ArrowRightLeft,
 } from "lucide-react";
 import {
   exportarDescartesCSV, exportarDescartesXLSX, exportarDescartesReportePDF, imprimirActaDescarte,
@@ -73,6 +74,7 @@ export default function DescartesPage() {
   const [editing, setEditing] = useState<DescarteAve | null>(null);
   const [checklistFor, setChecklistFor] = useState<DescarteAve | null>(null);
   const [evidenciasFor, setEvidenciasFor] = useState<DescarteAve | null>(null);
+  const [historialFor, setHistorialFor] = useState<DescarteAve | null>(null);
   const [vista, setVista] = useState<"lista" | "dashboard">("lista");
 
   const setF = (k: string, v: string) => setFiltros(p => ({ ...p, [k]: v }));
@@ -330,6 +332,7 @@ export default function DescartesPage() {
                           <div className="flex gap-1 justify-center">
                             <button onClick={() => setChecklistFor(r)} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-emerald-400" title="Checklist de trazabilidad"><ClipboardCheck className="w-3 h-3"/></button>
                             <button onClick={() => setEvidenciasFor(r)} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-cyan-400" title="Evidencias"><Camera className="w-3 h-3"/></button>
+                            <button onClick={() => setHistorialFor(r)} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-violet-400" title="Historial de cambios"><History className="w-3 h-3"/></button>
                             <button onClick={() => runActa(r)} disabled={!!actaId} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-amber-400 disabled:opacity-40" title="Imprimir acta de descarte (PDF)">{actaId === r.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <Printer className="w-3 h-3"/>}</button>
                             <button onClick={() => { setEditing(r); setModalOpen(true); }} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar"><Edit2 className="w-3 h-3"/></button>
                             <button onClick={async () => { if (confirm(`¿Eliminar el descarte de ${r.granjaNombre} (galpón ${r.galpon})?`)) { try { await removeD.mutateAsync(r.id); } catch (e:any) { alert("Error: " + (e?.response?.data?.message ?? e?.message)); } } }} className="p-1 rounded hover:bg-red-950/30 text-[#94A3B8] hover:text-red-400" title="Eliminar"><Trash2 className="w-3 h-3"/></button>
@@ -365,6 +368,10 @@ export default function DescartesPage() {
       {evidenciasFor && (
         <EvidenciasModal descarte={evidenciasFor} onClose={() => setEvidenciasFor(null)} />
       )}
+
+      {historialFor && (
+        <HistorialModal descarte={historialFor} onClose={() => setHistorialFor(null)} />
+      )}
     </div>
   );
 }
@@ -390,6 +397,83 @@ function FSel({ label, value, onChange, opts }: { label: string; value: string; 
         <option value="">Todos</option>
         {opts.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODAL · Historial de cambios (Fase 7)
+// ═══════════════════════════════════════════════════════════════════════════════
+const ACCION_META: Record<string, { color: string; icon: any }> = {
+  "Creación":            { color: "#22C55E", icon: PlusCircle },
+  "Edición":             { color: "#3B82F6", icon: PencilLine },
+  "Cambio de estado":    { color: "#F59E0B", icon: ArrowRightLeft },
+  "Checklist":           { color: "#10B981", icon: ClipboardCheck },
+  "Evidencia agregada":  { color: "#06B6D4", icon: Camera },
+  "Evidencia eliminada": { color: "#EF4444", icon: Trash2 },
+};
+
+function HistorialModal({ descarte, onClose }: { descarte: DescarteAve; onClose: () => void }) {
+  const q = useAuditoriaDescarte(descarte.id);
+  const eventos = q.data ?? [];
+  const fmt = (iso: string) => { const d = new Date(iso); return isNaN(d.getTime()) ? "—" : d.toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" }); };
+  const parseCambios = (json?: string | null): CambioCampo[] => { try { return json ? JSON.parse(json) : []; } catch { return []; } };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-hidden flex flex-col shadow-card">
+        <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
+          <div>
+            <h2 className="font-display font-bold text-white text-lg flex items-center gap-2"><History className="w-5 h-5 text-violet-400"/>Historial de cambios</h2>
+            <p className="text-xs text-[#94A3B8] mt-0.5">{descarte.granjaNombre} · Galpón {descarte.galpon} · Lote {descarte.lote} · {eventos.length} evento(s)</p>
+          </div>
+          <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
+        </header>
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {q.isLoading ? (
+            <div className="py-16 flex items-center justify-center text-[#475569]"><Loader2 className="w-5 h-5 animate-spin"/></div>
+          ) : eventos.length === 0 ? (
+            <div className="py-16 flex flex-col items-center justify-center text-center">
+              <History className="w-10 h-10 text-[#1E2D4A] mb-3"/>
+              <p className="text-white font-semibold mb-1">Sin eventos registrados</p>
+              <p className="text-[#475569] text-sm">Los cambios sobre este descarte se irán registrando aquí.</p>
+            </div>
+          ) : (
+            <ol className="relative border-l border-[#1E2D4A] ml-2 space-y-4">
+              {eventos.map(ev => {
+                const meta = ACCION_META[ev.accion] ?? { color: "#94A3B8", icon: History };
+                const Icon = meta.icon;
+                const cambios = parseCambios(ev.cambiosJSON);
+                return (
+                  <li key={ev.id} className="ml-5">
+                    <span className="absolute -left-[9px] flex items-center justify-center w-[18px] h-[18px] rounded-full" style={{ background: `${meta.color}22`, border: `1px solid ${meta.color}` }}>
+                      <Icon className="w-2.5 h-2.5" style={{ color: meta.color }}/>
+                    </span>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-sm font-semibold" style={{ color: meta.color }}>{ev.accion}</span>
+                      <span className="text-[10px] text-[#64748B] font-mono">{fmt(ev.createdAt)}</span>
+                    </div>
+                    {ev.detalle && <p className="text-xs text-[#94A3B8] mt-0.5">{ev.detalle}</p>}
+                    {ev.usuario && <p className="text-[10px] text-[#475569] mt-0.5">por {ev.usuario}</p>}
+                    {cambios.length > 0 && (
+                      <div className="mt-2 rounded-lg border border-[#1E2D4A] bg-[#0A111F] divide-y divide-[#1E2D4A]/60">
+                        {cambios.map((c, i) => (
+                          <div key={i} className="px-3 py-1.5 text-[11px] flex items-center gap-2 flex-wrap">
+                            <span className="text-[#94A3B8] min-w-[120px]">{CAMPO_LABELS[c.campo] ?? c.campo}</span>
+                            <span className="text-red-300/80 line-through break-all">{c.antes}</span>
+                            <ArrowRightLeft className="w-3 h-3 text-[#475569] shrink-0"/>
+                            <span className="text-emerald-300 break-all">{c.despues}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
