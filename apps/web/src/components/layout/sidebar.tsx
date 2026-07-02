@@ -8,7 +8,7 @@ import {
   Package, FileText, Activity, Files,
   Gauge,
   Truck, Table2, CheckSquare, Camera, Sparkles,
-  Warehouse, Egg,
+  Warehouse, Egg, Bird,
   Menu, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -33,6 +33,7 @@ const GRANJAS_NAV = [
   { href: "/granjas/hallazgos",  label: "Hallazgos",        icon: AlertTriangle,    badge: null },
   { href: "/granjas/kpi",        label: "Cumplimiento KPI", icon: Target,           badge: null },
   { href: "/granjas/trazabilidad", label: "Trazabilidad",   icon: Egg,              badge: null },
+  { href: "/granjas/descartes",  label: "Trazabilidad de Descartes", icon: Bird,   badge: null },
   { href: "/granjas/ranking",    label: "Ranking",          icon: Trophy,           badge: null },
   { href: "/granjas/inventario", label: "Inventario",       icon: Package,          badge: null },
   { href: "/granjas/reportes",   label: "Reportes",         icon: FileText,         badge: null },

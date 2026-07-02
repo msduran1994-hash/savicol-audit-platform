@@ -7,6 +7,7 @@ import { AuthModule } from "./auth/auth.module";
 import { AuditActivitiesModule } from "./audit-activities/audit-activities.module";
 import { UsersModule } from "./users/users.module";
 import { GranjasModule } from "./granjas/granjas.module";
+import { DescartesModule } from "./descartes/descartes.module";
 import { RutasModule } from "./rutas/rutas.module";
 import { CedisModule } from "./cedis/cedis.module";
 import { InventarioModule } from "./inventario/inventario.module";
@@ -44,6 +45,7 @@ import { AuditLogsModule } from "./audit-logs/audit-logs.module";
     AuditActivitiesModule,
     UsersModule,
     GranjasModule,
+    DescartesModule,
     RutasModule,
     CedisModule,
     InventarioModule,

@@ -632,6 +632,71 @@ model AccionCumplimiento {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// MÓDULO GRANJAS · Trazabilidad de Descartes (logística/sanitaria del descarte)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Un registro = un viaje/vehículo. Enums como String (compatible SQLite). Lote y
+// galpón son texto (los lotes viven en Documentos, no como modelo). GPS por
+// coordenadas + distancia (sin dependencia de mapas). Denormaliza granjaNombre.
+model DescarteAve {
+  id                     String    @id @default(cuid())
+  // Información general
+  fechaHoraDescarte      DateTime
+  granjaId               String?
+  granjaNombre           String
+  empresa                String?
+  integracion            String?
+  galpon                 String
+  lote                   String
+  lineaGenetica          String?
+  loteEdadDias           Int?
+  tipoDescarte           String    @default("Sanitario")
+  motivo                 String
+  clasificacionSanitaria String?
+  nivelRiesgo            String    @default("Medio")
+  estado                 String    @default("Registrado")
+  // Información productiva
+  cantidadAves           Int       @default(0)
+  pesoPromedioKg         Float?
+  pesoTotalKg            Float?
+  mortalidadTraslado     Int?
+  // Información logística
+  destino                String?
+  plantaDestino          String?
+  transportadora         String?
+  vehiculoPlaca          String?
+  conductor              String?
+  responsableDespacho    String?
+  responsableRecepcion   String?
+  medicoVeterinario      String?
+  // Control de tiempos
+  horaInicioCargue       DateTime?
+  horaFinCargue          DateTime?
+  horaSalidaGranja       DateTime?
+  horaLlegadaPlanta      DateTime?
+  horaInicioDescarga     DateTime?
+  horaFinDescarga        DateTime?
+  // Georreferenciación (coordenadas + distancia)
+  gpsSalidaLat           Float?
+  gpsSalidaLng           Float?
+  gpsLlegadaLat          Float?
+  gpsLlegadaLng          Float?
+  distanciaKm            Float?
+  ruta                   String?
+  // Otros
+  observaciones          String?
+  // Auditoría
+  createdBy              String?
+  updatedBy              String?
+  isDemo                 Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@index([granjaId])
+  @@index([estado])
+  @@index([fechaHoraDescarte])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MÓDULO SETTINGS · Configuración global key/value
 // ═══════════════════════════════════════════════════════════════════════════════
 // Patrón key/value para evitar migraciones cada vez que se agrega un setting.
