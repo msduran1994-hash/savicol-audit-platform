@@ -19,30 +19,33 @@ export const EVAL_ESCALA = [
 
 export interface EvalPregunta { item: string; proceso: string; aspecto: string; }
 
-// Las 22 preguntas (7.1–7.22), agrupadas por proceso, en el orden del documento.
+// Las 22 preguntas, agrupadas por proceso, en el orden del documento.
+// Ítems renumerados 1–22 (secuencia corrida) por solicitud; el texto de las
+// preguntas y los procesos se conservan idénticos al formato original (que las
+// codificaba 7.1–7.22).
 export const EVAL_PREGUNTAS: EvalPregunta[] = [
-  { item: "7.1",  proceso: "PROCESO SST O SISO", aspecto: "¿Los colaboradores cuentan con los elementos de proteccion personal (EPP)?" },
-  { item: "7.2",  proceso: "PROCESO SST O SISO", aspecto: "¿El ambiente laboral se encontro apto para la realizacion del inventario de producto?" },
-  { item: "7.3",  proceso: "PROCESO SST O SISO", aspecto: "¿Se definen las acciones para el control de los riesgos, implementación y seguimiento?" },
-  { item: "7.4",  proceso: "PROCESO LOGISTICO", aspecto: "¿ Cuentan con cronograma de actividades del inventario a desarrollar?" },
-  { item: "7.5",  proceso: "PROCESO LOGISTICO", aspecto: "¿Realizan una inspeccion inicial antes del inicio del inventario de producto?" },
-  { item: "7.6",  proceso: "PROCESO LOGISTICO", aspecto: "¿Cuentan con procedimiento publicado para el proceso de inventario?" },
-  { item: "7.7",  proceso: "PROCESO LOGISTICO", aspecto: "¿Se da cumplimiento al cronograma de inicio de inventario?" },
-  { item: "7.8",  proceso: "PROCESO LOGISTICO", aspecto: "¿Cuentan con organización logistica durante el proceso de inventarios (antes y en el momento del inventario de producto)?" },
-  { item: "7.9",  proceso: "PROCESO LOGISTICO", aspecto: "¿Se cuenta con la dispocision completa del personal (Antes y durante la ejecucion del inventario)?" },
-  { item: "7.10", proceso: "PROCESO LOGISTICO", aspecto: "¿Se realizo induccion antes del inicio de la actividad del inventario de producto?" },
-  { item: "7.11", proceso: "PROCESO LOGISTICO", aspecto: "Se efectuo una inspeccion final del inventario ¿Si hay; se ha corregido?." },
-  { item: "7.12", proceso: "PROCESO OPERATIVO", aspecto: "¿Realizan corte de documentos antes del inicio del inventario de producto?" },
-  { item: "7.13", proceso: "PROCESO OPERATIVO", aspecto: "¿Cuentan con acta de inicio (procedimiento, firma de responsables, e inicio hora de ejecucion?" },
-  { item: "7.14", proceso: "PROCESO OPERATIVO", aspecto: "¿Cuenta con herramientas tecnologicas para inicio actividad inventarios de producto?" },
-  { item: "7.15", proceso: "PROCESO OPERATIVO", aspecto: "¿El inventario se completo de forma correcta y sin novedades durante su ejecucion?" },
-  { item: "7.16", proceso: "PROCESO OPERATIVO", aspecto: "¿Los resultados de los inventario son validados por algun superior?" },
-  { item: "7.17", proceso: "PROCESO OPERATIVO", aspecto: "¿Las novedades presentadas durante los ajustes son atendidas y resueltas?" },
-  { item: "7.18", proceso: "PROCESO OPERATIVO", aspecto: "Existe participacion de otras areas durante la ejecucion del inventario.¿Cuales?" },
-  { item: "7.19", proceso: "PROCESO MANTENIMIENTO", aspecto: "¿Se efectuo inspeccion fisica calibracion a las Basculas?" },
-  { item: "7.20", proceso: "PROCESO MANTENIMIENTO", aspecto: "¿Ha presentado fallas la montacarga o estibadora manual durante la ejecucion de la actividad inventario de producto?" },
-  { item: "7.21", proceso: "PROCESO AJUSTE INVENTARIO", aspecto: "¿Se envian informacion completa y a tiempo para la realizacion de los ajustes de inventario?" },
-  { item: "7.22", proceso: "PROCESO AJUSTE INVENTARIO", aspecto: "¿Se esta ejecutando la revision post ajuste efectuados por el area de auditoria?" },
+  { item: "1",  proceso: "PROCESO SST O SISO", aspecto: "¿Los colaboradores cuentan con los elementos de proteccion personal (EPP)?" },
+  { item: "2",  proceso: "PROCESO SST O SISO", aspecto: "¿El ambiente laboral se encontro apto para la realizacion del inventario de producto?" },
+  { item: "3",  proceso: "PROCESO SST O SISO", aspecto: "¿Se definen las acciones para el control de los riesgos, implementación y seguimiento?" },
+  { item: "4",  proceso: "PROCESO LOGISTICO", aspecto: "¿ Cuentan con cronograma de actividades del inventario a desarrollar?" },
+  { item: "5",  proceso: "PROCESO LOGISTICO", aspecto: "¿Realizan una inspeccion inicial antes del inicio del inventario de producto?" },
+  { item: "6",  proceso: "PROCESO LOGISTICO", aspecto: "¿Cuentan con procedimiento publicado para el proceso de inventario?" },
+  { item: "7",  proceso: "PROCESO LOGISTICO", aspecto: "¿Se da cumplimiento al cronograma de inicio de inventario?" },
+  { item: "8",  proceso: "PROCESO LOGISTICO", aspecto: "¿Cuentan con organización logistica durante el proceso de inventarios (antes y en el momento del inventario de producto)?" },
+  { item: "9",  proceso: "PROCESO LOGISTICO", aspecto: "¿Se cuenta con la dispocision completa del personal (Antes y durante la ejecucion del inventario)?" },
+  { item: "10", proceso: "PROCESO LOGISTICO", aspecto: "¿Se realizo induccion antes del inicio de la actividad del inventario de producto?" },
+  { item: "11", proceso: "PROCESO LOGISTICO", aspecto: "Se efectuo una inspeccion final del inventario ¿Si hay; se ha corregido?." },
+  { item: "12", proceso: "PROCESO OPERATIVO", aspecto: "¿Realizan corte de documentos antes del inicio del inventario de producto?" },
+  { item: "13", proceso: "PROCESO OPERATIVO", aspecto: "¿Cuentan con acta de inicio (procedimiento, firma de responsables, e inicio hora de ejecucion?" },
+  { item: "14", proceso: "PROCESO OPERATIVO", aspecto: "¿Cuenta con herramientas tecnologicas para inicio actividad inventarios de producto?" },
+  { item: "15", proceso: "PROCESO OPERATIVO", aspecto: "¿El inventario se completo de forma correcta y sin novedades durante su ejecucion?" },
+  { item: "16", proceso: "PROCESO OPERATIVO", aspecto: "¿Los resultados de los inventario son validados por algun superior?" },
+  { item: "17", proceso: "PROCESO OPERATIVO", aspecto: "¿Las novedades presentadas durante los ajustes son atendidas y resueltas?" },
+  { item: "18", proceso: "PROCESO OPERATIVO", aspecto: "Existe participacion de otras areas durante la ejecucion del inventario.¿Cuales?" },
+  { item: "19", proceso: "PROCESO MANTENIMIENTO", aspecto: "¿Se efectuo inspeccion fisica calibracion a las Basculas?" },
+  { item: "20", proceso: "PROCESO MANTENIMIENTO", aspecto: "¿Ha presentado fallas la montacarga o estibadora manual durante la ejecucion de la actividad inventario de producto?" },
+  { item: "21", proceso: "PROCESO AJUSTE INVENTARIO", aspecto: "¿Se envian informacion completa y a tiempo para la realizacion de los ajustes de inventario?" },
+  { item: "22", proceso: "PROCESO AJUSTE INVENTARIO", aspecto: "¿Se esta ejecutando la revision post ajuste efectuados por el area de auditoria?" },
 ];
 
 export const EVAL_TOTAL_PREGUNTAS = EVAL_PREGUNTAS.length; // 22
