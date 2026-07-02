@@ -122,3 +122,20 @@ export function checklistStats(json?: string | null): {
   const pct = base > 0 ? Math.round((cumple / base) * 100) : 0;
   return { respondidos, total: CHECKLIST_TOTAL_ITEMS, cumple, noCumple, noAplica, pendientes: CHECKLIST_TOTAL_ITEMS - respondidos, pct, noCumpleSinObs };
 }
+
+// % de cumplimiento de una categoría del checklist (para índices como el documental).
+// Devuelve null si esa categoría no tiene ítems respondidos (excluye "No aplica").
+export function checklistCategoriaPct(json: string | null | undefined, categoria: string): number | null {
+  let ans: ChecklistRespuestas = {};
+  try { if (json) ans = JSON.parse(json); } catch { ans = {}; }
+  const cat = CHECKLIST_DESCARTE.find(c => c.categoria === categoria);
+  if (!cat) return null;
+  let cumple = 0, base = 0;
+  for (const it of cat.items) {
+    const r = ans[it.id];
+    if (!r || !r.estado || r.estado === "No aplica") continue;
+    base++;
+    if (r.estado === "Cumple") cumple++;
+  }
+  return base > 0 ? Math.round((cumple / base) * 100) : null;
+}

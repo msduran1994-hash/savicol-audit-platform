@@ -15,7 +15,7 @@ import { AUDITORS } from "@/lib/constants";
 import {
   TIPO_DESCARTE, MOTIVO_DESCARTE, CLASIFICACION_SANITARIA, NIVEL_RIESGO_DESCARTE,
   ESTADO_DESCARTE, DESTINO_DESCARTE, RIESGO_COLOR, ESTADO_DESCARTE_COLOR, TIEMPO_OBJETIVO_MIN,
-  CHECKLIST_DESCARTE, CHECKLIST_ESTADOS, CHECKLIST_TOTAL_ITEMS, checklistStats,
+  CHECKLIST_DESCARTE, CHECKLIST_ESTADOS, CHECKLIST_TOTAL_ITEMS, checklistStats, checklistCategoriaPct,
   EVIDENCIA_TIPOS, EVIDENCIA_CATEGORIAS,
   type ChecklistRespuesta, type ChecklistRespuestas,
 } from "@/lib/descartes.constants";
@@ -24,7 +24,13 @@ import {
   Bird, Plus, X, Loader2, AlertTriangle, Trash2, Edit2, Filter,
   Clock, Scale, Save, MapPin, CheckCircle2, ClipboardCheck,
   Camera, UploadCloud, Link2, Download, ExternalLink, Image as ImageIcon, Maximize2, FolderOpen,
+  LayoutDashboard, List, Gauge, TrendingUp, Building2, Truck, Trophy,
 } from "lucide-react";
+import {
+  ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
+} from "recharts";
+import { pieValuePct, barLabelPct, sumField } from "@/lib/chart-pct";
 
 // ─── Helpers de fecha/tiempo ─────────────────────────────────────────────────
 const isoToLocalInput = (iso?: string | null): string => {
@@ -57,6 +63,7 @@ export default function DescartesPage() {
   const [editing, setEditing] = useState<DescarteAve | null>(null);
   const [checklistFor, setChecklistFor] = useState<DescarteAve | null>(null);
   const [evidenciasFor, setEvidenciasFor] = useState<DescarteAve | null>(null);
+  const [vista, setVista] = useState<"lista" | "dashboard">("lista");
 
   const descQ = useDescartes({
     estado: filtroEstado || undefined,
@@ -88,6 +95,10 @@ export default function DescartesPage() {
       <div className="flex-1 p-6 space-y-6">
         {/* Toolbar */}
         <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1 bg-[#0D1526] border border-[#1E2D4A] rounded-lg p-0.5">
+            <button onClick={() => setVista("lista")} className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1.5 ${vista === "lista" ? "bg-[#1A2540] text-white" : "text-[#94A3B8]"}`}><List className="w-3.5 h-3.5"/>Lista</button>
+            <button onClick={() => setVista("dashboard")} className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1.5 ${vista === "dashboard" ? "bg-[#1A2540] text-white" : "text-[#94A3B8]"}`}><LayoutDashboard className="w-3.5 h-3.5"/>Dashboard</button>
+          </div>
           <span className="text-xs text-[#94A3B8] flex items-center gap-1.5"><Filter className="w-3.5 h-3.5"/>Filtros:</span>
           <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
             <option value="">Todos los estados</option>
@@ -114,7 +125,11 @@ export default function DescartesPage() {
           <MiniKpi icon={<Clock/>} label="Tiempo prom."     value={fmtDur(kpis.tProm)}                                        color="#8B5CF6"/>
         </div>
 
+        {/* Dashboard Ejecutivo (Fase 4) */}
+        {vista === "dashboard" && <DashboardDescartes rows={rows} />}
+
         {/* Lista */}
+        {vista === "lista" && (
         <div className="card-base p-0 overflow-hidden">
           {descQ.isLoading ? (
             <div className="py-16 flex items-center justify-center text-[#475569]"><Loader2 className="w-5 h-5 animate-spin"/></div>
@@ -187,6 +202,7 @@ export default function DescartesPage() {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {modalOpen && (
@@ -845,6 +861,190 @@ function EvidenciasModal({ descarte, onClose }: { descarte: DescarteAve; onClose
           <img src={imgSrc(lightbox)} alt="Evidencia" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={ev => ev.stopPropagation()}/>
         </div>
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DASHBOARD EJECUTIVO · Descartes (Fase 4) — KPIs, semáforos, alertas, gráficas
+// Calculado en el frontend desde los registros (respeta los filtros de la lista).
+// ═══════════════════════════════════════════════════════════════════════════════
+const TipD = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-lg p-2.5 text-xs shadow-card">
+      {label && <p className="font-semibold text-white mb-1">{label}</p>}
+      {payload.map((p: any, i: number) => (
+        <p key={i} className="flex items-center gap-1.5 text-[#94A3B8]"><span className="w-2 h-2 rounded-full" style={{ background: p.color ?? p.fill }} />{p.name}: <span className="text-white font-medium">{p.value}</span></p>
+      ))}
+    </div>
+  );
+};
+
+function ChartBox({ title, children, full }: { title: string; children: React.ReactNode; full?: boolean }) {
+  return (
+    <div className={`card-base ${full ? "lg:col-span-2" : ""}`}>
+      <h3 className="font-display font-semibold text-white mb-3 text-sm">{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function Sem({ label, pct, extra }: { label: string; pct: number; extra?: string }) {
+  const c = pct >= 90 ? "#10B981" : pct >= 70 ? "#F59E0B" : "#EF4444";
+  return (
+    <div className="card-base" style={{ borderColor: `${c}40` }}>
+      <div className="flex items-center gap-2 mb-1"><span className="w-2.5 h-2.5 rounded-full" style={{ background: c }} /><p className="text-[10px] uppercase tracking-wider text-[#94A3B8]">{label}</p></div>
+      <p className="font-display text-2xl font-bold" style={{ color: c }}>{pct}%</p>
+      {extra && <p className="text-[10px] text-[#64748B] mt-0.5">{extra}</p>}
+    </div>
+  );
+}
+
+function BarH({ data, color }: { data: { name: string; value: number }[]; color: string }) {
+  if (!data.length) return <Empty/>;
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(200, data.length * 34)}>
+      <BarChart data={data} layout="vertical" barSize={16} margin={{ left: 0, right: 48 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" horizontal={false}/>
+        <XAxis type="number" allowDecimals={false} tick={{ fill: "#94A3B8", fontSize: 10 }}/>
+        <YAxis type="category" dataKey="name" width={130} tick={{ fill: "#94A3B8", fontSize: 10 }}/>
+        <Tooltip content={<TipD/>} cursor={{ fill: "#1E2D4A33" }}/>
+        <Bar dataKey="value" fill={color} radius={[0, 4, 4, 0]}>
+          <LabelList content={barLabelPct(sumField(data, "value"), { horizontal: true })}/>
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function Empty() { return <div className="flex items-center justify-center h-[200px] text-[#475569] text-sm">Sin datos</div>; }
+
+function DashboardDescartes({ rows }: { rows: DescarteAve[] }) {
+  const d = useMemo(() => {
+    const tt = (a?: string | null, b?: string | null) => minsBetween(isoToLocalInput(a), isoToLocalInput(b));
+    const arr = (g: (r: DescarteAve) => number | null) => rows.map(g).filter((x): x is number => x != null);
+    const avg = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null);
+    const tTot = rows.map(r => tt(r.horaInicioCargue, r.horaFinDescarga)).filter((x): x is number => x != null);
+    const dentro = tTot.filter(x => x <= TIEMPO_OBJETIVO_MIN).length;
+    const chkPcts = rows.map(r => checklistStats(r.checklistJSON)).filter(s => s.respondidos > 0).map(s => s.pct);
+    const docPcts = rows.map(r => checklistCategoriaPct(r.checklistJSON, "Documentación")).filter((x): x is number => x != null);
+    const prom = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : 0);
+    const byCount = (key: (r: DescarteAve) => string) => {
+      const m: Record<string, number> = {};
+      rows.forEach(r => { const k = key(r) || "—"; m[k] = (m[k] || 0) + 1; });
+      return Object.entries(m).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+    };
+    const MES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+    const years = rows.map(r => String(r.fechaHoraDescarte || "").slice(0, 4)).filter(s => s.length === 4);
+    const year = years.length ? years.sort().reverse()[0] : String(new Date().getFullYear());
+    const tendencia = MES.map((m, i) => {
+      const mm = String(i + 1).padStart(2, "0");
+      const rr = rows.filter(r => { const f = String(r.fechaHoraDescarte || ""); return f.slice(0, 4) === year && f.slice(5, 7) === mm; });
+      return { mes: m, Descartes: rr.length, Aves: rr.reduce((s, r) => s + (r.cantidadAves || 0), 0) };
+    });
+    const plantaMap: Record<string, number[]> = {};
+    rows.forEach(r => { const t = tt(r.horaInicioCargue, r.horaFinDescarga); if (t != null) { const p = r.plantaDestino || "—"; (plantaMap[p] = plantaMap[p] || []).push(t); } });
+    const porPlanta = Object.entries(plantaMap).map(([name, a]) => ({ name, value: Math.round(a.reduce((x, y) => x + y, 0) / a.length) })).sort((a, b) => a.value - b.value);
+    return {
+      total: rows.length,
+      totalAves: rows.reduce((s, r) => s + (r.cantidadAves || 0), 0),
+      pesoTotal: rows.reduce((s, r) => s + (r.pesoTotalKg || 0), 0),
+      avgCargue: avg(arr(r => tt(r.horaInicioCargue, r.horaFinCargue))),
+      avgTray: avg(arr(r => tt(r.horaSalidaGranja, r.horaLlegadaPlanta))),
+      avgTot: avg(tTot),
+      cumpLog: tTot.length ? Math.round((dentro / tTot.length) * 100) : 0,
+      chkProm: prom(chkPcts), docProm: prom(docPcts),
+      criticos: rows.filter(r => r.nivelRiesgo === "Crítico").length,
+      altos: rows.filter(r => r.nivelRiesgo === "Alto").length,
+      motivos: byCount(r => r.motivo).slice(0, 8),
+      granjas: byCount(r => r.granjaNombre).slice(0, 8),
+      integraciones: byCount(r => r.integracion || "Sin integración").slice(0, 8),
+      riesgos: NIVEL_RIESGO_DESCARTE.map(n => ({ name: n, value: rows.filter(r => r.nivelRiesgo === n).length })).filter(x => x.value > 0),
+      tendencia, year, porPlanta,
+      conRetraso: rows.filter(r => { const t = tt(r.horaInicioCargue, r.horaFinDescarga); return t != null && t > TIEMPO_OBJETIVO_MIN; }).length,
+      sinChecklist: rows.filter(r => checklistStats(r.checklistJSON).respondidos === 0).length,
+      conNoCumple: rows.filter(r => checklistStats(r.checklistJSON).noCumple > 0).length,
+    };
+  }, [rows]);
+
+  if (!rows.length) return <div className="card-base py-16 text-center text-[#475569] text-sm">Sin descartes para analizar con los filtros actuales.</div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <MiniKpi icon={<Bird/>}       label="Descartes"      value={String(d.total)} color="#F59E0B"/>
+        <MiniKpi icon={<Bird/>}       label="Aves"           value={d.totalAves.toLocaleString("es-CO")} color="#EF4444"/>
+        <MiniKpi icon={<Scale/>}      label="Peso (kg)"      value={d.pesoTotal.toLocaleString("es-CO", { maximumFractionDigits: 0 })} color="#06B6D4"/>
+        <MiniKpi icon={<Clock/>}      label="T. cargue prom" value={fmtDur(d.avgCargue)} color="#8B5CF6"/>
+        <MiniKpi icon={<TrendingUp/>} label="T. trayecto prom" value={fmtDur(d.avgTray)} color="#3B82F6"/>
+        <MiniKpi icon={<Clock/>}      label="T. total prom"  value={fmtDur(d.avgTot)} color="#10B981"/>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Sem label="Cumplim. logístico" pct={d.cumpLog} extra={`objetivo ${fmtDur(TIEMPO_OBJETIVO_MIN)}`}/>
+        <Sem label="Cumplim. checklist" pct={d.chkProm}/>
+        <Sem label="Cumplim. documental" pct={d.docProm}/>
+        <MiniKpi icon={<AlertTriangle/>} label="Críticos / Altos" value={`${d.criticos} / ${d.altos}`} color="#EF4444"/>
+      </div>
+
+      {(d.conRetraso > 0 || d.sinChecklist > 0 || d.conNoCumple > 0 || d.criticos > 0) && (
+        <div className="card-base bg-red-500/5 border-red-500/20">
+          <h3 className="text-red-300 font-semibold text-sm mb-2 flex items-center gap-2"><AlertTriangle className="w-4 h-4"/>Alertas automáticas</h3>
+          <ul className="text-xs text-[#94A3B8] space-y-1 list-disc list-inside">
+            {d.conRetraso > 0 && <li>{d.conRetraso} descarte(s) con retraso logístico (tiempo total mayor al objetivo).</li>}
+            {d.criticos > 0 && <li>{d.criticos} descarte(s) con nivel de riesgo crítico.</li>}
+            {d.conNoCumple > 0 && <li>{d.conNoCumple} descarte(s) con ítems "No cumple" en el checklist.</li>}
+            {d.sinChecklist > 0 && <li>{d.sinChecklist} descarte(s) sin checklist iniciado.</li>}
+          </ul>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartBox title="Motivos más frecuentes"><BarH data={d.motivos} color="#F59E0B"/></ChartBox>
+        <ChartBox title="Granjas con mayor descarte"><BarH data={d.granjas} color="#EF4444"/></ChartBox>
+        <ChartBox title="Descartes por integración"><BarH data={d.integraciones} color="#8B5CF6"/></ChartBox>
+        <ChartBox title="Distribución por nivel de riesgo">
+          {d.riesgos.length === 0 ? <Empty/> : (
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie data={d.riesgos} dataKey="value" nameKey="name" outerRadius={85} innerRadius={45} label={pieValuePct}>
+                  {d.riesgos.map((e, i) => <Cell key={i} fill={RIESGO_COLOR[e.name] ?? "#94A3B8"}/>)}
+                </Pie>
+                <Tooltip content={<TipD/>}/>
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </ChartBox>
+        <ChartBox title={`Tendencia mensual · ${d.year}`} full>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={d.tendencia} margin={{ left: -12, right: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A"/>
+              <XAxis dataKey="mes" tick={{ fill: "#94A3B8", fontSize: 10 }}/>
+              <YAxis allowDecimals={false} tick={{ fill: "#94A3B8", fontSize: 10 }}/>
+              <Tooltip content={<TipD/>}/>
+              <Legend wrapperStyle={{ fontSize: 11 }}/>
+              <Line type="monotone" dataKey="Descartes" stroke="#F59E0B" strokeWidth={2} dot={false}/>
+              <Line type="monotone" dataKey="Aves" stroke="#06B6D4" strokeWidth={2} dot={false}/>
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartBox>
+        <ChartBox title="Tiempo total promedio por planta (min)" full>
+          {d.porPlanta.length === 0 ? <Empty/> : (
+            <ResponsiveContainer width="100%" height={Math.max(200, d.porPlanta.length * 34)}>
+              <BarChart data={d.porPlanta} layout="vertical" barSize={18} margin={{ left: 0, right: 56 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" horizontal={false}/>
+                <XAxis type="number" tick={{ fill: "#94A3B8", fontSize: 10 }}/>
+                <YAxis type="category" dataKey="name" width={140} tick={{ fill: "#94A3B8", fontSize: 10 }}/>
+                <Tooltip content={<TipD/>}/>
+                <Bar dataKey="value" fill="#06B6D4" radius={[0, 4, 4, 0]}>
+                  <LabelList dataKey="value" position="right" fill="#E2E8F0" fontSize={10} formatter={(v: any) => fmtDur(Number(v))}/>
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartBox>
+      </div>
     </div>
   );
 }
