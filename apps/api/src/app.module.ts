@@ -11,6 +11,7 @@ import { DescartesModule } from "./descartes/descartes.module";
 import { RutasModule } from "./rutas/rutas.module";
 import { CedisModule } from "./cedis/cedis.module";
 import { InventarioModule } from "./inventario/inventario.module";
+import { InventariosModule } from "./inventarios/inventarios.module";
 import { DocumentosModule } from "./documentos/documentos.module";
 import { EvidenciasModule } from "./evidencias/evidencias.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
@@ -49,6 +50,7 @@ import { AuditLogsModule } from "./audit-logs/audit-logs.module";
     RutasModule,
     CedisModule,
     InventarioModule,
+    InventariosModule,
     DocumentosModule,
     EvidenciasModule,
     DashboardModule,

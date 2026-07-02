@@ -9,6 +9,7 @@ import {
   Gauge,
   Truck, Table2, CheckSquare, Camera, Sparkles,
   Warehouse, Egg, Bird,
+  Boxes, Container, Wrench, Building2, Layers,
   Menu, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -59,22 +60,34 @@ const CEDIS_NAV = [
   { href: "/cedis/informe",      label: "Informe Ejecutivo", icon: Sparkles,        badge: null },
 ];
 
-type Workspace = "auditoria" | "granjas" | "rutas" | "cedis";
+const INVENTARIOS_NAV = [
+  { href: "/inventarios",               label: "Dashboard Inventarios",     icon: LayoutDashboard, badge: null },
+  { href: "/inventarios/producto",      label: "Inventario de Producto",    icon: Package,         badge: null },
+  { href: "/inventarios/tinas",         label: "Inventario de Tinas",       icon: Container,       badge: null },
+  { href: "/inventarios/insumos",       label: "Inventario de Insumos",     icon: Boxes,           badge: null },
+  { href: "/inventarios/mantenimiento", label: "Almacén de Mantenimiento",  icon: Wrench,          badge: null },
+  { href: "/inventarios/activos",       label: "Inventario de Activos Fijos", icon: Building2,     badge: null },
+  { href: "/inventarios/otros",         label: "Otros Inventarios",         icon: Layers,          badge: null },
+];
+
+type Workspace = "auditoria" | "granjas" | "rutas" | "cedis" | "inventarios";
 
 function detectWorkspace(pathname: string): Workspace {
-  if (pathname.startsWith("/granjas")) return "granjas";
-  if (pathname.startsWith("/rutas"))   return "rutas";
-  if (pathname.startsWith("/cedis"))   return "cedis";
+  if (pathname.startsWith("/granjas"))     return "granjas";
+  if (pathname.startsWith("/rutas"))       return "rutas";
+  if (pathname.startsWith("/cedis"))       return "cedis";
+  if (pathname.startsWith("/inventarios")) return "inventarios";
   return "auditoria";
 }
 
-type AccentKey = "corp" | "amber" | "cyan" | "emerald";
+type AccentKey = "corp" | "amber" | "cyan" | "emerald" | "violet";
 
 const ACCENT: Record<AccentKey, { active: string; activeBg: string; bar: string }> = {
   corp:    { active: "#FFFFFF",  activeBg: "rgba(255,255,255,0.15)", bar: "#C41230" },
   amber:   { active: "#FCD34D",  activeBg: "rgba(252,211,77,0.12)",  bar: "#F59E0B" },
   cyan:    { active: "#67E8F9",  activeBg: "rgba(103,232,249,0.12)", bar: "#06B6D4" },
   emerald: { active: "#6EE7B7",  activeBg: "rgba(110,231,183,0.12)", bar: "#10B981" },
+  violet:  { active: "#C4B5FD",  activeBg: "rgba(196,181,253,0.12)", bar: "#8B5CF6" },
 };
 
 const META: Record<Workspace, {
@@ -82,9 +95,10 @@ const META: Record<Workspace, {
   navTitle: string; accent: AccentKey; nav: typeof MAIN_NAV;
 }> = {
   auditoria: { brand: APP_NAME,                 subtitle: APP_COMPANY,      logoIcon: Shield,   navTitle: "Navegación",    accent: "corp",    nav: MAIN_NAV    },
-  granjas:   { brand: "Granjas Avícolas",       subtitle: "Módulo Granjas", logoIcon: Tractor,  navTitle: "Módulo Granjas",accent: "amber",   nav: GRANJAS_NAV },
-  rutas:     { brand: "Acompañamiento Rutas",   subtitle: "Módulo Rutas",   logoIcon: Truck,    navTitle: "Módulo Rutas",  accent: "cyan",    nav: RUTAS_NAV   },
-  cedis:     { brand: "Auditoría CEDIS",        subtitle: "Módulo CEDIS",   logoIcon: Warehouse,navTitle: "Módulo CEDIS",  accent: "emerald", nav: CEDIS_NAV   },
+  granjas:     { brand: "Granjas Avícolas",       subtitle: "Módulo Granjas",     logoIcon: Tractor,  navTitle: "Módulo Granjas",    accent: "amber",   nav: GRANJAS_NAV     },
+  rutas:       { brand: "Acompañamiento Rutas",   subtitle: "Módulo Rutas",       logoIcon: Truck,    navTitle: "Módulo Rutas",      accent: "cyan",    nav: RUTAS_NAV       },
+  cedis:       { brand: "Auditoría CEDIS",        subtitle: "Módulo CEDIS",       logoIcon: Warehouse,navTitle: "Módulo CEDIS",      accent: "emerald", nav: CEDIS_NAV       },
+  inventarios: { brand: "Auditoría Inventarios",  subtitle: "Módulo Inventarios", logoIcon: Boxes,    navTitle: "Módulo Inventarios",accent: "violet",  nav: INVENTARIOS_NAV },
 };
 
 export function Sidebar() {
@@ -218,7 +232,7 @@ export function Sidebar() {
           </p>
         )}
         {meta.nav.map(({ href, label, icon: Icon, badge }) => {
-          const active = (href === "/" || href === "/granjas" || href === "/rutas")
+          const active = (href === "/" || href === "/granjas" || href === "/rutas" || href === "/inventarios")
             ? pathname === href
             : pathname === href || pathname.startsWith(href + "/");
 

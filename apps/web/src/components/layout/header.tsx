@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search, HelpCircle, Shield, Tractor, Truck, Warehouse } from "lucide-react";
+import { Search, HelpCircle, Shield, Tractor, Truck, Warehouse, Boxes } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "./notification-bell";
@@ -9,17 +9,19 @@ import { NotificationBell } from "./notification-bell";
 interface HeaderProps { title: string; subtitle?: string; }
 
 const WORKSPACES = [
-  { id: "auditoria", label: "Auditoría", href: "/",        icon: Shield,    match: (p: string) => !p.startsWith("/granjas") && !p.startsWith("/rutas") && !p.startsWith("/cedis") },
-  { id: "granjas",   label: "Granjas",   href: "/granjas", icon: Tractor,   match: (p: string) => p.startsWith("/granjas") },
-  { id: "rutas",     label: "Rutas",     href: "/rutas",   icon: Truck,     match: (p: string) => p.startsWith("/rutas") },
-  { id: "cedis",     label: "CEDIS",     href: "/cedis",   icon: Warehouse, match: (p: string) => p.startsWith("/cedis") },
+  { id: "auditoria",   label: "Auditoría",   href: "/",            icon: Shield,    match: (p: string) => !p.startsWith("/granjas") && !p.startsWith("/rutas") && !p.startsWith("/cedis") && !p.startsWith("/inventarios") },
+  { id: "granjas",     label: "Granjas",     href: "/granjas",     icon: Tractor,   match: (p: string) => p.startsWith("/granjas") },
+  { id: "rutas",       label: "Rutas",       href: "/rutas",       icon: Truck,     match: (p: string) => p.startsWith("/rutas") },
+  { id: "cedis",       label: "CEDIS",       href: "/cedis",       icon: Warehouse, match: (p: string) => p.startsWith("/cedis") },
+  { id: "inventarios", label: "Inventarios", href: "/inventarios", icon: Boxes,     match: (p: string) => p.startsWith("/inventarios") },
 ] as const;
 
 const WORKSPACE_ACTIVE: Record<string, string> = {
-  auditoria: "bg-[#1A3A8F]/10 text-[#1A3A8F] border-[#1A3A8F]/25 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30",
-  granjas:   "bg-amber-500/10 text-amber-700 border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30",
-  rutas:     "bg-cyan-500/10 text-cyan-700 border-cyan-400/30 dark:bg-cyan-500/15 dark:text-cyan-300 dark:border-cyan-500/30",
-  cedis:     "bg-emerald-500/10 text-emerald-700 border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30",
+  auditoria:   "bg-[#1A3A8F]/10 text-[#1A3A8F] border-[#1A3A8F]/25 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30",
+  granjas:     "bg-amber-500/10 text-amber-700 border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30",
+  rutas:       "bg-cyan-500/10 text-cyan-700 border-cyan-400/30 dark:bg-cyan-500/15 dark:text-cyan-300 dark:border-cyan-500/30",
+  cedis:       "bg-emerald-500/10 text-emerald-700 border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30",
+  inventarios: "bg-violet-500/10 text-violet-700 border-violet-400/30 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-500/30",
 };
 
 export function Header({ title, subtitle }: HeaderProps) {

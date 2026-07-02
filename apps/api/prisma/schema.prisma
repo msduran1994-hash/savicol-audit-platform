@@ -738,6 +738,114 @@ model AuditoriaDescarte {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// HOJA INVENTARIOS · Auditoría de inventarios (motor genérico por módulo)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Un modelo genérico parametrizado por `modulo` (PRODUCTO | TINAS | INSUMOS |
+// MANTENIMIENTO | ACTIVOS | OTROS) sirve a los 6 módulos, sin duplicar tablas.
+// Campos específicos de cada módulo viven en datosJSON. Railway lo crea con db push.
+// Nombre distinto de `InventarioItem` (módulo singular de Granjas) para no colisionar.
+model InventarioAuditado {
+  id              String   @id @default(cuid())
+  consecutivo     String   @unique      // folio automático: INV-PROD-2026-0001
+  modulo          String                // PRODUCTO | TINAS | INSUMOS | MANTENIMIENTO | ACTIVOS | OTROS
+  nombre          String
+  descripcion     String?
+  categoria       String?
+  // Ubicación libre (independiente) + tags OPCIONALES para filtros/reportes
+  ubicacion       String?
+  cediId          String?
+  cediNombre      String?
+  granjaId        String?
+  granjaNombre    String?
+  // Cantidades / valoración
+  unidadMedida    String?
+  cantidad        Float?   @default(0)   // cantidad inicial / de referencia
+  saldo           Float?   @default(0)   // saldo actual (derivado del kardex)
+  cantidadContada Float?                 // conteo físico (auditoría)
+  diferencia      Float?                 // saldo - cantidadContada
+  costoUnitario   Float?
+  valorTotal      Float?
+  // Auditoría del ítem
+  estado          String   @default("Registrado")
+  responsable     String?
+  auditor         String?
+  fecha           DateTime @default(now())
+  observaciones   String?
+  datosJSON       String?                // campos específicos del módulo (JSON)
+  // Metadatos
+  createdBy       String?
+  updatedBy       String?
+  isDemo          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  movimientos     MovimientoInventario[]
+  evidencias      EvidenciaInventario[]
+  auditorias      AuditoriaInventario[]
+
+  @@index([modulo])
+  @@index([estado])
+  @@index([categoria])
+  @@index([fecha])
+}
+
+// Kardex de movimientos (entradas/salidas/ajustes/conteo) por ítem.
+model MovimientoInventario {
+  id              String   @id @default(cuid())
+  itemId          String
+  tipo            String              // Entrada | Salida | Ajuste | Conteo
+  cantidad        Float    @default(0)
+  saldoAnterior   Float?
+  saldoResultante Float?
+  fecha           DateTime @default(now())
+  motivo          String?
+  referencia      String?             // remisión / documento / orden
+  responsable     String?
+  observaciones   String?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+
+  item InventarioAuditado @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([fecha])
+}
+
+// Evidencias (fotos/PDF/Excel/enlaces) de un ítem. Mismo patrón que EvidenciaDescarte.
+model EvidenciaInventario {
+  id         String   @id @default(cuid())
+  itemId     String
+  tipo       String
+  nombre     String
+  url        String
+  size       Int      @default(0)
+  categoria  String?
+  uploadedAt DateTime @default(now())
+  uploadedBy String?
+  isDemo     Boolean  @default(false)
+
+  item InventarioAuditado @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+}
+
+// Auditoría / historial de cambios de un ítem (mismo patrón que AuditoriaDescarte).
+model AuditoriaInventario {
+  id          String   @id @default(cuid())
+  itemId      String
+  accion      String
+  detalle     String?
+  cambiosJSON String?
+  usuario     String?
+  createdAt   DateTime @default(now())
+
+  item InventarioAuditado @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MÓDULO SETTINGS · Configuración global key/value
 // ═══════════════════════════════════════════════════════════════════════════════
 // Patrón key/value para evitar migraciones cada vez que se agrega un setting.
