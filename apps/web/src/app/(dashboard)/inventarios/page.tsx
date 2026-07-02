@@ -5,13 +5,16 @@
 // gráficas tipo BI con "cantidad · %" (reutiliza recharts + lib/chart-pct).
 // Los filtros globales sincronizados llegan en la Fase 7.
 // ═══════════════════════════════════════════════════════════════════════════════
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { useInventarios } from "@/hooks/useInventarios";
 import { INVENTARIO_MODULOS, ESTADO_INVENTARIO_COLOR, type ModuloInventario } from "@/lib/inventarios.constants";
 import { useInventariosFiltros, filtrarInventario } from "@/store/inventarios-filtros.store";
 import { InventariosFiltros } from "./filtros-inventario";
+import { useCedis } from "@/hooks/useCedis";
+import { useGranjas } from "@/hooks/useGranjas";
+import { exportarInventarioXLSX, exportarInventarioEjecutivoPDF, exportarInventarioTecnicoPDF, describirFiltrosInventario } from "@/lib/inventarios-reportes";
 import { pieValuePct, barLabelPct, sumField } from "@/lib/chart-pct";
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -19,7 +22,7 @@ import {
 } from "recharts";
 import {
   Boxes, DollarSign, CheckCircle2, Clock, Lock, AlertTriangle, Target, Flame,
-  BarChart3, ArrowRight,
+  BarChart3, ArrowRight, FileSpreadsheet, FileText, Loader2,
 } from "lucide-react";
 
 const PALETA = ["#8B5CF6", "#06B6D4", "#F59E0B", "#10B981", "#EF4444", "#3B82F6", "#EC4899", "#A3E635"];
@@ -37,6 +40,21 @@ export default function DashboardInventariosPage() {
     cats: Array.from(new Set(allRows.map(r => (r.categoria || "").trim()).filter(Boolean))).sort() as string[],
     resp: Array.from(new Set(allRows.map(r => (r.responsable || "").trim()).filter(Boolean))).sort() as string[],
   }), [allRows]);
+
+  const cedis = (useCedis().data ?? []) as any[];
+  const granjas = (useGranjas().data ?? []) as any[];
+  const [exp, setExp] = useState<"" | "xlsx" | "pdf" | "tec">("");
+  const runExport = async (kind: "xlsx" | "pdf" | "tec") => {
+    if (exp || rows.length === 0) return;
+    setExp(kind);
+    try {
+      const ftxt = describirFiltrosInventario(filtros, cedis, granjas);
+      if (kind === "xlsx") await exportarInventarioXLSX(rows, "Consolidado");
+      else if (kind === "pdf") await exportarInventarioEjecutivoPDF(rows, "Consolidado", ftxt);
+      else await exportarInventarioTecnicoPDF(rows, "Consolidado", ftxt);
+    } catch (e: any) { alert("No se pudo generar el reporte: " + (e?.message ?? e)); }
+    finally { setExp(""); }
+  };
 
   const d = useMemo(() => {
     const total = rows.length;
@@ -84,7 +102,20 @@ export default function DashboardInventariosPage() {
       <Header title="Dashboard Inventarios" subtitle="Hoja Inventarios · Consolidado ejecutivo de los 7 módulos" />
 
       <div className="flex-1 p-6 space-y-6">
-        <InventariosFiltros showModulo categorias={filtroOpts.cats} responsables={filtroOpts.resp} />
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <InventariosFiltros showModulo categorias={filtroOpts.cats} responsables={filtroOpts.resp} />
+          <div className="flex items-center gap-1 bg-[#0D1526] border border-[#1E2D4A] rounded-lg p-0.5" title={rows.length ? `Exportar ${rows.length} registro(s) (respeta filtros)` : "Sin registros para exportar"}>
+            <button onClick={() => runExport("xlsx")} disabled={!!exp || !rows.length} className="px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 text-[#94A3B8] hover:text-emerald-400 hover:bg-[#1A2540] disabled:opacity-40 disabled:cursor-not-allowed">
+              {exp === "xlsx" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}Excel
+            </button>
+            <button onClick={() => runExport("pdf")} disabled={!!exp || !rows.length} className="px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 text-[#94A3B8] hover:text-violet-400 hover:bg-[#1A2540] disabled:opacity-40 disabled:cursor-not-allowed">
+              {exp === "pdf" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BarChart3 className="w-3.5 h-3.5" />}PDF Ejecutivo
+            </button>
+            <button onClick={() => runExport("tec")} disabled={!!exp || !rows.length} className="px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 text-[#94A3B8] hover:text-amber-400 hover:bg-[#1A2540] disabled:opacity-40 disabled:cursor-not-allowed">
+              {exp === "tec" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}PDF Técnico
+            </button>
+          </div>
+        </div>
 
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

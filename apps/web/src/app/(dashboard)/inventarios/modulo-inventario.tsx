@@ -23,6 +23,7 @@ import { useCedis } from "@/hooks/useCedis";
 import { AUDITORS } from "@/lib/constants";
 import { useInventariosFiltros, filtrarInventario } from "@/store/inventarios-filtros.store";
 import { InventariosFiltros } from "./filtros-inventario";
+import { exportarInventarioXLSX, exportarInventarioEjecutivoPDF, exportarInventarioTecnicoPDF, describirFiltrosInventario } from "@/lib/inventarios-reportes";
 import { procesarArchivo, imgSrc, esImagen, fmtSize } from "@/lib/evidencias-upload";
 import type {
   InventarioAuditado, InventarioPayload, MovimientoInventario,
@@ -32,7 +33,7 @@ import {
   Boxes, Hash, Loader2, Plus, X, Edit2, Trash2, Search, Filter,
   Save, AlertTriangle, DollarSign, ArrowLeftRight, Wallet,
   Camera, History, UploadCloud, Link2, Download, ExternalLink, Maximize2, FileText,
-  PlusCircle, PencilLine, ArrowRightLeft,
+  PlusCircle, PencilLine, ArrowRightLeft, FileSpreadsheet, BarChart3,
 } from "lucide-react";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -62,6 +63,9 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
   const [historialFor, setHistorialFor] = useState<InventarioAuditado | null>(null);
   const [search, setSearch] = useState("");
   const { filtros, reset: resetFiltros } = useInventariosFiltros();
+  const cediList = (useCedis().data ?? []) as any[];
+  const granjaList = (useGranjas().data ?? []) as any[];
+  const [exp, setExp] = useState<"" | "xlsx" | "pdf" | "tec">("");
 
   const catOpts = useMemo(() => Array.from(new Set(rows.map(r => (r.categoria || "").trim()).filter(Boolean))).sort() as string[], [rows]);
   const respOpts = useMemo(() => Array.from(new Set(rows.map(r => (r.responsable || "").trim()).filter(Boolean))).sort() as string[], [rows]);
@@ -81,6 +85,19 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
     const auditados = filtered.filter(r => ["Auditado", "Conciliado", "Cerrado"].includes(r.estado)).length;
     return { total: filtered.length, conDif, valor, auditados };
   }, [filtered]);
+
+  const runExport = async (kind: "xlsx" | "pdf" | "tec") => {
+    if (exp || filtered.length === 0) return;
+    setExp(kind);
+    try {
+      const scope = def?.label ?? "Inventario";
+      const ftxt = describirFiltrosInventario(filtros, cediList, granjaList);
+      if (kind === "xlsx") await exportarInventarioXLSX(filtered, scope);
+      else if (kind === "pdf") await exportarInventarioEjecutivoPDF(filtered, scope, ftxt);
+      else await exportarInventarioTecnicoPDF(filtered, scope, ftxt);
+    } catch (e: any) { alert("No se pudo generar el reporte: " + (e?.message ?? e)); }
+    finally { setExp(""); }
+  };
 
   if (!def) return null;
   const year = new Date().getFullYear();
@@ -108,9 +125,22 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar…"
                    className="pl-8 pr-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white w-52" />
           </div>
-          <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary text-xs ml-auto flex items-center gap-1.5">
-            <Plus className="w-3.5 h-3.5" />Nuevo registro
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-[#0D1526] border border-[#1E2D4A] rounded-lg p-0.5" title={filtered.length ? `Exportar ${filtered.length} registro(s)` : "Sin registros"}>
+              <button onClick={() => runExport("xlsx")} disabled={!!exp || !filtered.length} className="px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 text-[#94A3B8] hover:text-emerald-400 hover:bg-[#1A2540] disabled:opacity-40 disabled:cursor-not-allowed">
+                {exp === "xlsx" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}Excel
+              </button>
+              <button onClick={() => runExport("pdf")} disabled={!!exp || !filtered.length} className="px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 text-[#94A3B8] hover:text-violet-400 hover:bg-[#1A2540] disabled:opacity-40 disabled:cursor-not-allowed">
+                {exp === "pdf" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BarChart3 className="w-3.5 h-3.5" />}Ejecutivo
+              </button>
+              <button onClick={() => runExport("tec")} disabled={!!exp || !filtered.length} className="px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 text-[#94A3B8] hover:text-amber-400 hover:bg-[#1A2540] disabled:opacity-40 disabled:cursor-not-allowed">
+                {exp === "tec" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}Técnico
+              </button>
+            </div>
+            <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary text-xs flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5" />Nuevo registro
+            </button>
+          </div>
         </div>
 
         {/* Tabla */}
