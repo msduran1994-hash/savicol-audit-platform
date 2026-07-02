@@ -25,7 +25,11 @@ import {
   Clock, Scale, Save, MapPin, CheckCircle2, ClipboardCheck,
   Camera, UploadCloud, Link2, Download, ExternalLink, Image as ImageIcon, Maximize2, FolderOpen,
   LayoutDashboard, List, Gauge, TrendingUp, Building2, Truck, Trophy,
+  FileSpreadsheet, FileText, Printer,
 } from "lucide-react";
+import {
+  exportarDescartesCSV, exportarDescartesXLSX, exportarDescartesReportePDF, imprimirActaDescarte,
+} from "@/lib/descartes-reportes";
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
@@ -118,6 +122,44 @@ export default function DescartesPage() {
 
   const activeCount = Object.values(filtros).filter(Boolean).length;
 
+  // ── Reportes / acta (Fase 6) ──────────────────────────────────────────────
+  const [exporting, setExporting] = useState<"" | "xlsx" | "csv" | "pdf">("");
+  const [actaId, setActaId] = useState<string | null>(null);
+
+  // Etiquetas legibles de los filtros activos (encabezado del reporte PDF)
+  const filtrosTxt = useMemo(() => {
+    const f = filtros, out: string[] = [];
+    const push = (label: string, v: string) => { if (v) out.push(`${label}: ${v}`); };
+    push("Empresa", f.empresa); push("Integración", f.integracion); push("Granja", f.granjaNombre);
+    push("Galpón", f.galpon); push("Lote", f.lote); push("Planta", f.plantaDestino);
+    push("Veterinario", f.medicoVeterinario); push("Transportador", f.transportadora);
+    push("Estado", f.estado); push("Motivo", f.motivo); push("Riesgo", f.nivelRiesgo);
+    if (f.fechaDesde) out.push(`Desde ${f.fechaDesde}`);
+    if (f.fechaHasta) out.push(`Hasta ${f.fechaHasta}`);
+    if (f.cumplimiento) out.push(`Cumplimiento: ${f.cumplimiento === "dentro" ? "dentro de objetivo" : "con retraso"}`);
+    if (f.checklist) out.push(`Checklist: ${f.checklist === "completo" ? "completo" : "sin iniciar"}`);
+    return out;
+  }, [filtros]);
+
+  const runExport = async (kind: "xlsx" | "csv" | "pdf") => {
+    if (exporting || !filtered.length) return;
+    setExporting(kind);
+    try {
+      if (kind === "csv") exportarDescartesCSV(filtered);
+      else if (kind === "xlsx") await exportarDescartesXLSX(filtered);
+      else await exportarDescartesReportePDF(filtered, filtrosTxt);
+    } catch (e: any) { alert("No se pudo generar el archivo: " + (e?.message ?? e)); }
+    finally { setExporting(""); }
+  };
+
+  const runActa = async (r: DescarteAve) => {
+    if (actaId) return;
+    setActaId(r.id);
+    try { await imprimirActaDescarte(r); }
+    catch (e: any) { alert("No se pudo generar el acta: " + (e?.message ?? e)); }
+    finally { setActaId(null); }
+  };
+
   const removeD = useDeleteDescarte();
 
   // Resumen ligero (el Dashboard completo es una fase posterior)
@@ -151,9 +193,22 @@ export default function DescartesPage() {
           {activeCount > 0 && (
             <button onClick={() => setFiltros({ ...EMPTY_FILTROS })} className="text-xs text-[#94A3B8] hover:text-white flex items-center gap-1"><X className="w-3 h-3"/>Limpiar</button>
           )}
-          <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary text-xs ml-auto flex items-center gap-1.5">
-            <Plus className="w-3.5 h-3.5"/>Nuevo descarte
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-[#0D1526] border border-[#1E2D4A] rounded-lg p-0.5" title={filtered.length ? `Exportar ${filtered.length} registro(s) (respeta filtros)` : "Sin registros para exportar"}>
+              <button onClick={() => runExport("xlsx")} disabled={!!exporting || !filtered.length} className="px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 text-[#94A3B8] hover:text-emerald-400 hover:bg-[#1A2540] disabled:opacity-40 disabled:cursor-not-allowed">
+                {exporting === "xlsx" ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <FileSpreadsheet className="w-3.5 h-3.5"/>}Excel
+              </button>
+              <button onClick={() => runExport("csv")} disabled={!!exporting || !filtered.length} className="px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 text-[#94A3B8] hover:text-cyan-400 hover:bg-[#1A2540] disabled:opacity-40 disabled:cursor-not-allowed">
+                {exporting === "csv" ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Download className="w-3.5 h-3.5"/>}CSV
+              </button>
+              <button onClick={() => runExport("pdf")} disabled={!!exporting || !filtered.length} className="px-2 py-1 rounded text-xs font-semibold flex items-center gap-1 text-[#94A3B8] hover:text-amber-400 hover:bg-[#1A2540] disabled:opacity-40 disabled:cursor-not-allowed">
+                {exporting === "pdf" ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <FileText className="w-3.5 h-3.5"/>}PDF
+              </button>
+            </div>
+            <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary text-xs flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5"/>Nuevo descarte
+            </button>
+          </div>
         </div>
 
         {/* Panel de filtros avanzados (Fase 5) */}
@@ -275,6 +330,7 @@ export default function DescartesPage() {
                           <div className="flex gap-1 justify-center">
                             <button onClick={() => setChecklistFor(r)} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-emerald-400" title="Checklist de trazabilidad"><ClipboardCheck className="w-3 h-3"/></button>
                             <button onClick={() => setEvidenciasFor(r)} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-cyan-400" title="Evidencias"><Camera className="w-3 h-3"/></button>
+                            <button onClick={() => runActa(r)} disabled={!!actaId} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-amber-400 disabled:opacity-40" title="Imprimir acta de descarte (PDF)">{actaId === r.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <Printer className="w-3 h-3"/>}</button>
                             <button onClick={() => { setEditing(r); setModalOpen(true); }} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar"><Edit2 className="w-3 h-3"/></button>
                             <button onClick={async () => { if (confirm(`¿Eliminar el descarte de ${r.granjaNombre} (galpón ${r.galpon})?`)) { try { await removeD.mutateAsync(r.id); } catch (e:any) { alert("Error: " + (e?.response?.data?.message ?? e?.message)); } } }} className="p-1 rounded hover:bg-red-950/30 text-[#94A3B8] hover:text-red-400" title="Eliminar"><Trash2 className="w-3 h-3"/></button>
                           </div>
