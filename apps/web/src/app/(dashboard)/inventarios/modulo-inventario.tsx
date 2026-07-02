@@ -9,15 +9,19 @@ import { Header } from "@/components/layout/header";
 import {
   moduloByKey, type ModuloInventario,
   ESTADO_INVENTARIO, ESTADO_INVENTARIO_COLOR, UNIDADES_MEDIDA,
+  MOVIMIENTO_TIPOS, MOVIMIENTO_COLOR,
 } from "@/lib/inventarios.constants";
-import { useInventarios, useCreateInventario, useUpdateInventario, useDeleteInventario } from "@/hooks/useInventarios";
+import {
+  useInventarios, useCreateInventario, useUpdateInventario, useDeleteInventario,
+  useMovimientos, useCreateMovimiento, useDeleteMovimiento,
+} from "@/hooks/useInventarios";
 import { useGranjas } from "@/hooks/useGranjas";
 import { useCedis } from "@/hooks/useCedis";
 import { AUDITORS } from "@/lib/constants";
-import type { InventarioAuditado, InventarioPayload } from "@/lib/inventarios.types";
+import type { InventarioAuditado, InventarioPayload, MovimientoInventario } from "@/lib/inventarios.types";
 import {
   Boxes, Hash, Loader2, Plus, X, Edit2, Trash2, Search, Filter,
-  Save, AlertTriangle, DollarSign,
+  Save, AlertTriangle, DollarSign, ArrowLeftRight, Wallet,
 } from "lucide-react";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -42,6 +46,7 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<InventarioAuditado | null>(null);
+  const [kardexFor, setKardexFor] = useState<InventarioAuditado | null>(null);
   const [search, setSearch] = useState("");
   const [fEstado, setFEstado] = useState("");
   const [fCategoria, setFCategoria] = useState("");
@@ -133,6 +138,7 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
                     <th className="text-left p-2.5">Ítem · Categoría</th>
                     <th className="text-left p-2.5">Ubicación</th>
                     <th className="text-right p-2.5">Cantidad</th>
+                    <th className="text-right p-2.5">Saldo</th>
                     <th className="text-right p-2.5">Contada</th>
                     <th className="text-right p-2.5">Dif.</th>
                     <th className="text-center p-2.5">Estado</th>
@@ -154,6 +160,7 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
                         </td>
                         <td className="p-2.5 text-[#94A3B8] text-xs">{r.ubicacion || r.cediNombre || r.granjaNombre || "—"}</td>
                         <td className="p-2.5 text-right font-mono text-xs text-white">{r.cantidad != null ? nfmt(r.cantidad, 2) : "—"}<span className="text-[9px] text-[#475569]"> {r.unidadMedida || ""}</span></td>
+                        <td className="p-2.5 text-right font-mono text-xs font-semibold text-violet-300">{r.saldo != null ? nfmt(r.saldo, 2) : "—"}</td>
                         <td className="p-2.5 text-right font-mono text-xs text-[#94A3B8]">{r.cantidadContada != null ? nfmt(r.cantidadContada, 2) : "—"}</td>
                         <td className="p-2.5 text-right font-mono text-xs font-bold" style={{ color: dif != null && dif !== 0 ? "#EF4444" : "#475569" }}>{dif != null ? nfmt(dif, 2) : "—"}</td>
                         <td className="p-2.5 text-center">
@@ -163,6 +170,7 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
                         <td className="p-2.5 text-[#94A3B8] text-xs whitespace-nowrap">{fmtFecha(r.fecha)}</td>
                         <td className="p-2.5">
                           <div className="flex gap-1 justify-center">
+                            <button onClick={() => setKardexFor(r)} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-violet-400" title="Kardex de movimientos"><ArrowLeftRight className="w-3 h-3" /></button>
                             <button onClick={() => { setEditing(r); setModalOpen(true); }} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar"><Edit2 className="w-3 h-3" /></button>
                             <button onClick={async () => { if (confirm(`¿Eliminar "${r.nombre}" (${r.consecutivo})?`)) { try { await removeItem.mutateAsync(r.id); } catch (e: any) { alert("Error: " + (e?.response?.data?.message ?? e?.message)); } } }} className="p-1 rounded hover:bg-red-950/30 text-[#94A3B8] hover:text-red-400" title="Eliminar"><Trash2 className="w-3 h-3" /></button>
                           </div>
@@ -179,6 +187,10 @@ export function ModuloInventarioView({ modulo }: { modulo: ModuloInventario }) {
 
       {modalOpen && (
         <InventarioModal modulo={modulo} item={editing} onClose={() => setModalOpen(false)} onSaved={() => setModalOpen(false)} />
+      )}
+
+      {kardexFor && (
+        <KardexModal item={kardexFor} onClose={() => setKardexFor(null)} />
       )}
     </div>
   );
@@ -341,6 +353,145 @@ function InventarioModal({ modulo, item, onClose, onSaved }: {
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}{item ? "Guardar cambios" : "Crear registro"}
           </button>
         </footer>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODAL · Kardex de movimientos (entradas/salidas/ajustes/conteo + saldo)
+// ═══════════════════════════════════════════════════════════════════════════════
+const proyectarSaldo = (tipo: string, base: number, cant: number): number => {
+  let r = base;
+  if (tipo === "Entrada") r = base + cant;
+  else if (tipo === "Salida") r = base - cant;
+  else if (tipo === "Ajuste") r = base + cant;
+  else if (tipo === "Conteo") r = cant;
+  return Math.round(r * 100) / 100;
+};
+const fmtFechaHora = (iso?: string | null): string => {
+  if (!iso) return "—";
+  const d = new Date(iso); return isNaN(d.getTime()) ? "—" : d.toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" });
+};
+
+function KardexModal({ item, onClose }: { item: InventarioAuditado; onClose: () => void }) {
+  const q = useMovimientos(item.id);
+  const movs = q.data ?? [];
+  const create = useCreateMovimiento();
+  const remove = useDeleteMovimiento();
+
+  const [f, setF] = useState({
+    tipo: "Entrada", cantidad: "", motivo: "", referencia: "", responsable: "",
+    fecha: isoToLocalInput(new Date().toISOString()), observaciones: "",
+  });
+  const [error, setError] = useState("");
+  const set = (k: string, v: string) => setF(p => ({ ...p, [k]: v }));
+
+  // Saldo actual = saldoResultante del último movimiento, o el saldo/cantidad del ítem.
+  const saldoActual = movs.length ? (movs[0].saldoResultante ?? 0) : (item.saldo ?? item.cantidad ?? 0);
+  const proyectado = f.cantidad !== "" ? proyectarSaldo(f.tipo, saldoActual, num(f.cantidad)) : saldoActual;
+
+  const registrar = async () => {
+    if (f.cantidad === "" || isNaN(parseFloat(f.cantidad))) { setError("Ingresa la cantidad del movimiento."); return; }
+    if (f.tipo !== "Ajuste" && num(f.cantidad) < 0) { setError("La cantidad no puede ser negativa (usa 'Ajuste' para restar)."); return; }
+    setError("");
+    try {
+      await create.mutateAsync({
+        itemId: item.id, tipo: f.tipo, cantidad: num(f.cantidad),
+        motivo: f.motivo || undefined, referencia: f.referencia || undefined,
+        responsable: f.responsable || undefined, observaciones: f.observaciones || undefined,
+        fecha: f.fecha || undefined,
+      });
+      setF(p => ({ ...p, cantidad: "", motivo: "", referencia: "", observaciones: "" }));
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? e?.message ?? "No se pudo registrar el movimiento.");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col shadow-card">
+        <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
+          <div>
+            <h2 className="font-display font-bold text-white text-lg flex items-center gap-2"><ArrowLeftRight className="w-5 h-5 text-violet-400" />Kardex de movimientos</h2>
+            <p className="text-xs text-[#94A3B8] mt-0.5">{item.nombre} · {item.consecutivo}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider flex items-center gap-1 justify-end"><Wallet className="w-3 h-3" />Saldo actual</p>
+              <p className="font-display text-xl font-bold text-violet-300 leading-tight">{nfmt(saldoActual, 2)}<span className="text-[10px] text-[#475569]"> {item.unidadMedida || ""}</span></p>
+            </div>
+            <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5" /></button>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {/* Registrar movimiento */}
+          <div className="rounded-xl border border-[#1E2D4A] bg-[#0A111F] p-3 space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Sel label="Tipo" value={f.tipo} onChange={v => set("tipo", v)} options={MOVIMIENTO_TIPOS as unknown as string[]} />
+              <F label={f.tipo === "Conteo" ? "Cantidad contada" : "Cantidad"} value={f.cantidad} onChange={v => set("cantidad", v)} type="number" placeholder="0" />
+              <F label="Fecha" value={f.fecha} onChange={v => set("fecha", v)} type="datetime-local" />
+              <Calc label="Saldo proyectado" value={nfmt(proyectado, 2)} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <F label="Motivo" value={f.motivo} onChange={v => set("motivo", v)} placeholder="Ej. Compra / consumo / conteo físico" />
+              <F label="Referencia" value={f.referencia} onChange={v => set("referencia", v)} placeholder="Remisión / orden / doc." />
+              <div>
+                <label className="text-[10px] text-[#94A3B8] mb-1 block">Responsable</label>
+                <input list="inv-auditors" value={f.responsable} onChange={e => set("responsable", e.target.value)} placeholder="Nombre" className="w-full bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2 text-xs text-white" />
+              </div>
+            </div>
+            {error && <p className="text-xs text-red-400 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" />{error}</p>}
+            <div className="flex justify-end">
+              <button onClick={registrar} disabled={create.isPending} className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50">
+                {create.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}Registrar movimiento
+              </button>
+            </div>
+          </div>
+
+          {/* Historial */}
+          {q.isLoading ? (
+            <div className="py-10 flex items-center justify-center text-[#475569]"><Loader2 className="w-5 h-5 animate-spin" /></div>
+          ) : movs.length === 0 ? (
+            <div className="py-10 text-center text-[#475569] text-sm">Sin movimientos registrados. El saldo inicial es la cantidad del ítem.</div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-[#1E2D4A]">
+              <table className="w-full text-sm">
+                <thead className="bg-[#0D1526]">
+                  <tr className="text-[10px] uppercase tracking-wider text-[#475569] border-b border-[#1E2D4A]">
+                    <th className="text-left p-2.5">Fecha</th>
+                    <th className="text-left p-2.5">Tipo</th>
+                    <th className="text-right p-2.5">Cantidad</th>
+                    <th className="text-right p-2.5">Saldo</th>
+                    <th className="text-left p-2.5">Motivo · Ref.</th>
+                    <th className="text-left p-2.5">Responsable</th>
+                    <th className="text-center p-2.5 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {movs.map(m => {
+                    const mc = MOVIMIENTO_COLOR[m.tipo] ?? "#94A3B8";
+                    const signo = m.tipo === "Salida" ? "−" : m.tipo === "Entrada" ? "+" : "";
+                    return (
+                      <tr key={m.id} className="border-b border-[#1E2D4A]/50">
+                        <td className="p-2.5 text-[#94A3B8] text-xs whitespace-nowrap">{fmtFechaHora(m.fecha)}</td>
+                        <td className="p-2.5"><span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: `${mc}18`, color: mc, border: `1px solid ${mc}30` }}>{m.tipo}</span></td>
+                        <td className="p-2.5 text-right font-mono text-xs" style={{ color: mc }}>{signo}{nfmt(m.cantidad, 2)}</td>
+                        <td className="p-2.5 text-right font-mono text-xs text-[#94A3B8]">{nfmt(m.saldoAnterior ?? 0, 2)} → <span className="text-violet-300 font-semibold">{nfmt(m.saldoResultante ?? 0, 2)}</span></td>
+                        <td className="p-2.5 text-[#94A3B8] text-xs">{m.motivo || "—"}{m.referencia ? <span className="text-[#475569]"> · {m.referencia}</span> : ""}</td>
+                        <td className="p-2.5 text-[#94A3B8] text-xs">{m.responsable || "—"}</td>
+                        <td className="p-2.5 text-center">
+                          <button onClick={async () => { if (confirm("¿Eliminar este movimiento? El saldo se recalculará.")) { try { await remove.mutateAsync(m.id); } catch (e: any) { alert("Error: " + (e?.response?.data?.message ?? e?.message)); } } }} className="p-1 rounded hover:bg-red-950/30 text-[#94A3B8] hover:text-red-400" title="Eliminar movimiento"><Trash2 className="w-3 h-3" /></button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

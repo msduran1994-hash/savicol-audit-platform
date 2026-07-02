@@ -2,7 +2,7 @@ import {
   Controller, Get, Post, Patch, Delete,
   Body, Param, Query, UseGuards, Req, HttpCode, HttpStatus,
 } from "@nestjs/common";
-import { InventariosService, CreateInventarioItemDto } from "./inventarios.service";
+import { InventariosService, CreateInventarioItemDto, CreateMovimientoDto } from "./inventarios.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 
 interface AuthRequest extends Request {
@@ -23,6 +23,23 @@ export class InventariosController {
     @Query("granjaId") granjaId?: string,
   ) {
     return this.svc.findAll({ modulo, estado, categoria, cediId, granjaId });
+  }
+
+  // ── Kardex de movimientos (antes de :id para no colisionar) ──
+  @Get("movimientos")
+  findMovimientos(@Query("itemId") itemId: string) {
+    return this.svc.findMovimientos(itemId);
+  }
+
+  @Post("movimientos")
+  createMovimiento(@Body() dto: CreateMovimientoDto, @Req() req: AuthRequest) {
+    return this.svc.createMovimiento(dto, req.user?.name ?? req.user?.email);
+  }
+
+  @Delete("movimientos/:id")
+  @HttpCode(HttpStatus.OK)
+  removeMovimiento(@Param("id") id: string, @Req() req: AuthRequest) {
+    return this.svc.removeMovimiento(id, req.user?.name ?? req.user?.email);
   }
 
   @Get(":id")

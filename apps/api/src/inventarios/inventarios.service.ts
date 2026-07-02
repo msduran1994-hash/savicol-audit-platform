@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 
 // DTO de creación/edición de un ítem de inventario (motor genérico por módulo).
@@ -23,6 +23,18 @@ export interface CreateInventarioItemDto {
   fecha?: string;
   observaciones?: string;
   datosJSON?: string;
+}
+
+// DTO de movimiento del kardex (Entrada | Salida | Ajuste | Conteo).
+export interface CreateMovimientoDto {
+  itemId: string;
+  tipo: string;
+  cantidad: number;
+  motivo?: string;
+  referencia?: string;
+  responsable?: string;
+  observaciones?: string;
+  fecha?: string;
 }
 
 // Prefijos de consecutivo por módulo (folio: INV-<prefijo>-<año>-<seq>).
@@ -108,5 +120,78 @@ export class InventariosService {
 
   remove(id: string) {
     return this.prisma.inventarioAuditado.delete({ where: { id } });
+  }
+
+  // ── Kardex de movimientos ──
+  findMovimientos(itemId: string) {
+    return this.prisma.movimientoInventario.findMany({ where: { itemId }, orderBy: { createdAt: "desc" } });
+  }
+
+  private aplicarDelta(tipo: string, saldoAnterior: number, cantidad: number): number {
+    let r = saldoAnterior;
+    if (tipo === "Entrada")      r = saldoAnterior + cantidad;
+    else if (tipo === "Salida")  r = saldoAnterior - cantidad;
+    else if (tipo === "Ajuste")  r = saldoAnterior + cantidad; // cantidad con signo
+    else if (tipo === "Conteo")  r = cantidad;                 // el conteo fija el saldo
+    return Math.round(r * 100) / 100;
+  }
+
+  async createMovimiento(dto: CreateMovimientoDto, userName?: string) {
+    const item = await this.prisma.inventarioAuditado.findUnique({ where: { id: dto.itemId } });
+    if (!item) throw new NotFoundException("Ítem de inventario no encontrado");
+    const cantidad = Number(dto.cantidad) || 0;
+    const saldoAnterior = item.saldo ?? 0;
+    const saldoResultante = this.aplicarDelta(dto.tipo, saldoAnterior, cantidad);
+
+    const mov = await this.prisma.movimientoInventario.create({
+      data: {
+        itemId: dto.itemId, tipo: dto.tipo, cantidad,
+        saldoAnterior, saldoResultante,
+        fecha: dto.fecha ? new Date(dto.fecha) : new Date(),
+        motivo: dto.motivo ?? null, referencia: dto.referencia ?? null,
+        responsable: dto.responsable ?? null, observaciones: dto.observaciones ?? null,
+        createdBy: userName ?? null,
+      },
+    });
+
+    // Actualiza el saldo del ítem (y conteo/diferencia si el movimiento es un Conteo).
+    const patch: any = { saldo: saldoResultante, updatedBy: userName ?? null };
+    if (dto.tipo === "Conteo") {
+      patch.cantidadContada = cantidad;
+      patch.diferencia = Math.round((saldoAnterior - cantidad) * 100) / 100;
+    }
+    await this.prisma.inventarioAuditado.update({ where: { id: dto.itemId }, data: patch });
+    return mov;
+  }
+
+  async removeMovimiento(id: string, userName?: string) {
+    const mov = await this.prisma.movimientoInventario.findUnique({ where: { id } });
+    const res = await this.prisma.movimientoInventario.delete({ where: { id } });
+    if (mov) await this.recomputeSaldo(mov.itemId, userName);
+    return res;
+  }
+
+  // Recalcula el saldo del ítem y los saldos de cada movimiento reproduciendo el
+  // kardex desde la cantidad inicial (base). Mantiene la cadena consistente aunque
+  // se elimine un movimiento intermedio.
+  private async recomputeSaldo(itemId: string, userName?: string) {
+    const item = await this.prisma.inventarioAuditado.findUnique({ where: { id: itemId } });
+    if (!item) return;
+    const base = item.cantidad ?? 0;
+    const movs = await this.prisma.movimientoInventario.findMany({ where: { itemId }, orderBy: { createdAt: "asc" } });
+    let saldo = base;
+    let ultimoConteo: number | null = null, difConteo: number | null = null;
+    for (const m of movs) {
+      const saldoAnterior = saldo;
+      const saldoResultante = this.aplicarDelta(m.tipo, saldoAnterior, m.cantidad ?? 0);
+      if (m.saldoAnterior !== saldoAnterior || m.saldoResultante !== saldoResultante) {
+        await this.prisma.movimientoInventario.update({ where: { id: m.id }, data: { saldoAnterior, saldoResultante } });
+      }
+      if (m.tipo === "Conteo") { ultimoConteo = m.cantidad ?? 0; difConteo = Math.round((saldoAnterior - (m.cantidad ?? 0)) * 100) / 100; }
+      saldo = saldoResultante;
+    }
+    const patch: any = { saldo, updatedBy: userName ?? null };
+    if (ultimoConteo != null) { patch.cantidadContada = ultimoConteo; patch.diferencia = difConteo; }
+    await this.prisma.inventarioAuditado.update({ where: { id: itemId }, data: patch });
   }
 }
