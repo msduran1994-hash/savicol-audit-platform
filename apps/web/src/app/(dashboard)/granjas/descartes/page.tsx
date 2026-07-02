@@ -3,23 +3,27 @@
 // GRANJAS · Trazabilidad de Descartes — Fase 1 (formulario + cálculos + lista)
 // Un registro = un viaje/vehículo. Persistencia real vía /descartes (NestJS/Prisma).
 // ═══════════════════════════════════════════════════════════════════════════════
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Header } from "@/components/layout/header";
 import {
   useDescartes, useCreateDescarte, useUpdateDescarte, useDeleteDescarte,
+  useEvidenciasDescarte, useCreateEvidenciaDescarte, useDeleteEvidenciaDescarte,
 } from "@/hooks/useDescartes";
+import { procesarArchivo, imgSrc, fmtSize, esImagen } from "@/lib/evidencias-upload";
 import { useGranjas } from "@/hooks/useGranjas";
 import { AUDITORS } from "@/lib/constants";
 import {
   TIPO_DESCARTE, MOTIVO_DESCARTE, CLASIFICACION_SANITARIA, NIVEL_RIESGO_DESCARTE,
   ESTADO_DESCARTE, DESTINO_DESCARTE, RIESGO_COLOR, ESTADO_DESCARTE_COLOR, TIEMPO_OBJETIVO_MIN,
   CHECKLIST_DESCARTE, CHECKLIST_ESTADOS, CHECKLIST_TOTAL_ITEMS, checklistStats,
+  EVIDENCIA_TIPOS, EVIDENCIA_CATEGORIAS,
   type ChecklistRespuesta, type ChecklistRespuestas,
 } from "@/lib/descartes.constants";
-import type { DescarteAve, DescartePayload } from "@/lib/descartes.types";
+import type { DescarteAve, DescartePayload, EvidenciaDescarte } from "@/lib/descartes.types";
 import {
   Bird, Plus, X, Loader2, AlertTriangle, Trash2, Edit2, Filter,
   Clock, Scale, Save, MapPin, CheckCircle2, ClipboardCheck,
+  Camera, UploadCloud, Link2, Download, ExternalLink, Image as ImageIcon, Maximize2, FolderOpen,
 } from "lucide-react";
 
 // ─── Helpers de fecha/tiempo ─────────────────────────────────────────────────
@@ -52,6 +56,7 @@ export default function DescartesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<DescarteAve | null>(null);
   const [checklistFor, setChecklistFor] = useState<DescarteAve | null>(null);
+  const [evidenciasFor, setEvidenciasFor] = useState<DescarteAve | null>(null);
 
   const descQ = useDescartes({
     estado: filtroEstado || undefined,
@@ -169,6 +174,7 @@ export default function DescartesPage() {
                         <td className="p-2.5">
                           <div className="flex gap-1 justify-center">
                             <button onClick={() => setChecklistFor(r)} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-emerald-400" title="Checklist de trazabilidad"><ClipboardCheck className="w-3 h-3"/></button>
+                            <button onClick={() => setEvidenciasFor(r)} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-cyan-400" title="Evidencias"><Camera className="w-3 h-3"/></button>
                             <button onClick={() => { setEditing(r); setModalOpen(true); }} className="p-1 rounded hover:bg-[#1A2540] text-[#94A3B8] hover:text-white" title="Editar"><Edit2 className="w-3 h-3"/></button>
                             <button onClick={async () => { if (confirm(`¿Eliminar el descarte de ${r.granjaNombre} (galpón ${r.galpon})?`)) { try { await removeD.mutateAsync(r.id); } catch (e:any) { alert("Error: " + (e?.response?.data?.message ?? e?.message)); } } }} className="p-1 rounded hover:bg-red-950/30 text-[#94A3B8] hover:text-red-400" title="Eliminar"><Trash2 className="w-3 h-3"/></button>
                           </div>
@@ -197,6 +203,10 @@ export default function DescartesPage() {
           onClose={() => setChecklistFor(null)}
           onSaved={() => setChecklistFor(null)}
         />
+      )}
+
+      {evidenciasFor && (
+        <EvidenciasModal descarte={evidenciasFor} onClose={() => setEvidenciasFor(null)} />
       )}
     </div>
   );
@@ -659,6 +669,182 @@ function ChecklistModal({ descarte, onClose, onSaved }: {
           </div>
         </footer>
       </div>
+    </div>
+  );
+}
+
+// ─── Miniatura de evidencia con degradación si la imagen no carga ────────────
+function EvidThumb({ url, alt, className }: { url: string; alt: string; className?: string }) {
+  const [err, setErr] = useState(false);
+  if (err) return <div className={`flex items-center justify-center bg-[#0D1526] border border-[#2A3F6A] ${className ?? ""}`}><ImageIcon className="w-6 h-6 text-[#475569]"/></div>;
+  return <img src={imgSrc(url)} alt={alt} className={className} loading="lazy" onError={() => setErr(true)}/>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODAL · Evidencias del descarte (fotos/PDF/Excel/enlaces · base64)
+// ═══════════════════════════════════════════════════════════════════════════════
+function EvidenciasModal({ descarte, onClose }: { descarte: DescarteAve; onClose: () => void }) {
+  const evidQ = useEvidenciasDescarte(descarte.id);
+  const evid = evidQ.data ?? [];
+  const createEv = useCreateEvidenciaDescarte();
+  const removeEv = useDeleteEvidenciaDescarte();
+
+  const [modo, setModo] = useState<"subir" | "enlace">("subir");
+  const [tipo, setTipo] = useState<string>("Foto");
+  const [categoria, setCategoria] = useState<string>(EVIDENCIA_CATEGORIAS[0]);
+  const [nombre, setNombre] = useState("");
+  const [url, setUrl] = useState("");
+  const [size, setSize] = useState(0);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [procesando, setProcesando] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function onPick(file?: File) {
+    if (!file) return;
+    setErr(null); setProcesando(true);
+    try {
+      const { dataUrl, size: s, tipo: t } = await procesarArchivo(file);
+      setUrl(dataUrl); setSize(s); setTipo(t); setPreview(dataUrl.startsWith("data:image/") ? dataUrl : null);
+      setNombre(prev => prev || file.name);
+    } catch (e: any) {
+      setErr(e?.message ?? "No se pudo procesar el archivo"); setPreview(null); setUrl(""); setSize(0);
+    } finally { setProcesando(false); }
+  }
+
+  async function agregar() {
+    setErr(null);
+    if (!nombre.trim()) return setErr("El nombre es obligatorio.");
+    if (!url.trim()) return setErr(modo === "subir" ? "Selecciona un archivo." : "La URL es obligatoria.");
+    setSaving(true);
+    try {
+      await createEv.mutateAsync({ descarteId: descarte.id, tipo, nombre: nombre.trim(), url: url.trim(), size, categoria });
+      setNombre(""); setUrl(""); setSize(0); setPreview(null); if (fileRef.current) fileRef.current.value = "";
+    } catch (e: any) {
+      setErr(e?.response?.data?.message ?? e?.message ?? "Error al guardar la evidencia");
+    } finally { setSaving(false); }
+  }
+
+  const cambiarModo = (m: "subir" | "enlace") => { setModo(m); setErr(null); setPreview(null); setUrl(""); setSize(0); };
+  const TAB = (m: "subir" | "enlace", label: string, Icon: any) => (
+    <button type="button" onClick={() => cambiarModo(m)}
+      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${modo === m ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300" : "bg-[#0D1526] border-[#1E2D4A] text-[#94A3B8] hover:text-white"}`}>
+      <Icon className="w-3.5 h-3.5"/> {label}
+    </button>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0D1526] border border-[#1E2D4A] rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col shadow-card">
+        <header className="flex items-center justify-between px-6 py-4 border-b border-[#1E2D4A]">
+          <div>
+            <h2 className="font-display font-bold text-white text-lg">Evidencias del descarte</h2>
+            <p className="text-xs text-[#94A3B8] mt-0.5">{descarte.granjaNombre} · Galpón {descarte.galpon} · Lote {descarte.lote} · {evid.length} archivo(s)</p>
+          </div>
+          <button onClick={onClose} className="text-[#94A3B8] hover:text-white"><X className="w-5 h-5"/></button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {/* Cargar evidencia */}
+          <div className="rounded-xl border border-[#1E2D4A] bg-[#0A111F] p-3 space-y-3">
+            <div className="flex gap-2">
+              {TAB("subir", "Subir archivo", UploadCloud)}
+              {TAB("enlace", "Pegar enlace", Link2)}
+            </div>
+            {modo === "subir" ? (
+              <div>
+                <input ref={fileRef} type="file" accept="image/*,application/pdf,.xlsx,.xls,.csv,video/*" className="hidden" onChange={e => onPick(e.target.files?.[0])}/>
+                {preview ? (
+                  <div className="relative">
+                    <img src={preview} alt="Vista previa" className="w-full max-h-56 object-contain rounded-lg border border-[#1E2D4A] bg-[#0A111F]"/>
+                    <button type="button" onClick={() => fileRef.current?.click()} className="absolute bottom-2 right-2 text-[11px] bg-[#0D1526]/90 border border-[#1E2D4A] rounded-md px-2 py-1 text-cyan-300">Cambiar</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => fileRef.current?.click()} disabled={procesando} className="w-full border-2 border-dashed border-[#1E2D4A] hover:border-cyan-500/50 rounded-lg py-6 flex flex-col items-center gap-2 text-[#94A3B8] hover:text-cyan-300 transition-colors">
+                    {procesando ? <Loader2 className="w-6 h-6 animate-spin"/> : <UploadCloud className="w-6 h-6"/>}
+                    <span className="text-sm font-medium">{procesando ? "Procesando…" : "Haz clic para seleccionar un archivo"}</span>
+                    <span className="text-[10px]">Imágenes (se optimizan), PDF, Excel · máx. 10 MB</span>
+                  </button>
+                )}
+                {url && !procesando && <p className="text-[10px] text-emerald-400 mt-1.5">Archivo listo · {tipo} · {fmtSize(size)}</p>}
+              </div>
+            ) : (
+              <div>
+                <input type="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://…" className="input-base"/>
+                <p className="text-[10px] text-[#475569] mt-1">Para videos o archivos grandes, pega un enlace público.</p>
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre *" className="input-base"/>
+              <select value={categoria} onChange={e => setCategoria(e.target.value)} className="input-base">
+                {EVIDENCIA_CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select value={tipo} onChange={e => setTipo(e.target.value)} className="input-base">
+                {EVIDENCIA_TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            {err && <p className="text-[11px] text-red-300 flex items-center gap-1.5"><AlertTriangle className="w-3 h-3"/>{err}</p>}
+            <div className="flex justify-end">
+              <button onClick={agregar} disabled={saving || procesando} className="btn-primary text-xs bg-cyan-500 hover:bg-cyan-600 flex items-center gap-2 disabled:opacity-50">
+                {saving ? <Loader2 className="w-3 h-3 animate-spin"/> : <Plus className="w-3 h-3"/>}Agregar evidencia
+              </button>
+            </div>
+          </div>
+
+          {/* Galería */}
+          {evidQ.isLoading ? (
+            <div className="py-8 flex items-center justify-center text-[#475569]"><Loader2 className="w-5 h-5 animate-spin"/></div>
+          ) : evid.length === 0 ? (
+            <div className="py-10 text-center"><FolderOpen className="w-9 h-9 text-[#1E2D4A] mx-auto mb-3"/><p className="text-white text-sm font-semibold">Sin evidencias</p><p className="text-[#475569] text-xs">Agrega la primera foto o documento.</p></div>
+          ) : (
+            <div className={`grid gap-3 ${evid.length === 1 ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}>
+              {evid.map((e: EvidenciaDescarte) => {
+                const img = esImagen(e);
+                const h = evid.length === 1 ? "h-72" : "h-52";
+                return (
+                  <div key={e.id} className="bg-[#1A2540] border border-[#2A3F6A] rounded-lg overflow-hidden flex flex-col">
+                    {img ? (
+                      <button onClick={() => setLightbox(e.url)} className={`relative group block w-full bg-[#0A111F] ${h}`} title="Ampliar">
+                        <EvidThumb url={e.url} alt={e.nombre} className={`w-full object-contain ${h}`}/>
+                        <span className="absolute top-2 right-2 flex items-center gap-1 rounded-md bg-black/55 px-2 py-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity"><Maximize2 className="w-3 h-3"/>Ampliar</span>
+                      </button>
+                    ) : (
+                      <div className={`flex items-center justify-center bg-[#0D1526] ${h}`}><FolderOpen className="w-12 h-12 text-[#475569]"/></div>
+                    )}
+                    <div className="p-3 flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white truncate">{e.nombre}</p>
+                        <p className="text-[10px] text-[#94A3B8] truncate">{e.tipo} · {e.categoria ?? "—"} · {fmtSize(e.size)}</p>
+                      </div>
+                      {img ? (
+                        <button onClick={() => setLightbox(e.url)} className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400 shrink-0" title="Ver"><Maximize2 className="w-4 h-4"/></button>
+                      ) : /^data:/i.test(e.url) ? (
+                        <a href={e.url} download={e.nombre} className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400 shrink-0" title="Descargar"><Download className="w-4 h-4"/></a>
+                      ) : (
+                        <a href={e.url} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded hover:bg-cyan-500/10 text-[#94A3B8] hover:text-cyan-400 shrink-0" title="Abrir"><ExternalLink className="w-4 h-4"/></a>
+                      )}
+                      <button onClick={async () => { if (confirm(`¿Eliminar "${e.nombre}"?`)) { try { await removeEv.mutateAsync(e.id); } catch (er:any) { alert("Error: " + (er?.response?.data?.message ?? er?.message)); } } }} className="p-1.5 rounded hover:bg-red-500/10 text-[#94A3B8] hover:text-red-400 shrink-0" title="Eliminar"><Trash2 className="w-4 h-4"/></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <footer className="flex items-center justify-end px-6 py-3 border-t border-[#1E2D4A]">
+          <button onClick={onClose} className="btn-ghost text-xs">Cerrar</button>
+        </footer>
+      </div>
+
+      {lightbox && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[60] flex items-center justify-center p-6" onClick={() => setLightbox(null)}>
+          <button className="absolute top-4 right-4 text-white/80 hover:text-white" onClick={() => setLightbox(null)}><X className="w-7 h-7"/></button>
+          <img src={imgSrc(lightbox)} alt="Evidencia" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={ev => ev.stopPropagation()}/>
+        </div>
+      )}
     </div>
   );
 }

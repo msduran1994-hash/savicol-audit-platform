@@ -43,6 +43,13 @@ export const ESTADO_DESCARTE_COLOR: Record<string, string> = {
 // Objetivo logístico (minutos) para semáforo de cumplimiento del tiempo total.
 export const TIEMPO_OBJETIVO_MIN = 180;
 
+// ─── Evidencias ──────────────────────────────────────────────────────────────
+export const EVIDENCIA_TIPOS = ["Foto", "PDF", "Excel", "Video", "Otro"] as const;
+export const EVIDENCIA_CATEGORIAS = [
+  "Acta de descarte", "Remisión", "Guía sanitaria", "Certificado",
+  "Foto del producto", "Foto del vehículo", "Pesaje", "Documento", "Otro",
+] as const;
+
 // ─── Checklist de trazabilidad (parametrizable) ──────────────────────────────
 // Plantilla de categorías/preguntas. Las respuestas se guardan por descarte en
 // checklistJSON: { [itemId]: { estado, obs, criticidad } }.

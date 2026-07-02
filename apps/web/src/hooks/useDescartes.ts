@@ -3,7 +3,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
-import type { DescarteAve, DescartePayload, DescartesFilters } from "@/lib/descartes.types";
+import type {
+  DescarteAve, DescartePayload, DescartesFilters,
+  EvidenciaDescarte, EvidenciaDescartePayload,
+} from "@/lib/descartes.types";
 
 export function useDescartes(filters: DescartesFilters = {}) {
   const params = new URLSearchParams();
@@ -37,5 +40,31 @@ export function useDeleteDescarte() {
   return useMutation({
     mutationFn: (id: string) => apiDelete(`/descartes/${id}`),
     onSuccess:  () => qc.invalidateQueries({ queryKey: ["descartes"] }),
+  });
+}
+
+// ─── Evidencias ──────────────────────────────────────────────────────────────
+export function useEvidenciasDescarte(descarteId: string | null) {
+  return useQuery({
+    queryKey: ["descartes-evidencias", descarteId],
+    queryFn:  () => apiGet<EvidenciaDescarte[]>(`/descartes/evidencias?descarteId=${descarteId}`),
+    enabled:  !!descarteId,
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateEvidenciaDescarte() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: EvidenciaDescartePayload) => apiPost<EvidenciaDescarte>("/descartes/evidencias", dto),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ["descartes-evidencias"] }),
+  });
+}
+
+export function useDeleteEvidenciaDescarte() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(`/descartes/evidencias/${id}`),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ["descartes-evidencias"] }),
   });
 }

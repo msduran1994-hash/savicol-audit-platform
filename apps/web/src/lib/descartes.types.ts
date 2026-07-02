@@ -66,3 +66,24 @@ export interface DescartesFilters {
   nivelRiesgo?: string;
   plantaDestino?: string;
 }
+
+export interface EvidenciaDescarte {
+  id: string;
+  descarteId: string;
+  tipo: string;
+  nombre: string;
+  url: string;
+  size: number;
+  categoria?: string | null;
+  uploadedAt?: string;
+  uploadedBy?: string | null;
+}
+
+export interface EvidenciaDescartePayload {
+  descarteId: string;
+  tipo: string;
+  nombre: string;
+  url: string;
+  size: number;
+  categoria?: string;
+}

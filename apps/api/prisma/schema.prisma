@@ -692,9 +692,30 @@ model DescarteAve {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
+  evidencias             EvidenciaDescarte[]
+
   @@index([granjaId])
   @@index([estado])
   @@index([fechaHoraDescarte])
+}
+
+// Evidencias de un descarte (fotos/PDF/Excel/enlaces). url = data URL base64 o
+// enlace externo (mismo patrón que EvidenciaRuta/EvidenciaCedi).
+model EvidenciaDescarte {
+  id          String   @id @default(cuid())
+  descarteId  String
+  tipo        String      // Foto | PDF | Excel | Video | Otro
+  nombre      String
+  url         String
+  size        Int      @default(0)
+  categoria   String?
+  uploadedAt  DateTime @default(now())
+  uploadedBy  String?
+  isDemo      Boolean  @default(false)
+
+  descarte DescarteAve @relation(fields: [descarteId], references: [id], onDelete: Cascade)
+
+  @@index([descarteId])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

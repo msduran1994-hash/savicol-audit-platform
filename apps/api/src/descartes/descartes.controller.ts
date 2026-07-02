@@ -2,7 +2,7 @@ import {
   Controller, Get, Post, Patch, Delete,
   Body, Param, Query, UseGuards, Req, HttpCode, HttpStatus,
 } from "@nestjs/common";
-import { DescartesService, CreateDescarteDto } from "./descartes.service";
+import { DescartesService, CreateDescarteDto, CreateEvidenciaDescarteDto } from "./descartes.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 
 interface AuthRequest extends Request {
@@ -23,6 +23,23 @@ export class DescartesController {
     @Query("plantaDestino") plantaDestino?: string,
   ) {
     return this.svc.findAll({ granjaId, estado, motivo, nivelRiesgo, plantaDestino });
+  }
+
+  // ── Evidencias (declaradas antes de :id para no colisionar con esa ruta) ──
+  @Get("evidencias")
+  findEvidencias(@Query("descarteId") descarteId: string) {
+    return this.svc.findEvidencias(descarteId);
+  }
+
+  @Post("evidencias")
+  createEvidencia(@Body() dto: CreateEvidenciaDescarteDto, @Req() req: AuthRequest) {
+    return this.svc.createEvidencia(dto, req.user?.name ?? req.user?.email);
+  }
+
+  @Delete("evidencias/:id")
+  @HttpCode(HttpStatus.OK)
+  removeEvidencia(@Param("id") id: string) {
+    return this.svc.removeEvidencia(id);
   }
 
   @Get(":id")

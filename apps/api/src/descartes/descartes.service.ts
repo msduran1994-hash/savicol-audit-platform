@@ -44,6 +44,15 @@ export interface CreateDescarteDto {
   observaciones?: string;
 }
 
+export interface CreateEvidenciaDescarteDto {
+  descarteId: string;
+  tipo: string;
+  nombre: string;
+  url: string;
+  size?: number;
+  categoria?: string;
+}
+
 // Campos DateTime que llegan como texto ISO y se convierten a Date.
 const DATE_FIELDS = [
   "fechaHoraDescarte", "horaInicioCargue", "horaFinCargue", "horaSalidaGranja",
@@ -111,5 +120,28 @@ export class DescartesService {
 
   remove(id: string) {
     return this.prisma.descarteAve.delete({ where: { id } });
+  }
+
+  // ── Evidencias ──
+  findEvidencias(descarteId: string) {
+    return this.prisma.evidenciaDescarte.findMany({ where: { descarteId }, orderBy: { uploadedAt: "desc" } });
+  }
+
+  createEvidencia(dto: CreateEvidenciaDescarteDto, userName?: string) {
+    return this.prisma.evidenciaDescarte.create({
+      data: {
+        descarteId: dto.descarteId,
+        tipo: dto.tipo,
+        nombre: dto.nombre,
+        url: dto.url,
+        size: dto.size ?? 0,
+        categoria: dto.categoria ?? null,
+        uploadedBy: userName ?? null,
+      },
+    });
+  }
+
+  removeEvidencia(id: string) {
+    return this.prisma.evidenciaDescarte.delete({ where: { id } });
   }
 }
