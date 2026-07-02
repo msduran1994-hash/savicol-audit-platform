@@ -55,35 +55,81 @@ const fmtDur = (m: number | null): string =>
   m == null ? "—" : m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
 const num = (v: any): number => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
 
+const EMPTY_FILTROS = {
+  empresa: "", integracion: "", granjaNombre: "", galpon: "", lote: "",
+  plantaDestino: "", medicoVeterinario: "", transportadora: "",
+  estado: "", motivo: "", nivelRiesgo: "",
+  fechaDesde: "", fechaHasta: "", cumplimiento: "", checklist: "",
+};
+
 export default function DescartesPage() {
-  const [filtroEstado, setFiltroEstado] = useState("");
-  const [filtroRiesgo, setFiltroRiesgo] = useState("");
-  const [filtroMotivo, setFiltroMotivo] = useState("");
+  const [filtros, setFiltros] = useState({ ...EMPTY_FILTROS });
+  const [filtrosOpen, setFiltrosOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<DescarteAve | null>(null);
   const [checklistFor, setChecklistFor] = useState<DescarteAve | null>(null);
   const [evidenciasFor, setEvidenciasFor] = useState<DescarteAve | null>(null);
   const [vista, setVista] = useState<"lista" | "dashboard">("lista");
 
-  const descQ = useDescartes({
-    estado: filtroEstado || undefined,
-    nivelRiesgo: filtroRiesgo || undefined,
-    motivo: filtroMotivo || undefined,
-  });
+  const setF = (k: string, v: string) => setFiltros(p => ({ ...p, [k]: v }));
+  const descQ = useDescartes({});
   const rows = descQ.data ?? [];
+
+  // Opciones de filtro tomadas de los valores presentes en los datos
+  const opciones = useMemo(() => {
+    const uniq = (g: (r: DescarteAve) => any) => Array.from(new Set(rows.map(g).filter(Boolean))).sort() as string[];
+    return {
+      empresas: uniq(r => r.empresa), integraciones: uniq(r => r.integracion),
+      granjas: uniq(r => r.granjaNombre), galpones: uniq(r => r.galpon), lotes: uniq(r => r.lote),
+      plantas: uniq(r => r.plantaDestino), veterinarios: uniq(r => r.medicoVeterinario),
+      transportadoras: uniq(r => r.transportadora),
+    };
+  }, [rows]);
+
+  // Filtrado en el frontend (aplica a lista y dashboard; incluye filtros derivados)
+  const filtered = useMemo(() => rows.filter(r => {
+    const f = filtros;
+    if (f.empresa && r.empresa !== f.empresa) return false;
+    if (f.integracion && r.integracion !== f.integracion) return false;
+    if (f.granjaNombre && r.granjaNombre !== f.granjaNombre) return false;
+    if (f.galpon && r.galpon !== f.galpon) return false;
+    if (f.lote && r.lote !== f.lote) return false;
+    if (f.plantaDestino && r.plantaDestino !== f.plantaDestino) return false;
+    if (f.medicoVeterinario && r.medicoVeterinario !== f.medicoVeterinario) return false;
+    if (f.transportadora && r.transportadora !== f.transportadora) return false;
+    if (f.estado && r.estado !== f.estado) return false;
+    if (f.motivo && r.motivo !== f.motivo) return false;
+    if (f.nivelRiesgo && r.nivelRiesgo !== f.nivelRiesgo) return false;
+    const fecha = String(r.fechaHoraDescarte || "").slice(0, 10);
+    if (f.fechaDesde && fecha < f.fechaDesde) return false;
+    if (f.fechaHasta && fecha > f.fechaHasta) return false;
+    if (f.cumplimiento) {
+      const t = minsBetween(isoToLocalInput(r.horaInicioCargue), isoToLocalInput(r.horaFinDescarga));
+      if (f.cumplimiento === "dentro" && !(t != null && t <= TIEMPO_OBJETIVO_MIN)) return false;
+      if (f.cumplimiento === "retraso" && !(t != null && t > TIEMPO_OBJETIVO_MIN)) return false;
+    }
+    if (f.checklist) {
+      const cs = checklistStats(r.checklistJSON);
+      if (f.checklist === "completo" && !(cs.respondidos > 0 && cs.pendientes === 0)) return false;
+      if (f.checklist === "sin" && cs.respondidos !== 0) return false;
+    }
+    return true;
+  }), [rows, filtros]);
+
+  const activeCount = Object.values(filtros).filter(Boolean).length;
 
   const removeD = useDeleteDescarte();
 
   // Resumen ligero (el Dashboard completo es una fase posterior)
   const kpis = useMemo(() => {
-    const totalAves = rows.reduce((s, r) => s + (r.cantidadAves || 0), 0);
-    const pesoTotal = rows.reduce((s, r) => s + (r.pesoTotalKg || 0), 0);
-    const tiempos = rows
+    const totalAves = filtered.reduce((s, r) => s + (r.cantidadAves || 0), 0);
+    const pesoTotal = filtered.reduce((s, r) => s + (r.pesoTotalKg || 0), 0);
+    const tiempos = filtered
       .map(r => minsBetween(isoToLocalInput(r.horaInicioCargue), isoToLocalInput(r.horaFinDescarga)))
       .filter((x): x is number => x != null);
     const tProm = tiempos.length ? Math.round(tiempos.reduce((a, b) => a + b, 0) / tiempos.length) : null;
-    return { total: rows.length, totalAves, pesoTotal, tProm };
-  }, [rows]);
+    return { total: filtered.length, totalAves, pesoTotal, tProm };
+  }, [filtered]);
 
   return (
     <div className="flex flex-col min-h-full">
@@ -99,23 +145,55 @@ export default function DescartesPage() {
             <button onClick={() => setVista("lista")} className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1.5 ${vista === "lista" ? "bg-[#1A2540] text-white" : "text-[#94A3B8]"}`}><List className="w-3.5 h-3.5"/>Lista</button>
             <button onClick={() => setVista("dashboard")} className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1.5 ${vista === "dashboard" ? "bg-[#1A2540] text-white" : "text-[#94A3B8]"}`}><LayoutDashboard className="w-3.5 h-3.5"/>Dashboard</button>
           </div>
-          <span className="text-xs text-[#94A3B8] flex items-center gap-1.5"><Filter className="w-3.5 h-3.5"/>Filtros:</span>
-          <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
-            <option value="">Todos los estados</option>
-            {ESTADO_DESCARTE.map(e => <option key={e} value={e}>{e}</option>)}
-          </select>
-          <select value={filtroRiesgo} onChange={e => setFiltroRiesgo(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
-            <option value="">Todo riesgo</option>
-            {NIVEL_RIESGO_DESCARTE.map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
-          <select value={filtroMotivo} onChange={e => setFiltroMotivo(e.target.value)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white">
-            <option value="">Todo motivo</option>
-            {MOTIVO_DESCARTE.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
+          <button onClick={() => setFiltrosOpen(o => !o)} className="px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white flex items-center gap-1.5 hover:bg-[#1A2540]">
+            <Filter className="w-3.5 h-3.5"/>Filtros{activeCount > 0 && <span className="bg-amber-500 text-[#0A111F] rounded-full px-1.5 text-[10px] font-bold">{activeCount}</span>}
+          </button>
+          {activeCount > 0 && (
+            <button onClick={() => setFiltros({ ...EMPTY_FILTROS })} className="text-xs text-[#94A3B8] hover:text-white flex items-center gap-1"><X className="w-3 h-3"/>Limpiar</button>
+          )}
           <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary text-xs ml-auto flex items-center gap-1.5">
             <Plus className="w-3.5 h-3.5"/>Nuevo descarte
           </button>
         </div>
+
+        {/* Panel de filtros avanzados (Fase 5) */}
+        {filtrosOpen && (
+          <div className="card-base p-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              <FSel label="Empresa"             value={filtros.empresa}           onChange={v => setF("empresa", v)}           opts={opciones.empresas}/>
+              <FSel label="Integración"         value={filtros.integracion}       onChange={v => setF("integracion", v)}       opts={opciones.integraciones}/>
+              <FSel label="Granja"              value={filtros.granjaNombre}      onChange={v => setF("granjaNombre", v)}      opts={opciones.granjas}/>
+              <FSel label="Galpón"              value={filtros.galpon}            onChange={v => setF("galpon", v)}            opts={opciones.galpones}/>
+              <FSel label="Lote"                value={filtros.lote}              onChange={v => setF("lote", v)}              opts={opciones.lotes}/>
+              <FSel label="Planta"              value={filtros.plantaDestino}     onChange={v => setF("plantaDestino", v)}     opts={opciones.plantas}/>
+              <FSel label="Médico veterinario"  value={filtros.medicoVeterinario} onChange={v => setF("medicoVeterinario", v)} opts={opciones.veterinarios}/>
+              <FSel label="Transportador"       value={filtros.transportadora}    onChange={v => setF("transportadora", v)}    opts={opciones.transportadoras}/>
+              <FSel label="Estado"              value={filtros.estado}            onChange={v => setF("estado", v)}            opts={ESTADO_DESCARTE}/>
+              <FSel label="Motivo"              value={filtros.motivo}            onChange={v => setF("motivo", v)}            opts={MOTIVO_DESCARTE}/>
+              <FSel label="Nivel de riesgo"     value={filtros.nivelRiesgo}       onChange={v => setF("nivelRiesgo", v)}       opts={NIVEL_RIESGO_DESCARTE}/>
+              <div>
+                <label className="text-[10px] text-[#94A3B8] mb-1 block">Cumplimiento logístico</label>
+                <select value={filtros.cumplimiento} onChange={e => setF("cumplimiento", e.target.value)} className="w-full bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2 text-xs text-white">
+                  <option value="">Todos</option><option value="dentro">Dentro de objetivo</option><option value="retraso">Con retraso</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-[#94A3B8] mb-1 block">Checklist</label>
+                <select value={filtros.checklist} onChange={e => setF("checklist", e.target.value)} className="w-full bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2 text-xs text-white">
+                  <option value="">Todos</option><option value="completo">Completo</option><option value="sin">Sin iniciar</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-[#94A3B8] mb-1 block">Fecha desde</label>
+                <input type="date" value={filtros.fechaDesde} onChange={e => setF("fechaDesde", e.target.value)} className="w-full bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2 text-xs text-white"/>
+              </div>
+              <div>
+                <label className="text-[10px] text-[#94A3B8] mb-1 block">Fecha hasta</label>
+                <input type="date" value={filtros.fechaHasta} onChange={e => setF("fechaHasta", e.target.value)} className="w-full bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2 text-xs text-white"/>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Resumen ligero */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -126,7 +204,7 @@ export default function DescartesPage() {
         </div>
 
         {/* Dashboard Ejecutivo (Fase 4) */}
-        {vista === "dashboard" && <DashboardDescartes rows={rows} />}
+        {vista === "dashboard" && <DashboardDescartes rows={filtered} />}
 
         {/* Lista */}
         {vista === "lista" && (
@@ -139,6 +217,13 @@ export default function DescartesPage() {
               <p className="text-white font-semibold mb-1">Sin descartes registrados</p>
               <p className="text-[#475569] text-sm mb-4">Registra el primer descarte con "Nuevo descarte".</p>
               <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-primary text-xs flex items-center gap-1.5"><Plus className="w-3.5 h-3.5"/>Nuevo descarte</button>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-16 flex flex-col items-center justify-center text-center">
+              <Filter className="w-10 h-10 text-[#1E2D4A] mb-4"/>
+              <p className="text-white font-semibold mb-1">Sin resultados con los filtros</p>
+              <p className="text-[#475569] text-sm mb-4">Ajusta o limpia los filtros para ver registros.</p>
+              <button onClick={() => setFiltros({ ...EMPTY_FILTROS })} className="btn-primary text-xs flex items-center gap-1.5"><X className="w-3.5 h-3.5"/>Limpiar filtros</button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -159,7 +244,7 @@ export default function DescartesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(r => {
+                  {filtered.map(r => {
                     const tTotal = minsBetween(isoToLocalInput(r.horaInicioCargue), isoToLocalInput(r.horaFinDescarga));
                     const rc = RIESGO_COLOR[r.nivelRiesgo] ?? "#94A3B8";
                     const ec = ESTADO_DESCARTE_COLOR[r.estado] ?? "#94A3B8";
@@ -236,6 +321,19 @@ function MiniKpi({ icon, label, value, color }: { icon: React.ReactNode; label: 
         <p className="font-display text-lg font-bold text-white leading-tight truncate">{value}</p>
         <p className="text-[10px] text-[#94A3B8] uppercase tracking-wider">{label}</p>
       </div>
+    </div>
+  );
+}
+
+// Select de filtro (Fase 5): opción "Todos" + valores dinámicos/catálogo.
+function FSel({ label, value, onChange, opts }: { label: string; value: string; onChange: (v: string) => void; opts: readonly string[] }) {
+  return (
+    <div>
+      <label className="text-[10px] text-[#94A3B8] mb-1 block">{label}</label>
+      <select value={value} onChange={e => onChange(e.target.value)} className="w-full bg-[#0D1526] border border-[#1E2D4A] rounded-lg px-3 py-2 text-xs text-white">
+        <option value="">Todos</option>
+        {opts.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
     </div>
   );
 }
