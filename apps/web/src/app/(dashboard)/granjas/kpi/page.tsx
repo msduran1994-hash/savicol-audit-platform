@@ -2300,12 +2300,24 @@ export default function KPIPage() {
             const gIds = new Set(filtered.map(k => k.granjaId).filter(Boolean));
             const hallazgosFiltrados = hallazgos.filter(h => hIds.has(h.id));
             const granjasFiltradas   = granjas.filter(g => gIds.has(g.id));
-            // Genera el PDF NATIVO del modelo con los datos filtrados. Si falla lanza
-            // error (no se abre el envío). El PDF corresponde exactamente al modelo + filtros.
-            const { b64, filename } = await generarPDFNativo(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId);
+            const evidenciasMap = await cargarEvidenciasInforme(Array.from(hIds) as string[], accessToken);
+            // HTML EXACTO del modelo seleccionado (el mismo que "Descargar PDF").
+            const htmlInforme = (() => {
+              switch (modelo) {
+                case "1-ejecutivo": return generarModelo1(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
+                case "2-tecnico":   return generarModelo2(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
+                case "3-dashboard": return generarModelo3(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
+                case "4-granja":    return generarModelo4(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId, evidenciasMap);
+                default:            return generarModelo5(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
+              }
+            })();
+            // Convierte ESE HTML a PDF (html2canvas → jsPDF). Si falla lanza error (no
+            // adjunta HTML). El PDF corresponde exactamente al modelo + filtros seleccionados.
+            const { b64 } = await htmlToPDFBase64(htmlInforme);
             const granja = granjaId ? granjas.find(g => g.id === granjaId) : null;
             setEnvioKPI({
-              b64, filename,
+              b64,
+              filename: `Informe-Auditoria-Savicol-${modelo}-${new Date().toISOString().slice(0, 10)}.pdf`,
               tipo: `KPI · ${MODELOS_INFO[modelo].titulo}`,
               asunto: `Informe de Auditoría — ${MODELOS_INFO[modelo].titulo}${granja ? " · " + granja.nombre : ""} · Pollos Savicol S.A.S.`,
               mensaje: (descripcion?.trim() ? descripcion.trim() + "\n\n" : "") + `Cordial saludo,\n\nAdjunto el Informe de Auditoría (${MODELOS_INFO[modelo].titulo})${granja ? " para la granja " + granja.nombre : " de cumplimiento KPI"}, generado con los filtros activos del módulo.\n\nQuedo atento(a) a sus comentarios.\n\n${auditorNombre}\nControl Interno y Auditoría · Pollos Savicol S.A.S.`,
