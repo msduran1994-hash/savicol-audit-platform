@@ -1557,10 +1557,11 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
     // Reasignar reglas de `body {...}` a un wrapper, ya que el contenido irá en un div
     styleContent = styleContent.replace(/(^|\})\s*body\s*\{/g, "$1 .pdf-root{");
 
-    // Contenedor visible en pantalla (no fuera de viewport) para que html2canvas
-    // renderice correctamente. Se oculta con opacity y se coloca al frente del flujo.
+    // Contenedor FUERA de pantalla pero OPACO. Con opacity:0 html2canvas captura
+    // todo transparente → el PDF sale en blanco. El patrón correcto (usado en el
+    // resto de generadores) es posicionarlo a la izquierda (-10000px) sin opacity.
     container = document.createElement("div");
-    container.style.cssText = "position:fixed;top:0;left:0;width:900px;background:#ffffff;z-index:-9999;opacity:0;pointer-events:none;";
+    container.style.cssText = "position:absolute;top:0;left:-10000px;width:900px;background:#ffffff;z-index:-1;";
 
     const styleEl = document.createElement("style");
     styleEl.textContent = styleContent;
