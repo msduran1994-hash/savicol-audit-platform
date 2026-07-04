@@ -1,8 +1,8 @@
 "use client";
 // ═══════════════════════════════════════════════════════════════════════════════
-// GRANJAS · Trazabilidad · Envío de informe por correo
-// Reutiliza el EmailService del backend (Brevo/Resend/SMTP). El PDF ya viene
-// generado (base64) desde el modal de informe. Sin almacenar contenido del correo.
+// COMPARTIDO · Envío de informe por correo (Granjas: Trazabilidad, Cumplimiento KPI…)
+// Reutiliza el EmailService del backend (Brevo/Resend/SMTP) vía /informes/enviar.
+// El PDF ya viene generado (base64). Sin almacenar contenido del correo.
 // ═══════════════════════════════════════════════════════════════════════════════
 import { useMemo, useRef, useState } from "react";
 import { useEnviarInforme, useEnviosInforme } from "@/hooks/useEnvioInforme";
@@ -16,7 +16,7 @@ const parseEmails = (s: string): string[] => (s || "").split(/[,;\s]+/).map(e =>
 const fmtFechaHora = (iso?: string) => { if (!iso) return "—"; const d = new Date(iso); return isNaN(d.getTime()) ? "—" : d.toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" }); };
 
 export function EnvioCorreoModal({ tipo, filename, pdfBase64, asuntoDefault, mensajeDefault, onClose }: {
-  tipo: "General" | "Ejecutivo"; filename: string; pdfBase64: string;
+  tipo: string; filename: string; pdfBase64: string;
   asuntoDefault: string; mensajeDefault: string; onClose: () => void;
 }) {
   const [to, setTo] = useState("");

@@ -8,6 +8,7 @@ import { ESTADO_KPI, TIPO_RIESGO } from "@/lib/granjas.constants";
 import { AUDITORS } from "@/lib/constants";
 import type { KPI } from "@/lib/granjas.types";
 import { evidenciasGridHTML } from "@/lib/pdf-evidencias";
+import { EnvioCorreoModal } from "@/components/informes/envio-correo";
 import {
   Target, Plus, Filter, X, Trash2, Edit2, AlertCircle,
   Loader2, CheckCircle2, Sparkles, FileText, TrendingUp, Bell, ChevronDown,
@@ -1775,7 +1776,7 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
   resultadosCount?: number;
   onClose:    () => void;
   onGenerar:  (modelo: ModeloInforme, granjaId?: string) => void | Promise<void>;
-  onEnviar:   (modelo: ModeloInforme, email: string, asunto: string, granjaId?: string, descripcion?: string) => Promise<void>;
+  onEnviar:   (modelo: ModeloInforme, granjaId?: string, descripcion?: string) => void | Promise<void>;
 }) {
   const [modeloSel,   setModeloSel]   = useState<ModeloInforme>("5-general");
   const [granjaFiltro,setGranjaFiltro]= useState("");
@@ -1813,13 +1814,14 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
   })();
 
   async function handleEnviar() {
-    if (!emailDest.trim()) return;
     setEnviando(true); setEnviado(null);
     try {
-      await onEnviar(modeloSel, emailDest.trim(), asunto, granjaFiltro || undefined, descripcionCorreo);
-      setEnviado(`✅ Informe enviado a ${emailDest.trim()} · Respuestas → ${auditorStoreEmail}`);
+      // Genera el PDF del modelo (con los filtros) y abre el formulario de envío
+      // (destinatarios/CC/CCO/replyTo/historial) manejado por el page.
+      await onEnviar(modeloSel, granjaFiltro || undefined, descripcionCorreo);
+      onClose();
     } catch(e: any) {
-      setEnviado("✗ Error al enviar: " + (e?.message ?? "desconocido"));
+      setEnviado("✗ No se pudo generar el informe: " + (e?.message ?? "desconocido"));
     } finally {
       setEnviando(false);
     }
@@ -1932,30 +1934,18 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
                   </p>
                 </div>
                 <div>
-                  <span className="text-[10px] text-[#94A3B8] mb-1 block">Destinatario *</span>
-                  <input value={emailDest} onChange={e=>setEmailDest(e.target.value)}
-                    className={INP_STYLE} placeholder="gerencia@empresa.com · dirección evaluada" type="email"/>
-                </div>
-                <div>
-                  <span className="text-[10px] text-[#94A3B8] mb-1 block">Asunto</span>
-                  <input value={asunto} onChange={e=>setAsunto(e.target.value)}
-                    className={INP_STYLE} placeholder="Asunto del correo"/>
-                </div>
-                <div>
-                  <span className="text-[10px] text-[#94A3B8] mb-1 block">Descripción del correo (opcional)</span>
+                  <span className="text-[10px] text-[#94A3B8] mb-1 block">Mensaje del correo (opcional)</span>
                   <textarea value={descripcionCorreo} onChange={e=>setDescripcionCorreo(e.target.value)}
                     rows={3} className={INP_STYLE + " resize-none"}
-                    placeholder="Observaciones, instrucciones o comentarios que deseas incluir en el correo y el informe…"/>
+                    placeholder="Mensaje que acompañará el informe (podrás editarlo y agregar destinatarios, CC y CCO en el siguiente paso)…"/>
                 </div>
                 {enviado && (
-                  <div className={`text-xs px-3 py-2 rounded-lg ${enviado.startsWith("✅")?"bg-green-500/10 text-green-400 border border-green-500/20":"bg-red-500/10 text-red-400 border border-red-500/20"}`}>
-                    {enviado}
-                  </div>
+                  <div className="text-xs px-3 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">{enviado}</div>
                 )}
-                <button onClick={handleEnviar} disabled={enviando || !emailDest.trim()}
+                <button onClick={handleEnviar} disabled={enviando}
                   className="w-full btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center justify-center gap-2 py-2 disabled:opacity-50">
                   {enviando ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Bell className="w-3.5 h-3.5"/>}
-                  {enviando ? "Enviando..." : "Enviar Informe"}
+                  {enviando ? "Generando informe…" : "Continuar al envío →"}
                 </button>
               </div>
             )}
@@ -1997,6 +1987,7 @@ export default function KPIPage() {
   const [saveError, setSaveError]     = useState<string | null>(null);
   const [alertsOpen, setAlertsOpen]   = useState(false);
   const [informeOpen,  setInformeOpen]  = useState(false);
+  const [envioKPI, setEnvioKPI] = useState<{ b64: string; filename: string; tipo: string; asunto: string; mensaje: string } | null>(null);
 
   // ── Filtros superiores ────────────────────────────────────────────────────
   const [fEstado,        setFEstado]        = useState("");
@@ -2302,58 +2293,33 @@ export default function KPIPage() {
             );
             generarInforme(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId, evidenciasMap);
           }}
-          onEnviar={async (modelo, email, asunto, granjaId, descripcion) => {
+          onEnviar={async (modelo, granjaId, descripcion) => {
             const auditorNombre = usuarios?.find((u:any)=>u.role==="AUDITOR")?.name ?? "Auditor Interno";
-            const auditorEmail  = accessToken ? (JSON.parse(atob(accessToken.split(".")[1]||"e30=")).email ?? "") : "";
-
-            // Filtrado coherente: derivar hallazgos y granjas SOLO de los KPIs filtrados
+            // Filtrado coherente: hallazgos y granjas SOLO de los KPIs filtrados
             const hIds = new Set(filtered.map(k => k.hallazgoId).filter(Boolean));
             const gIds = new Set(filtered.map(k => k.granjaId).filter(Boolean));
             const hallazgosFiltrados = hallazgos.filter(h => hIds.has(h.id));
             const granjasFiltradas   = granjas.filter(g => gIds.has(g.id));
-            // Cargar evidencias fotográficas de los hallazgos filtrados
-            const evidenciasMap = await cargarEvidenciasInforme(
-              Array.from(hIds) as string[], accessToken
-            );
-
-            // 1. Generar el HTML exacto del modelo seleccionado
-            //    El mismo HTML que se ve en la plataforma al descargar
-            const htmlInforme = (() => {
-              switch (modelo) {
-                case "1-ejecutivo": return generarModelo1(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
-                case "2-tecnico":   return generarModelo2(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
-                case "3-dashboard": return generarModelo3(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
-                case "4-granja":    return generarModelo4(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId, evidenciasMap);
-                default:            return generarModelo5(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
-              }
-            })();
-
-            // 2. Agregar descripción del auditor al HTML si viene
-            const htmlConDesc = descripcion?.trim()
-              ? htmlInforme.replace(
-                  "</body>",
-                  `<div style="padding:20px 50px;background:#fff;border-top:1px solid #e2e8f0">
-                    <p style="font-size:11px;color:#64748b;font-family:Arial,sans-serif;line-height:1.6">
-                      <strong>Observaciones del Auditor:</strong><br>${descripcion.trim()}
-                    </p>
-                  </div></body>`
-                )
-              : htmlInforme;
-
-            // 3. Generar el PDF con texto NATIVO (jsPDF directo, sin html2canvas).
-            //    Garantiza que el contenido siempre aparezca y sea seleccionable.
-            let pdfBase64 = "";
-            let pdfFilename = `Informe-Auditoria-Savicol-${modelo}-${new Date().toISOString().slice(0,10)}.pdf`;
-            // Si falla la generación, generarPDFNativo lanza error y NO se envía
-            // un HTML como si fuera PDF. El error se propaga al usuario.
-            const { b64, filename: fn } = await generarPDFNativo(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId);
-            pdfBase64  = b64;
-            pdfFilename = fn;
-
-            // 2. Enviar correo con PDF adjunto
-            const r = await enviarInformePorCorreo(modelo, email, asunto, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, accessToken||"", auditorEmail, granjaId, descripcion, pdfBase64, pdfFilename);
-            if (!r.ok) throw new Error(r.message);
+            // Genera el PDF NATIVO del modelo con los datos filtrados. Si falla lanza
+            // error (no se abre el envío). El PDF corresponde exactamente al modelo + filtros.
+            const { b64, filename } = await generarPDFNativo(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId);
+            const granja = granjaId ? granjas.find(g => g.id === granjaId) : null;
+            setEnvioKPI({
+              b64, filename,
+              tipo: `KPI · ${MODELOS_INFO[modelo].titulo}`,
+              asunto: `Informe de Auditoría — ${MODELOS_INFO[modelo].titulo}${granja ? " · " + granja.nombre : ""} · Pollos Savicol S.A.S.`,
+              mensaje: (descripcion?.trim() ? descripcion.trim() + "\n\n" : "") + `Cordial saludo,\n\nAdjunto el Informe de Auditoría (${MODELOS_INFO[modelo].titulo})${granja ? " para la granja " + granja.nombre : " de cumplimiento KPI"}, generado con los filtros activos del módulo.\n\nQuedo atento(a) a sus comentarios.\n\n${auditorNombre}\nControl Interno y Auditoría · Pollos Savicol S.A.S.`,
+            });
           }}
+        />
+      )}
+
+      {/* Envío por correo del informe KPI (reutiliza la infra de /informes/enviar) */}
+      {envioKPI && (
+        <EnvioCorreoModal
+          tipo={envioKPI.tipo} filename={envioKPI.filename} pdfBase64={envioKPI.b64}
+          asuntoDefault={envioKPI.asunto} mensajeDefault={envioKPI.mensaje}
+          onClose={() => setEnvioKPI(null)}
         />
       )}
 

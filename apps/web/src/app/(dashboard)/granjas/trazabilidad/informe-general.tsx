@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import { X, FileText, Download, Loader2, Building2, Calendar, Hash, User, Mail } from "lucide-react";
 import { LOGO_SAVICOL } from "../../cedis/cumplimiento/savicol-logo";
 import { evidenciasGridHTML, type FotoPDF } from "@/lib/pdf-evidencias";
-import { EnvioCorreoModal } from "./envio-correo";
+import { EnvioCorreoModal } from "@/components/informes/envio-correo";
 import { apiGet } from "@/lib/api";
 import { leerMetaFoto, calcularCumplimiento, type LoteItem, type ChecklistData, type Muestreo } from "@/hooks/useLotes";
 
