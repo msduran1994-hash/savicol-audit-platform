@@ -902,6 +902,27 @@ model EvidenciaEvaluacion {
   @@index([evaluacionId])
 }
 
+// Historial de envíos de informes por correo (Granjas → Trazabilidad). Solo el
+// estado del envío; NO se almacena el contenido del correo ni el PDF.
+model EnvioInforme {
+  id             String   @id @default(cuid())
+  tipo           String   // General | Ejecutivo
+  asunto         String?
+  destinatarios  String?  // separados por coma
+  cc             String?
+  cco            String?
+  remitente      String?  // nombre del usuario autenticado
+  remitenteEmail String?  // correo (replyTo)
+  estado         String   // Enviado | Error | NO-OP
+  modo           String?  // brevo | resend | smtp | noop
+  messageId      String?
+  mensajeError   String?
+  createdBy      String?
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MÓDULO SETTINGS · Configuración global key/value
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -13,6 +13,7 @@ import { CedisModule } from "./cedis/cedis.module";
 import { InventarioModule } from "./inventario/inventario.module";
 import { InventariosModule } from "./inventarios/inventarios.module";
 import { EvaluacionesModule } from "./evaluaciones/evaluaciones.module";
+import { InformesModule } from "./informes/informes.module";
 import { DocumentosModule } from "./documentos/documentos.module";
 import { EvidenciasModule } from "./evidencias/evidencias.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
@@ -53,6 +54,7 @@ import { AuditLogsModule } from "./audit-logs/audit-logs.module";
     InventarioModule,
     InventariosModule,
     EvaluacionesModule,
+    InformesModule,
     DocumentosModule,
     EvidenciasModule,
     DashboardModule,

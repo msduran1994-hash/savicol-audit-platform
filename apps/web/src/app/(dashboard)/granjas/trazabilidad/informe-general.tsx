@@ -1,8 +1,9 @@
 "use client";
 import { useState, useMemo } from "react";
-import { X, FileText, Download, Loader2, Building2, Calendar, Hash, User } from "lucide-react";
+import { X, FileText, Download, Loader2, Building2, Calendar, Hash, User, Mail } from "lucide-react";
 import { LOGO_SAVICOL } from "../../cedis/cumplimiento/savicol-logo";
 import { evidenciasGridHTML, type FotoPDF } from "@/lib/pdf-evidencias";
+import { EnvioCorreoModal } from "./envio-correo";
 import { apiGet } from "@/lib/api";
 import { leerMetaFoto, calcularCumplimiento, type LoteItem, type ChecklistData, type Muestreo } from "@/hooks/useLotes";
 
@@ -99,7 +100,7 @@ function renderChecklist(c: ChecklistData): string {
 // ── PDF (jsPDF + html2canvas) · márgenes ICONTEC + paginado inteligente ─────
 // Márgenes (mm) ~ NTC 1486: superior 3, inferior 3, izquierdo 3, derecho 2.
 const MARGEN = { top: 30, bottom: 30, left: 30, right: 20 };
-async function generarPDF(html: string, filename: string, opts?: { pageNumbers?: boolean }): Promise<void> {
+async function generarPDF(html: string, filename: string, opts?: { pageNumbers?: boolean; returnBase64?: boolean }): Promise<string | void> {
   const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
   let cont: HTMLDivElement | null = document.createElement("div");
   cont.style.cssText = "position:absolute;top:0;left:-10000px;width:794px;background:#fff;z-index:-1;";
@@ -145,6 +146,10 @@ async function generarPDF(html: string, filename: string, opts?: { pageNumbers?:
         pdf.setPage(i); pdf.setFont("times", "normal"); pdf.setFontSize(9); pdf.setTextColor(120, 130, 145);
         pdf.text(`Página ${i} de ${total}`, pageW - MARGEN.right, pageH - 12, { align: "right" });
       }
+    }
+    if (opts?.returnBase64) {
+      // Devuelve el base64 (sin el prefijo data:...;base64,) para adjuntarlo al correo.
+      return pdf.output("datauristring").split(",")[1] ?? "";
     }
     pdf.save(filename);
   } finally { if (cont?.parentNode) document.body.removeChild(cont); cont = null; }
@@ -727,8 +732,9 @@ export function InformeEjecutivoModal({ lotes, granjas, usuario, onClose }: {
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
   const [fase, setFase] = useState<"idle" | "fotos" | "pdf">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [envio, setEnvio] = useState<{ base64: string; filename: string } | null>(null);
 
-  async function exportar() {
+  async function exportar(modo: "descargar" | "correo" = "descargar") {
     if (lotes.length === 0) { setError("No hay lotes en el alcance (ajusta los filtros)."); return; }
     if (!form.numeroInforme.trim()) { setError("Indica el número de informe."); return; }
     setError(null);
@@ -737,8 +743,14 @@ export function InformeEjecutivoModal({ lotes, granjas, usuario, onClose }: {
       const { fotosByLoteGalpon, checklistsByGranja } = await cargarDatosInforme(lotes);
       setFase("pdf");
       const html = construirInformeEjecutivo({ form, lotes, fotosByLoteGalpon, checklistsByGranja, usuario });
-      await generarPDF(html, `Informe-Ejecutivo-${(granjasSet[0] || "Granjas").replace(/\s+/g, "-")}-${hoy}.pdf`, { pageNumbers: true });
-      onClose();
+      const filename = `Informe-Ejecutivo-${(granjasSet[0] || "Granjas").replace(/\s+/g, "-")}-${hoy}.pdf`;
+      if (modo === "correo") {
+        const base64 = await generarPDF(html, filename, { pageNumbers: true, returnBase64: true }) as string;
+        setEnvio({ base64, filename });
+      } else {
+        await generarPDF(html, filename, { pageNumbers: true });
+        onClose();
+      }
     } catch (e: any) {
       setError("Error al generar el informe: " + (e?.message ?? "desconocido"));
     } finally { setFase("idle"); }
@@ -781,13 +793,26 @@ export function InformeEjecutivoModal({ lotes, granjas, usuario, onClose }: {
 
         <footer className="shrink-0 flex items-center justify-end gap-2 px-6 py-4 border-t border-[#1E2D4A]">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs text-[#94A3B8] hover:text-white" disabled={generando}>Cancelar</button>
-          <button onClick={exportar} disabled={generando || lotes.length === 0}
+          <button onClick={() => exportar("correo")} disabled={generando || lotes.length === 0}
+            className="px-4 py-2 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-200 text-xs font-bold flex items-center gap-2 hover:bg-emerald-600/30 disabled:opacity-40">
+            {generando ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Mail className="w-3.5 h-3.5"/>}Enviar por correo
+          </button>
+          <button onClick={() => exportar("descargar")} disabled={generando || lotes.length === 0}
             className="px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-[#0A111F] text-xs font-bold flex items-center gap-2 disabled:opacity-40">
             {generando ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Download className="w-3.5 h-3.5"/>}
             {fase === "fotos" ? "Procesando evidencias…" : fase === "pdf" ? "Construyendo PDF…" : "Generar Ejecutivo"}
           </button>
         </footer>
       </div>
+
+      {envio && (
+        <EnvioCorreoModal
+          tipo="Ejecutivo" filename={envio.filename} pdfBase64={envio.base64}
+          asuntoDefault={`Informe Ejecutivo de Auditoría ${form.numeroInforme} · ${granjasSet[0] || "Granjas"}`}
+          mensajeDefault={`Cordial saludo,\n\nAdjunto el Informe Ejecutivo de Auditoría (${form.numeroInforme}) correspondiente a ${granjasSet.join(", ") || "las granjas evaluadas"}, con fecha de emisión ${form.fechaEmision}.\n\nQuedo atento(a) a sus comentarios.\n\n${usuario}\nControl Interno y Auditoría · Pollos Savicol S.A.S.`}
+          onClose={() => setEnvio(null)}
+        />
+      )}
     </div>
   );
 }
@@ -815,8 +840,9 @@ export function InformeGeneralModal({ lotes, granjas, usuario, onClose }: {
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
   const [fase, setFase] = useState<"idle" | "fotos" | "pdf">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [envio, setEnvio] = useState<{ base64: string; filename: string } | null>(null);
 
-  async function exportar() {
+  async function exportar(modo: "descargar" | "correo" = "descargar") {
     if (lotes.length === 0) { setError("No hay lotes en el alcance (ajusta los filtros)."); return; }
     if (!form.numeroInforme.trim()) { setError("Indica el número de informe."); return; }
     setError(null);
@@ -857,8 +883,14 @@ export function InformeGeneralModal({ lotes, granjas, usuario, onClose }: {
       // 2) Construir HTML y generar PDF
       setFase("pdf");
       const html = construirInforme({ form, lotes, fotosByLoteGalpon, checklistsByGranja, usuario });
-      await generarPDF(html, `Informe-General-${(granjasSet[0] || "Granjas").replace(/\s+/g, "-")}-${hoy}.pdf`);
-      onClose();
+      const filename = `Informe-General-${(granjasSet[0] || "Granjas").replace(/\s+/g, "-")}-${hoy}.pdf`;
+      if (modo === "correo") {
+        const base64 = await generarPDF(html, filename, { returnBase64: true }) as string;
+        setEnvio({ base64, filename });
+      } else {
+        await generarPDF(html, filename);
+        onClose();
+      }
     } catch (e: any) {
       setError("Error al generar el informe: " + (e?.message ?? "desconocido"));
     } finally { setFase("idle"); }
@@ -901,13 +933,26 @@ export function InformeGeneralModal({ lotes, granjas, usuario, onClose }: {
 
         <footer className="shrink-0 flex items-center justify-end gap-2 px-6 py-4 border-t border-[#1E2D4A]">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs text-[#94A3B8] hover:text-white" disabled={generando}>Cancelar</button>
-          <button onClick={exportar} disabled={generando || lotes.length === 0}
+          <button onClick={() => exportar("correo")} disabled={generando || lotes.length === 0}
+            className="px-4 py-2 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-200 text-xs font-bold flex items-center gap-2 hover:bg-emerald-600/30 disabled:opacity-40">
+            {generando ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Mail className="w-3.5 h-3.5"/>}Enviar por correo
+          </button>
+          <button onClick={() => exportar("descargar")} disabled={generando || lotes.length === 0}
             className="px-5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[#0A111F] text-xs font-bold flex items-center gap-2 disabled:opacity-40">
             {generando ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Download className="w-3.5 h-3.5"/>}
             {fase === "fotos" ? "Procesando evidencias…" : fase === "pdf" ? "Construyendo PDF…" : "Generar Informe"}
           </button>
         </footer>
       </div>
+
+      {envio && (
+        <EnvioCorreoModal
+          tipo="General" filename={envio.filename} pdfBase64={envio.base64}
+          asuntoDefault={`Informe General de Auditoría ${form.numeroInforme} · ${granjasSet[0] || "Granjas"}`}
+          mensajeDefault={`Cordial saludo,\n\nAdjunto el Informe General de Auditoría (${form.numeroInforme}) — ${form.area} — correspondiente a ${granjasSet.join(", ") || "las granjas evaluadas"}, con fecha de emisión ${form.fechaEmision}.\n\nQuedo atento(a) a sus comentarios.\n\n${usuario}\nControl Interno y Auditoría · Pollos Savicol S.A.S.`}
+          onClose={() => setEnvio(null)}
+        />
+      )}
     </div>
   );
 }
