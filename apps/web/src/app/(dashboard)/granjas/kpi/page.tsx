@@ -190,7 +190,7 @@ function porcentaje(kpis: any[]) {
 // ─── CSS compartido ───────────────────────────────────────────────────────────
 const CSS_BASE = `
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Times New Roman', Times, serif;color:#1a202c;font-size:13px;background:#fff}
+body{font-family:'Times New Roman', Times, serif;color:#1a202c;font-size:14px;background:#fff}
 .page{max-width:900px;margin:0 auto;padding:0}
 
 /* Portada */
@@ -217,10 +217,8 @@ body{font-family:'Times New Roman', Times, serif;color:#1a202c;font-size:13px;ba
 /* Secciones */
 .section{padding:28px 50px;border-bottom:1px solid #edf2f7}
 .section:last-child{border-bottom:none}
-.section-title{font-size:14px;font-weight:700;color:#0D1526;margin:0 0 16px;
-  display:flex;align-items:center;gap:8px;line-height:1.5;padding-top:6px;min-height:26px}
-.section-title::before{content:'';display:block;width:4px;height:18px;flex-shrink:0;
-  background:linear-gradient(#C41230,#F59E0B);border-radius:2px}
+.section-title{font-size:15px;font-weight:700;color:#0D1526;margin:0 0 16px;
+  padding:10px 0 8px 12px;line-height:1.6;border-left:4px solid #C41230;overflow:visible}
 
 /* KPI Cards resumen */
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:4px}
@@ -236,7 +234,7 @@ body{font-family:'Times New Roman', Times, serif;color:#1a202c;font-size:13px;ba
 .progress-pct{font-size:11px;font-weight:600;color:#1a202c;min-width:35px;text-align:right}
 
 /* Tabla hallazgos */
-table{width:100%;border-collapse:collapse;font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:13px}
 th{background:#0D1526;color:white;padding:8px 10px;text-align:left;font-size:10px;font-weight:600}
 td{padding:7px 10px;border-bottom:1px solid #f0f4f8;vertical-align:top}
 tr:nth-child(even) td{background:#f9fafb}
@@ -392,7 +390,7 @@ function biResumenEjecutivo(kpis: any[]): string {
     ${cards.map(cd => `
       <div style="background:#fff;border:1px solid #e2e8f0;border-top:3px solid ${cd.color};border-radius:8px;padding:12px 8px;text-align:center">
         <div style="font-size:24px;font-weight:800;color:${cd.color};line-height:1">${cd.val}</div>
-        <div style="font-size:8.5px;color:#64748b;margin-top:4px;text-transform:uppercase;letter-spacing:0.3px;font-weight:600">${cd.label}</div>
+        <div style="font-size:11px;color:#64748b;margin-top:4px;text-transform:uppercase;letter-spacing:0.3px;font-weight:600">${cd.label}</div>
       </div>`).join("")}
   </div>`;
 }
@@ -906,7 +904,7 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
       ${tarjetas.map(k => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:3px solid ${k.c};border-radius:8px;padding:12px 8px;text-align:center">
         <div style="font-size:20px;font-weight:800;color:${k.c}">${k.v}</div>
-        <div style="font-size:9px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.3px">${k.l}</div></div>`).join("")}
+        <div style="font-size:11px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.3px">${k.l}</div></div>`).join("")}
     </div>
     <table><thead><tr><th>Granja</th><th style="text-align:right">Ingresadas</th><th style="text-align:right">Actuales</th><th style="text-align:right">Muertes</th><th style="text-align:right">% Mort.</th></tr></thead>
     <tbody>${filas}</tbody></table>
@@ -977,7 +975,7 @@ function seccionMetodologia(kpis: any[], hallazgos: any[], granjas: any[]): stri
   const nG = granjas.length, nH = hallazgos.length, nK = kpis.length;
   const rango = _rangoFechas([...hallazgos, ...kpis]);
   const bloque = (t: string, c: string) =>
-    `<div style="margin-bottom:11px;page-break-inside:avoid"><div style="font-size:12px;font-weight:800;color:#0D1526;margin-bottom:3px">${t}</div><div style="font-size:12px;line-height:1.65;color:#475569;text-align:justify">${c}</div></div>`;
+    `<div style="margin-bottom:11px;page-break-inside:avoid"><div style="font-size:12px;font-weight:800;color:#0D1526;margin-bottom:3px">${t}</div><div style="font-size:13px;line-height:1.65;color:#475569;text-align:justify">${c}</div></div>`;
   return `<div class="section"><div class="section-title">Marco Metodológico de la Auditoría</div>
     ${bloque("1. Introducción", `El presente informe consolida los resultados de la auditoría interna de cumplimiento KPI ejecutada por el área de ${EMPRESA.area} de ${EMPRESA.nombre} (NIT ${EMPRESA.nit}). El ejercicio se orientó a verificar el estado de los planes de acción derivados de los hallazgos de auditoría en las granjas avícolas evaluadas y a valorar el nivel de exposición al riesgo asociado.`)}
     ${bloque("2. Objetivos", `Verificar el grado de avance y cierre de los ${nK} plan(es) de acción registrados; evaluar la severidad y el estado de los ${nH} hallazgo(s) identificados; y entregar a la Gerencia una visión objetiva del nivel de cumplimiento y de los riesgos residuales que requieren atención prioritaria.`)}
@@ -995,7 +993,7 @@ function seccionMarcoLegal(marcoLegal?: string): string {
     ? marcoLegal.trim().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>")
     : `<em style="color:#94a3b8">El marco legal aplicable no fue especificado para este informe. En el formulario de generación (campo "Marco legal aplicable") puede indicarse la normatividad sanitaria, ambiental y de bioseguridad vigente que aplique al alcance auditado.</em>`;
   return `<div class="section"><div class="section-title">Marco Legal Aplicable</div>
-    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #4A7AFF;border-radius:6px;padding:12px 14px;font-size:12px;line-height:1.7;color:#334155;text-align:justify">${cuerpo}</div></div>`;
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #4A7AFF;border-radius:6px;padding:12px 14px;font-size:13px;line-height:1.7;color:#334155;text-align:justify">${cuerpo}</div></div>`;
 }
 
 // Evaluación de riesgos + observaciones/causas/efectos/controles
@@ -1013,7 +1011,7 @@ function seccionRiesgos(hallazgos: any[]): string {
       <td style="text-align:center"><span class="badge" style="background:${color}1f;color:${color};border-color:${color}55">${nivel}</span></td></tr>`;
   }).join("");
   const bloque = (t: string, c: string) =>
-    `<div style="margin-bottom:9px"><div style="font-size:12px;font-weight:800;color:#0D1526;margin-bottom:2px">${t}</div><div style="font-size:12px;line-height:1.6;color:#475569;text-align:justify">${c}</div></div>`;
+    `<div style="margin-bottom:9px"><div style="font-size:12px;font-weight:800;color:#0D1526;margin-bottom:2px">${t}</div><div style="font-size:13px;line-height:1.6;color:#475569;text-align:justify">${c}</div></div>`;
   return `<div class="section"><div class="section-title">Evaluación de Riesgos</div>
     <table style="margin-bottom:12px"><thead><tr><th>Tipo de riesgo</th><th style="text-align:center">Hallazgos asociados</th><th style="text-align:center">Nivel de exposición</th></tr></thead>
     <tbody>${filas}</tbody></table>
@@ -1064,7 +1062,7 @@ function seccionFortalezas(kpis: any[], hallazgos: any[]): string {
   items.push(`El sistema de auditoría mantiene trazabilidad completa: hallazgo → plan de acción → evidencia → seguimiento.`);
   items.push(`La verificación se soporta en evidencias fotográficas cargadas por los responsables de cada granja.`);
   return `<div class="section"><div class="section-title">Fortalezas Identificadas</div>
-    <ul style="font-size:12px;line-height:1.8;color:#334155;padding-left:18px;margin:0">${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`;
+    <ul style="font-size:13px;line-height:1.8;color:#334155;padding-left:18px;margin:0">${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`;
 }
 
 // Recomendaciones
@@ -1077,7 +1075,7 @@ function seccionRecomendaciones(kpis: any[], hallazgos: any[]): string {
   recs.push(`Mantener el cargue oportuno de evidencias fotográficas como soporte del cierre de cada plan.`);
   recs.push(`Programar auditorías de seguimiento sobre las granjas con mayor nivel de riesgo.`);
   return `<div class="section"><div class="section-title">Recomendaciones</div>
-    <ol style="font-size:12px;line-height:1.8;color:#334155;padding-left:18px;margin:0">${recs.map(r => `<li>${r}</li>`).join("")}</ol></div>`;
+    <ol style="font-size:13px;line-height:1.8;color:#334155;padding-left:18px;margin:0">${recs.map(r => `<li>${r}</li>`).join("")}</ol></div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1119,7 +1117,7 @@ function chartCard(num: number, titulo: string, contenido: string, subtitulo = "
   return `<div class="chart-box" style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;page-break-inside:avoid">
     <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:10px">
       <span style="background:#4A7AFF;color:#fff;font-size:9px;font-weight:800;min-width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${num}</span>
-      <div><div style="font-size:12px;font-weight:700;color:#0D1526">${titulo}</div>${subtitulo ? `<div style="font-size:8.5px;color:#94a3b8">${subtitulo}</div>` : ""}</div>
+      <div><div style="font-size:13px;font-weight:700;color:#0D1526">${titulo}</div>${subtitulo ? `<div style="font-size:10px;color:#94a3b8">${subtitulo}</div>` : ""}</div>
     </div>
     ${contenido}
   </div>`;
@@ -1163,7 +1161,7 @@ function biBarrasApiladas(kpis: any[], granjas: any[]): string {
       <div style="display:flex;height:14px;border-radius:4px;overflow:hidden;background:#f1f5f9">${segs}</div>
     </div>`;
   }).join("");
-  const leyenda = BI_ORDEN.map(e => `<span style="display:inline-flex;align-items:center;gap:4px;font-size:8.5px;color:#475569"><span style="width:9px;height:9px;border-radius:2px;background:${BI_COLORS[e]}"></span>${e}</span>`).join("");
+  const leyenda = BI_ORDEN.map(e => `<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#475569"><span style="width:9px;height:9px;border-radius:2px;background:${BI_COLORS[e]}"></span>${e}</span>`).join("");
   return `${rows}<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9">${leyenda}</div>`;
 }
 
@@ -1213,7 +1211,7 @@ function seccionDashboardCompleto(kpis: any[], hallazgos: any[], granjas: any[])
   })).filter(g=>g.kpis.length>0).slice(0,8);
   return `
 <div class="section">
-  <div class="section-title">Tablero Visual · Cumplimiento KPI <span style="font-size:9px;font-weight:400;color:#94a3b8">(10 visualizaciones · datos filtrados)</span></div>
+  <div class="section-title">Tablero Visual · Cumplimiento KPI <span style="font-size:11px;font-weight:400;color:#94a3b8">(10 visualizaciones · datos filtrados)</span></div>
 
   ${chartCard(1, "Indicadores de Cumplimiento", biResumenEjecutivo(kpis), "Tarjetas de indicadores")}
 
@@ -1256,7 +1254,7 @@ function generarModelo3(kpis: any[], hallazgos: any[], granjas: any[], auditor: 
 .metric{background:white;border-radius:8px;padding:10px;text-align:center;
   border:1px solid #e2e8f0}
 .metric-n{font-size:22px;font-weight:800}
-.metric-l{font-size:9px;color:#64748b}
+.metric-l{font-size:11px;color:#64748b}
 </style></head><body><div class="page">
 ${portada("Dashboard de Auditoría", "Visualización Ejecutiva de KPIs · Pollos Savicol S.A.S.", kpis, hallazgos, auditor, undefined, datos)}
 
@@ -1378,7 +1376,7 @@ ${seccionFortalezas(kpis, hallazgos)}
 <div class="divider">VIII — Conclusiones y Recomendaciones</div>
 <div class="section">
   <div class="section-title">Conclusiones Generales</div>
-  <div style="font-size:12px;line-height:1.8;color:#475569">
+  <div style="font-size:13px;line-height:1.8;color:#475569">
     <p>El Sistema de Gestión de Auditoría Interna de <strong>${EMPRESA.nombre}</strong> registra
     un avance global del <strong style="color:${pct>=70?"#22C55E":pct>=40?"#F97316":"#EF4444"}">${pct}%</strong>
     en sus planes de acción KPI, con <strong>${kpis.filter(k=>k.estado==="COMPLETADO").length}</strong>
@@ -1587,7 +1585,17 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
     let pageVacia = true;
 
     const capturar = (el: HTMLElement) =>
-      html2canvas(el, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: "#ffffff", logging: false, windowWidth: 900 });
+      html2canvas(el, {
+        scale: 2, useCORS: true, allowTaint: true, backgroundColor: "#ffffff", logging: false, windowWidth: 900,
+        // Seguro anti-recorte: añade un colchón superior/inferior al clon capturado
+        // para que html2canvas no corte la primera/última línea (títulos incluidos).
+        onclone: (_doc: Document, clone: HTMLElement) => {
+          try {
+            clone.style.paddingTop = (parseFloat(getComputedStyle(el).paddingTop || "0") + 6) + "px";
+            clone.style.paddingBottom = (parseFloat(getComputedStyle(el).paddingBottom || "0") + 4) + "px";
+          } catch { /* noop */ }
+        },
+      });
     const nuevaPagina = () => { pdf.addPage(); y = mTop; pageVacia = true; };
 
     // Coloca un canvas preservando su proporción (centrado según el ancho real del
