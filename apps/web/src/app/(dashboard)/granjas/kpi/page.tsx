@@ -1256,42 +1256,15 @@ function biEmbudo(kpis: any[]): string {
   }).join("");
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MODELO 3 — DASHBOARD VISUAL (reestructurado · 10 tipos de gráfico)
-// ═══════════════════════════════════════════════════════════════════════════════
-function generarModelo3(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
-  // Avance por granja (top 8, solo con KPIs)
+// ── Tablero Visual completo (10 tipos de gráfico) — reutilizable en Modelos 3 y 5 ──
+function seccionDashboardCompleto(kpis: any[], hallazgos: any[], granjas: any[]): string {
+  if (!kpis.length) return "";
   const granjasConAvance = granjas.map(g => ({
     nombre: g.nombre,
     kpis: kpis.filter(k=>k.granjaId===g.id),
     avance: porcentaje(kpis.filter(k=>k.granjaId===g.id)),
   })).filter(g=>g.kpis.length>0).slice(0,8);
-
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Dashboard Auditoría — Pollos Savicol S.A.S.</title>
-<style>${CSS_BASE}
-.dash-header{background:linear-gradient(90deg,#0D1526,#1a2d4a);padding:16px 20px;
-  display:flex;justify-content:space-between;align-items:center;margin-bottom:0}
-.metric-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:16px 50px;
-  background:#f1f5f9;border-bottom:1px solid #e2e8f0}
-.metric{background:white;border-radius:8px;padding:10px;text-align:center;
-  border:1px solid #e2e8f0}
-.metric-n{font-size:22px;font-weight:800}
-.metric-l{font-size:9px;color:#64748b}
-</style></head><body><div class="page">
-${portada("Dashboard de Auditoría", "Visualización Ejecutiva de KPIs · Pollos Savicol S.A.S.", kpis, hallazgos, auditor)}
-
-<div class="metric-grid">
-  ${[
-    {n:kpis.length,            l:"KPIs Total",         c:"#4A7AFF"},
-    {n:hallazgos.length,       l:"Hallazgos",          c:"#F97316"},
-    {n:granjas.length,         l:"Granjas",            c:"#8B5CF6"},
-    {n:porcentaje(kpis)+"%",   l:"Avance Global",      c:"#22C55E"},
-    {n:hallazgos.filter(h=>h.estado==="ABIERTO").length, l:"Abiertos",  c:"#EF4444"},
-    {n:hallazgos.filter(h=>h.estado==="CERRADO").length, l:"Cerrados",  c:"#22C55E"},
-  ].map(m=>`<div class="metric"><div class="metric-n" style="color:${m.c}">${m.n}</div><div class="metric-l">${m.l}</div></div>`).join("")}
-</div>
-
+  return `
 <div class="section">
   <div class="section-title">Tablero Visual · Cumplimiento KPI <span style="font-size:9px;font-weight:400;color:#94a3b8">(10 visualizaciones · datos filtrados)</span></div>
 
@@ -1319,7 +1292,39 @@ ${portada("Dashboard de Auditoría", "Visualización Ejecutiva de KPIs · Pollos
   <div style="margin-top:14px">
     ${chartCard(10, "Matriz Riesgos vs Estado KPI", biRiesgosVsEstado(kpis, hallazgos), "Mapa de calor")}
   </div>
+</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODELO 3 — DASHBOARD VISUAL (reestructurado · 10 tipos de gráfico)
+// ═══════════════════════════════════════════════════════════════════════════════
+function generarModelo3(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Dashboard Auditoría — Pollos Savicol S.A.S.</title>
+<style>${CSS_BASE}
+.dash-header{background:linear-gradient(90deg,#0D1526,#1a2d4a);padding:16px 20px;
+  display:flex;justify-content:space-between;align-items:center;margin-bottom:0}
+.metric-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:16px 50px;
+  background:#f1f5f9;border-bottom:1px solid #e2e8f0}
+.metric{background:white;border-radius:8px;padding:10px;text-align:center;
+  border:1px solid #e2e8f0}
+.metric-n{font-size:22px;font-weight:800}
+.metric-l{font-size:9px;color:#64748b}
+</style></head><body><div class="page">
+${portada("Dashboard de Auditoría", "Visualización Ejecutiva de KPIs · Pollos Savicol S.A.S.", kpis, hallazgos, auditor)}
+
+<div class="metric-grid">
+  ${[
+    {n:kpis.length,            l:"KPIs Total",         c:"#4A7AFF"},
+    {n:hallazgos.length,       l:"Hallazgos",          c:"#F97316"},
+    {n:granjas.length,         l:"Granjas",            c:"#8B5CF6"},
+    {n:porcentaje(kpis)+"%",   l:"Avance Global",      c:"#22C55E"},
+    {n:hallazgos.filter(h=>h.estado==="ABIERTO").length, l:"Abiertos",  c:"#EF4444"},
+    {n:hallazgos.filter(h=>h.estado==="CERRADO").length, l:"Cerrados",  c:"#22C55E"},
+  ].map(m=>`<div class="metric"><div class="metric-n" style="color:${m.c}">${m.n}</div><div class="metric-l">${m.l}</div></div>`).join("")}
 </div>
+
+${seccionDashboardCompleto(kpis, hallazgos, granjas)}
 
 <div class="section">
   <div class="section-title">Hallazgos Prioritarios</div>
@@ -1422,9 +1427,14 @@ ${footer()}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MODELO 5 — INFORME GENERAL COMBINADO
+// MODELO 5 — INFORME GENERAL COMPLETO (documento unificado de Gerencia)
+// Combina el marco metodológico/legal (Fase 2), el tablero de 10 gráficos (Fase 3),
+// evaluación de riesgos, ficha técnica y consolidado (mortalidad real + KPI).
 // ═══════════════════════════════════════════════════════════════════════════════
-function generarModelo5(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
+function generarModelo5(
+  kpis: any[], hallazgos: any[], granjas: any[], auditor: string,
+  evidenciasPorHallazgo?: Record<string, any[]>, marcoLegal?: string, mortalidad?: MortalidadResumen
+): string {
   const total = kpis.length;
   const pct   = porcentaje(kpis);
 
@@ -1443,32 +1453,43 @@ ${portada(`Informe General de Auditoría N° ${num}`, "Evaluación Integral · T
 <div class="section">
   <div class="section-title">Estructura del Informe</div>
   ${[
-    "I.   Resumen Ejecutivo (Modelo 1)",
-    "II.  Análisis Visual Dashboard (Modelo 3)",
-    "III. Hallazgos Completos — Tabla Técnica (Modelo 2)",
-    "IV.  Gestión KPI Detallada — Planes de Acción (Modelo 2)",
-    "V.   Análisis por Granja (Modelo 4)",
-    "VI.  Conclusiones y Recomendaciones",
-    "VII. Firma y Certificación",
+    "I.    Marco Metodológico y Legal",
+    "II.   Resumen Ejecutivo y Tablero Visual (10 gráficos)",
+    "III.  Evaluación de Riesgos",
+    "IV.   Hallazgos Identificados",
+    "V.    Gestión KPI · Planes de Acción",
+    "VI.   Ficha Técnica y Análisis por Granja",
+    "VII.  Consolidado de Resultados (alimento · mortalidad · KPI)",
+    "VIII. Conclusiones y Recomendaciones",
+    "IX.   Trazabilidad Detallada y Firma",
   ].map(s=>`<div style="padding:4px 0;font-size:11px;color:#475569;border-bottom:1px dotted #e2e8f0">${s}</div>`).join("")}
 </div>
 
-<!-- I. RESUMEN EJECUTIVO -->
-<div class="divider">I — Resumen Ejecutivo</div>
+<!-- I. MARCO METODOLÓGICO Y LEGAL -->
+<div class="divider">I — Marco Metodológico y Legal</div>
+${seccionMetodologia(kpis, hallazgos, granjas)}
+${seccionMarcoLegal(marcoLegal)}
+
+<!-- II. RESUMEN EJECUTIVO Y TABLERO VISUAL -->
+<div class="divider">II — Resumen Ejecutivo y Tablero Visual</div>
 ${seccionResumen(kpis, hallazgos)}
+${seccionDashboardCompleto(kpis, hallazgos, granjas)}
 
-${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
+<!-- III. EVALUACIÓN DE RIESGOS -->
+<div class="divider">III — Evaluación de Riesgos</div>
+${seccionRiesgos(hallazgos)}
 
-<!-- II. HALLAZGOS COMPLETOS -->
-<div class="divider">II — Hallazgos Identificados</div>
+<!-- IV. HALLAZGOS COMPLETOS -->
+<div class="divider">IV — Hallazgos Identificados</div>
 ${seccionHallazgos(hallazgos, granjas, 20)}
 
-<!-- III. KPIs DETALLADOS -->
-<div class="divider">III — Gestión KPI · Planes de Acción</div>
+<!-- V. KPIs DETALLADOS -->
+<div class="divider">V — Gestión KPI · Planes de Acción</div>
 ${seccionKPIs(kpis, granjas, hallazgos)}
 
-<!-- IV. ANÁLISIS POR GRANJA -->
-<div class="divider">IV — Análisis por Granja</div>
+<!-- VI. FICHA TÉCNICA Y ANÁLISIS POR GRANJA -->
+<div class="divider">VI — Ficha Técnica y Análisis por Granja</div>
+${seccionFichaTecnica(granjas)}
 <div class="section">
   <div class="section-title">Avance por Granja Evaluada</div>
   ${granjas.filter(g=>kpis.some(k=>k.granjaId===g.id)).slice(0,10).map(g=>{
@@ -1495,8 +1516,13 @@ ${seccionKPIs(kpis, granjas, hallazgos)}
   }).join("")}
 </div>
 
-<!-- V. CONCLUSIONES -->
-<div class="divider">V — Conclusiones y Recomendaciones</div>
+<!-- VII. CONSOLIDADO DE RESULTADOS -->
+<div class="divider">VII — Consolidado de Resultados</div>
+${seccionConsolidado(kpis, granjas, mortalidad)}
+${seccionFortalezas(kpis, hallazgos)}
+
+<!-- VIII. CONCLUSIONES -->
+<div class="divider">VIII — Conclusiones y Recomendaciones</div>
 <div class="section">
   <div class="section-title">Conclusiones Generales</div>
   <div style="font-size:11px;line-height:1.8;color:#475569">
@@ -1523,6 +1549,8 @@ ${seccionKPIs(kpis, granjas, hallazgos)}
   </div>
 </div>
 
+<!-- IX. TRAZABILIDAD DETALLADA Y FIRMA -->
+<div class="divider">IX — Trazabilidad Detallada y Firma</div>
 ${seccionTrazabilidadKPI(kpis, hallazgos, granjas, evidenciasPorHallazgo)}
 
 ${seccionFirma(auditor)}
@@ -1609,7 +1637,7 @@ export function generarInforme(
     case "3-dashboard": html = generarModelo3(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo); break;
     case "4-granja":    html = generarModelo4(kpis, hallazgos, granjas, auditor, granjaFiltroId, evidenciasPorHallazgo); break;
     case "5-general":
-    default:            html = generarModelo5(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo); break;
+    default:            html = generarModelo5(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo, marcoLegal, mortalidad); break;
   }
   const win = window.open("", "_blank");
   if (win) {
@@ -2603,7 +2631,7 @@ export default function KPIPage() {
                 case "2-tecnico":   return generarModelo2(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
                 case "3-dashboard": return generarModelo3(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
                 case "4-granja":    return generarModelo4(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId, evidenciasMap);
-                default:            return generarModelo5(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
+                default:            return generarModelo5(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidad);
               }
             })();
             // Convierte ESE HTML a PDF (html2canvas → jsPDF). Si falla lanza error (no
