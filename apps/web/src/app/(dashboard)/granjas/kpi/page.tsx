@@ -934,51 +934,43 @@ function seccionEvidencias(hallazgos: any[], granjas: any[], evidenciasPorHallaz
   return `<div class="section"><div class="section-title">Evidencias Fotográficas</div>${bloques}</div>`;
 }
 
-// ─── SECCIÓN INVENTARIOS (datos reales del módulo Inventarios · /inventarios) ──
-function seccionInventarios(inventarios: any[]): string {
-  if (!inventarios || !inventarios.length) {
-    return `<div class="section"><div class="section-title">Inventarios</div>
-      <p style="font-size:13px;color:#94a3b8"><em>Sin registros de inventario disponibles.</em></p></div>`;
+// ─── SECCIÓN DETALLE DE HALLAZGOS (ficha completa por hallazgo + evidencias) ──
+function seccionHallazgosDetalle(hallazgos: any[], granjas: any[], evidenciasPorHallazgo?: Record<string, any[]>): string {
+  if (!hallazgos.length) {
+    return `<div class="section"><div class="section-title">Detalle de Hallazgos</div>
+      <p style="font-size:13px;color:#94a3b8"><em>No hay hallazgos reportados para el alcance seleccionado.</em></p></div>`;
   }
-  const num = (v: any): number | null => (typeof v === "number" && !isNaN(v) ? v : null);
-  let totalValor = 0, conDiscrepancia = 0, contados = 0;
-  const filas = inventarios.slice(0, 40).map(it => {
-    const saldo = num(it.saldo) ?? num(it.cantidad);
-    const contado = num(it.cantidadContada);
-    const disc = (saldo != null && contado != null) ? contado - saldo : null;
-    if (contado != null) contados++;
-    if (disc != null && disc !== 0) conDiscrepancia++;
-    if (num(it.valorTotal)) totalValor += it.valorTotal;
-    const discColor = disc == null ? "#94a3b8" : disc === 0 ? "#22C55E" : "#EF4444";
-    return `<tr>
-      <td><strong>${it.nombre || "—"}</strong></td>
-      <td>${it.modulo || "—"}</td>
-      <td>${it.categoria || "—"}</td>
-      <td>${it.ubicacion || "—"}</td>
-      <td style="text-align:right">${saldo != null ? saldo.toLocaleString("es-CO") : "—"}${it.unidadMedida ? " " + it.unidadMedida : ""}</td>
-      <td style="text-align:right">${contado != null ? contado.toLocaleString("es-CO") : "—"}</td>
-      <td style="text-align:right;color:${discColor};font-weight:700">${disc != null ? (disc > 0 ? "+" : "") + disc.toLocaleString("es-CO") : "—"}</td>
-      <td><span class="badge ${clsBadge(it.estado)}">${it.estado || "—"}</span></td>
-    </tr>`;
+  const fichas = hallazgos.slice(0, 25).map((h, idx) => {
+    const g = granjas.find(gr => gr.id === h.granjaId);
+    const evs = (evidenciasPorHallazgo?.[h.id]) || [];
+    const galeria = evs.length > 0
+      ? `<div style="font-size:11px;font-weight:700;color:#4A7AFF;text-transform:uppercase;letter-spacing:0.5px;margin:10px 0 6px">Evidencias fotográficas (${evs.length})</div>
+         ${evidenciasGridHTML(evs.map((ev: any) => ({ src: ev.url, titulo: ev.nombre || undefined, pie: ev.categoria || undefined })))}`
+      : `<div style="margin-top:8px;font-size:11px;color:#94a3b8">Sin evidencias fotográficas asociadas.</div>`;
+    const riesgos = Array.isArray(h.tiposRiesgo) && h.tiposRiesgo.length ? h.tiposRiesgo.join(", ") : "—";
+    return `<div class="section" style="page-break-inside:avoid;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #0D1526;padding-bottom:8px;margin-bottom:12px">
+        <div style="font-size:14px;font-weight:800;color:#0D1526">Hallazgo #${idx + 1}${h.criticidad ? ` · Criticidad ${h.criticidad}` : ""}</div>
+        <span class="badge ${clsBadge(h.estado)}">${displayEstado(h.estado)}</span>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:#0D1526;margin-bottom:8px">${h.titulo || "—"}</div>
+      <table style="width:100%;font-size:12px;margin-bottom:10px">
+        <tr><td style="color:#64748b;width:30%">Granja</td><td style="font-weight:600">${g?.nombre || h.granjaNombre || "—"}</td></tr>
+        <tr><td style="color:#64748b">Auditor</td><td>${h.auditorNombre || "—"}</td></tr>
+        <tr><td style="color:#64748b">Fecha de visita</td><td>${fmtFechaCorta(h.fechaVisita)}</td></tr>
+        <tr><td style="color:#64748b">Categoría</td><td>${h.categoria || "—"}</td></tr>
+        <tr><td style="color:#64748b">Criticidad</td><td>${h.criticidad || "—"}</td></tr>
+        <tr><td style="color:#64748b">Tipos de riesgo</td><td>${riesgos}</td></tr>
+        <tr><td style="color:#64748b">Tipo de granja / operación</td><td>${[h.tipoGranja, h.tipoOperativo].filter(Boolean).join(" · ") || "—"}</td></tr>
+      </table>
+      <div style="background:#f8fafc;border-radius:6px;padding:10px 12px;font-size:12px;color:#475569;line-height:1.6">
+        <strong style="color:#0D1526">Descripción:</strong><br>${h.descripcion || "Sin descripción registrada."}
+      </div>
+      ${h.recomendacionesIA ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 12px;font-size:12px;color:#1e40af;line-height:1.6;margin-top:8px"><strong>Recomendaciones:</strong><br>${h.recomendacionesIA}</div>` : ""}
+      ${galeria}
+    </div>`;
   }).join("");
-  const pctExactitud = contados > 0 ? Math.round((contados - conDiscrepancia) / contados * 100) : null;
-  const tarjetas = [
-    { l: "Ítems auditados",  v: inventarios.length.toLocaleString("es-CO"), c: "#0D1526" },
-    { l: "Con discrepancia", v: conDiscrepancia.toLocaleString("es-CO"),    c: conDiscrepancia > 0 ? "#EF4444" : "#22C55E" },
-    { l: "Exactitud",        v: pctExactitud != null ? pctExactitud + "%" : "—", c: (pctExactitud ?? 100) >= 90 ? "#22C55E" : (pctExactitud ?? 0) >= 70 ? "#F97316" : "#EF4444" },
-    { l: "Valor total",      v: totalValor > 0 ? "$" + totalValor.toLocaleString("es-CO") : "—", c: "#4A7AFF" },
-  ];
-  return `<div class="section"><div class="section-title">Inventarios</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
-      ${tarjetas.map(k => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:3px solid ${k.c};border-radius:8px;padding:12px 8px;text-align:center">
-        <div style="font-size:20px;font-weight:800;color:${k.c}">${k.v}</div>
-        <div style="font-size:11px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.3px">${k.l}</div></div>`).join("")}
-    </div>
-    <table><thead><tr><th>Ítem</th><th>Módulo</th><th>Categoría</th><th>Ubicación</th><th style="text-align:right">Saldo</th><th style="text-align:right">Contado</th><th style="text-align:right">Discrep.</th><th>Estado</th></tr></thead>
-    <tbody>${filas}</tbody></table>
-    ${inventarios.length > 40 ? `<p style="font-size:11px;color:#94a3b8;margin-top:6px">Mostrando 40 de ${inventarios.length} ítems.</p>` : ""}
-    <p style="font-size:11px;color:#94a3b8;margin-top:4px">Exactitud = ítems contados sin discrepancia / ítems contados. Discrepancia = contado − saldo del sistema.</p>
-  </div>`;
+  return `<div class="section"><div class="section-title">Detalle de Hallazgos (${hallazgos.length})</div>${fichas}</div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1528,48 +1520,34 @@ async function cargarMortalidadInforme(
 function generarModelo6(
   hallazgos: any[], granjas: any[], auditor: string,
   evidenciasPorHallazgo?: Record<string, any[]>, mortalidad?: MortalidadResumen,
-  datos?: DatosGenerales, inventarios?: any[]
+  datos?: DatosGenerales
 ): string {
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Informe de Hallazgos — Pollos Savicol S.A.S.</title>
 <style>${CSS_BASE}</style></head><body><div class="page">
-${portada("Informe de Hallazgos", "Hallazgos, Evidencias Fotográficas, Mortalidad e Inventarios", [], hallazgos, auditor, undefined, datos, true)}
+${portada("Informe de Hallazgos", "Hallazgos con Detalle, Evidencias Fotográficas y Mortalidad", [], hallazgos, auditor, undefined, datos, true)}
 
 ${seccionHallazgos(hallazgos, granjas, 30)}
 
-${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
+${seccionHallazgosDetalle(hallazgos, granjas, evidenciasPorHallazgo)}
 
 ${seccionMortalidad(mortalidad, granjas)}
-
-${seccionInventarios(inventarios || [])}
 
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
 </div></body></html>`;
 }
 
-// Carga los registros del módulo Inventarios (/inventarios) para el Informe Hallazgos.
-async function cargarInventariosInforme(accessToken: string | null): Promise<any[]> {
-  const API = process.env.NEXT_PUBLIC_API_URL || "";
-  if (!accessToken) return [];
-  try {
-    const r = await fetch(`${API}/api/v1/inventarios`, { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!r.ok) return [];
-    const data = await r.json();
-    return Array.isArray(data) ? data : [];
-  } catch { return []; }
-}
-
 // Construye el HTML de un modelo (mismo que se descarga y se adjunta al correo).
 function htmlDeModelo(
   modelo: ModeloInforme, kpis: any[], hallazgos: any[], granjas: any[], auditor: string,
   evidenciasMap?: Record<string, any[]>, marcoLegal?: string, mortalidad?: MortalidadResumen,
-  datos?: DatosGenerales, inventarios?: any[]
+  datos?: DatosGenerales
 ): string {
   switch (modelo) {
     case "1-ejecutivo": return generarModelo1(kpis, hallazgos, granjas, auditor, evidenciasMap, marcoLegal, mortalidad, datos);
     case "3-dashboard": return generarModelo3(kpis, hallazgos, granjas, auditor, evidenciasMap, datos);
-    case "6-hallazgos": return generarModelo6(hallazgos, granjas, auditor, evidenciasMap, mortalidad, datos, inventarios);
+    case "6-hallazgos": return generarModelo6(hallazgos, granjas, auditor, evidenciasMap, mortalidad, datos);
     default:            return generarModelo5(kpis, hallazgos, granjas, auditor, evidenciasMap, marcoLegal, mortalidad, datos);
   }
 }
@@ -2374,12 +2352,11 @@ export default function KPIPage() {
             const mortalidadRep = necesitaHallazgos
               ? await cargarMortalidadInforme(Array.from(new Set(hallazgosRep.map(h => h.granjaId).filter(Boolean))) as string[], accessToken)
               : mortalidadKPI;
-            const inventarios = necesitaHallazgos ? await cargarInventariosInforme(accessToken) : [];
             const fecha = new Date().toISOString().slice(0, 10);
             // Un PDF por cada modelo seleccionado.
             for (const modelo of modelosSel) {
               const esH = modelo === "6-hallazgos";
-              const html = htmlDeModelo(modelo, filtered, esH ? hallazgosRep : hallazgosFiltrados, esH ? granjasRep : granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, esH ? mortalidadRep : mortalidadKPI, datos, inventarios);
+              const html = htmlDeModelo(modelo, filtered, esH ? hallazgosRep : hallazgosFiltrados, esH ? granjasRep : granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, esH ? mortalidadRep : mortalidadKPI, datos);
               const { b64 } = await htmlToPDFBase64(html);
               descargarPDFBase64(b64, `Informe-${MODELOS_INFO[modelo].titulo.replace(/\s+/g, "-")}-${fecha}.pdf`);
             }
@@ -2407,13 +2384,12 @@ export default function KPIPage() {
             const mortalidadRep = necesitaHallazgos
               ? await cargarMortalidadInforme(Array.from(new Set(hallazgosRep.map(h => h.granjaId).filter(Boolean))) as string[], accessToken)
               : mortalidadKPI;
-            const inventarios = necesitaHallazgos ? await cargarInventariosInforme(accessToken) : [];
             const fecha = new Date().toISOString().slice(0, 10);
             // Genera el PDF de cada modelo seleccionado (mismo HTML que la descarga).
             const pdfs: { b64: string; filename: string; titulo: string }[] = [];
             for (const modelo of modelosSel) {
               const esH = modelo === "6-hallazgos";
-              const html = htmlDeModelo(modelo, filtered, esH ? hallazgosRep : hallazgosFiltrados, esH ? granjasRep : granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, esH ? mortalidadRep : mortalidadKPI, datos, inventarios);
+              const html = htmlDeModelo(modelo, filtered, esH ? hallazgosRep : hallazgosFiltrados, esH ? granjasRep : granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, esH ? mortalidadRep : mortalidadKPI, datos);
               const { b64 } = await htmlToPDFBase64(html);
               pdfs.push({ b64, filename: `Informe-${MODELOS_INFO[modelo].titulo.replace(/\s+/g, "-")}-${fecha}.pdf`, titulo: MODELOS_INFO[modelo].titulo });
             }
