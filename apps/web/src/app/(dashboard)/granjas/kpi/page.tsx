@@ -146,14 +146,12 @@ const EMPRESA = {
   color3:    "#F59E0B",  // amber
 };
 
-export type ModeloInforme = "1-ejecutivo" | "2-tecnico" | "3-dashboard" | "4-granja" | "5-general";
+export type ModeloInforme = "1-ejecutivo" | "3-dashboard" | "5-general";
 
 export const MODELOS_INFO: Record<ModeloInforme, { titulo: string; desc: string; icon: string }> = {
-  "1-ejecutivo": { titulo: "Ejecutivo Corporativo",    desc: "Resumen conciso para Gerencia General",         icon: "🔷" },
-  "2-tecnico":   { titulo: "Técnico Detallado",        desc: "Tablas y evidencias para Comité de Auditoría",  icon: "🔶" },
-  "3-dashboard": { titulo: "Dashboard Visual",          desc: "Gráficos dinámicos para Junta Directiva",       icon: "🔵" },
-  "4-granja":    { titulo: "Informe por Granja",        desc: "Ficha técnica individual por granja evaluada",  icon: "🟢" },
-  "5-general":   { titulo: "Informe General Completo",  desc: "Combinación de los 4 modelos — versión máxima", icon: "⭐" },
+  "1-ejecutivo": { titulo: "Ejecutivo Corporativo",    desc: "Hallazgos, planes, mortalidad y evidencias — sin gráficos", icon: "🔷" },
+  "3-dashboard": { titulo: "Dashboard Visual",          desc: "Gráficas de KPI, hallazgos y riesgos — sin evidencias",     icon: "🔵" },
+  "5-general":   { titulo: "Informe General Completo",  desc: "Ejecutivo + Dashboard con estructura de auditoría",         icon: "⭐" },
 };
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
@@ -1092,83 +1090,6 @@ ${footer()}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MODELO 2 — TÉCNICO DETALLADO
-// ═══════════════════════════════════════════════════════════════════════════════
-function generarModelo2(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
-  const num = `AU-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Informe Técnico — Pollos Savicol S.A.S.</title>
-<style>${CSS_BASE}
-.toc-item{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:11px;color:#475569}
-.toc-dots{flex:1;border-bottom:1px dotted #cbd5e0}
-.toc-num{font-weight:600;color:#1a202c}
-</style></head><body><div class="page">
-${portada(`Informe Técnico de Auditoría N° ${num}`, "Evaluación Integral de Cumplimiento KPI y Hallazgos", kpis, hallazgos, auditor)}
-
-<div class="section">
-  <div class="section-title">Tabla de Contenido</div>
-  ${[
-    ["1.","Objeto y Alcance"],["2.","Resumen Ejecutivo"],["3.","Metodología"],
-    ["4.","Hallazgos Identificados"],["5.","Gestión de Planes KPI"],
-    ["6.","Planes de Acción"],["7.","Conclusiones y Recomendaciones"],
-    ["8.","Firma y Aprobación"],
-  ].map(([n,t])=>`<div class="toc-item"><span style="font-weight:600;color:#C41230">${n}</span> ${t} <span class="toc-dots"></span> <span class="toc-num">p.${n}</span></div>`).join("")}
-</div>
-
-<div class="section">
-  <div class="section-title">1. Objeto y Alcance</div>
-  <div style="font-size:11px;line-height:1.8;color:#475569">
-    <p><strong>Objeto:</strong> El presente informe tiene como propósito evaluar el nivel de cumplimiento
-    de los Indicadores Clave de Desempeño (KPI) establecidos para el control interno de
-    ${EMPRESA.nombre}, identificar hallazgos de auditoría y proponer planes de acción correctivos.</p>
-    <p style="margin-top:8px"><strong>Alcance:</strong> La evaluación comprende <strong>${granjas.length} granjas</strong> operativas,
-    <strong>${hallazgos.length} hallazgos</strong> registrados y <strong>${kpis.length} planes de acción KPI</strong>
-    en el período evaluado.</p>
-    <p style="margin-top:8px"><strong>Número de informe:</strong> ${num} · <strong>Clasificación:</strong> CONFIDENCIAL</p>
-  </div>
-</div>
-
-${seccionResumen(kpis, hallazgos)}
-
-${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
-
-<div class="section">
-  <div class="section-title">3. Metodología</div>
-  <div style="font-size:11px;line-height:1.8;color:#475569">
-    La auditoría fue realizada aplicando los siguientes métodos: visita de campo, revisión documental,
-    entrevistas con responsables de granja, análisis de registros de bioseguridad y evaluación de
-    protocolos operativos. Los hallazgos fueron clasificados por criticidad y tipo de riesgo.
-    Los planes de acción fueron elaborados con apoyo de herramientas analíticas especializadas en
-    bioseguridad avícola colombiana.
-  </div>
-</div>
-
-${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
-
-${seccionHallazgos(hallazgos, granjas)}
-${seccionKPIs(kpis, granjas, hallazgos)}
-
-<div class="section">
-  <div class="section-title">7. Conclusiones y Recomendaciones</div>
-  <div style="font-size:11px;line-height:1.8;color:#475569">
-    <ol style="padding-left:16px">
-      <li>Priorizar el cierre de los <strong>${hallazgos.filter(h=>h.estado==="ABIERTO").length}</strong> hallazgos en estado abierto mediante la activación inmediata de los planes de acción.</li>
-      <li>Los <strong>${kpis.filter(k=>k.estado==="NO_INICIADO").length}</strong> planes KPI en estado "No Iniciado" requieren asignación inmediata de responsable y fecha de inicio.</li>
-      <li>Se recomienda incrementar la frecuencia de visitas de seguimiento a granjas con riesgo alto.</li>
-      <li>Implementar capacitación al personal operativo en bioseguridad y protocolos de granja.</li>
-      <li>Verificar el cumplimiento de los planes de acción en la próxima auditoría.</li>
-    </ol>
-  </div>
-</div>
-
-${seccionTrazabilidadKPI(kpis, hallazgos, granjas, evidenciasPorHallazgo)}
-
-${seccionFirma(auditor)}
-${footer()}
-</div></body></html>`;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // CHARTS BI ADICIONALES (Fase 3) — para completar 10 tipos de gráfico en el Dashboard
 // SVG/HTML inline, sin dependencias, con datos REALES filtrados.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1346,83 +1267,6 @@ ${seccionDashboardCompleto(kpis, hallazgos, granjas)}
       <td><span class="badge ${clsBadge(h.estado)}">${displayEstado(h.estado)}</span></td>
     </tr>`;}).join("")}
   </tbody></table>
-</div>
-
-${seccionTrazabilidadKPI(kpis, hallazgos, granjas, evidenciasPorHallazgo)}
-
-${seccionFirma(auditor)}
-${footer()}
-</div></body></html>`;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// MODELO 4 — POR GRANJA INDIVIDUAL
-// ═══════════════════════════════════════════════════════════════════════════════
-function generarModelo4(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, granjaFiltroId?: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
-  const granja = granjaFiltroId ? granjas.find(g=>g.id===granjaFiltroId) : granjas[0];
-  if (!granja) return "<html><body><p>Selecciona una granja para este modelo.</p></body></html>";
-
-  const kpisGranja     = kpis.filter(k=>k.granjaId===granja.id);
-  const hallazgosGranja= hallazgos.filter(h=>h.granjaId===granja.id);
-  const pct            = porcentaje(kpisGranja);
-
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Informe Granja ${granja.nombre} — Pollos Savicol S.A.S.</title>
-<style>${CSS_BASE}</style></head><body><div class="page">
-${portada(`Informe de Auditoría — ${granja.nombre}`, "Evaluación Individual de Granja", kpisGranja, hallazgosGranja, auditor, granja.nombre)}
-
-<div class="section">
-  <div class="section-title">Ficha Técnica de la Granja</div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-    ${[
-      ["Nombre",          granja.nombre],
-      ["Código",          granja.codigo],
-      ["Región",          granja.region||"—"],
-      ["Vereda",          granja.vereda||"—"],
-      ["Tipo de Granja",  granja.tipoGranja||"—"],
-      ["Tipo Operativo",  granja.tipoOperativo||"—"],
-      ["Nivel de Riesgo", granja.nivelRiesgo||"—"],
-      ["Capacidad",       granja.capacidadAves ? `${granja.capacidadAves.toLocaleString("es-CO")} aves` : "—"],
-      ["Administrador",   granja.administrador||"—"],
-      ["Estado Sanitario",granja.estadoSanitario||"—"],
-      ["Estado",          granja.estado||"—"],
-      ["Auditor",         auditor||"—"],
-    ].map(([l,v])=>`<div style="background:#f8fafc;border-radius:6px;padding:8px 12px">
-      <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em">${l}</div>
-      <div style="font-size:12px;font-weight:600;color:#1a202c;margin-top:2px">${v}</div>
-    </div>`).join("")}
-  </div>
-</div>
-
-${seccionResumen(kpisGranja, hallazgosGranja)}
-
-${seccionDashboardEjecutivo(kpisGranja, hallazgosGranja, granjas)}
-
-<div class="section">
-  <div class="section-title">Hallazgos de la Granja (${hallazgosGranja.length})</div>
-  ${hallazgosGranja.length > 0
-    ? `<table><thead><tr><th>Hallazgo</th><th>Auditor</th><th>Fecha Visita</th><th>Tipo Riesgo</th><th>Estado</th></tr></thead>
-      <tbody>${hallazgosGranja.map(h=>`<tr>
-        <td><strong>${h.titulo?.slice(0,40)||"—"}</strong></td>
-        <td>${h.auditorNombre||"—"}</td>
-        <td>${fmtFechaCorta(h.fechaVisita)}</td>
-        <td>${h.tiposRiesgo?.join(", ")||"—"}</td>
-        <td><span class="badge ${clsBadge(h.estado)}">${displayEstado(h.estado)}</span></td>
-      </tr>`).join("")}</tbody></table>`
-    : `<p style="font-size:11px;color:#64748b">Sin hallazgos registrados para esta granja.</p>`
-  }
-</div>
-
-${seccionKPIs(kpisGranja, granjas, hallazgos)}
-
-<div class="section">
-  <div class="section-title">Conclusión Individual</div>
-  <div style="background:#f8fafc;border-radius:8px;padding:14px 16px;font-size:11px;line-height:1.7;color:#475569">
-    La granja <strong>${granja.nombre}</strong> registra un avance del <strong>${pct}%</strong>
-    en sus planes de acción KPI. Se identificaron <strong>${hallazgosGranja.filter(h=>h.estado==="ABIERTO").length}</strong>
-    hallazgos abiertos que requieren atención inmediata. El nivel de riesgo general es
-    <strong>${granja.nivelRiesgo||"No definido"}</strong>.
-  </div>
 </div>
 
 ${seccionTrazabilidadKPI(kpis, hallazgos, granjas, evidenciasPorHallazgo)}
@@ -1639,9 +1483,7 @@ export function generarInforme(
   let html = "";
   switch(modelo) {
     case "1-ejecutivo": html = generarModelo1(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo, marcoLegal, mortalidad); break;
-    case "2-tecnico":   html = generarModelo2(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo); break;
     case "3-dashboard": html = generarModelo3(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo); break;
-    case "4-granja":    html = generarModelo4(kpis, hallazgos, granjas, auditor, granjaFiltroId, evidenciasPorHallazgo); break;
     case "5-general":
     default:            html = generarModelo5(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo, marcoLegal, mortalidad); break;
   }
@@ -1653,194 +1495,6 @@ export function generarInforme(
     setTimeout(() => win.print(), 700);
   }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// FUNCIÓN ENVIAR POR CORREO — USA EL EMAILSERVICE DEL BACKEND
-// ═══════════════════════════════════════════════════════════════════════════════
-// ─── Generación de PDF NATIVO con jsPDF (texto real, sin html2canvas) ──────────
-// Genera el PDF escribiendo texto y tablas directamente. No depende de renderizar
-// HTML ni capturar el navegador → el contenido SIEMPRE aparece y es seleccionable.
-async function generarPDFNativo(
-  modelo: ModeloInforme,
-  kpis: any[], hallazgos: any[], granjas: any[],
-  auditor: string, granjaFiltroId?: string
-): Promise<{ b64: string; filename: string }> {
-  const { default: jsPDF } = await import("jspdf");
-  const fecha = new Date().toISOString().slice(0, 10);
-  const filename = `Informe-Auditoria-Savicol-${modelo}-${fecha}.pdf`;
-
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
-  const PW = doc.internal.pageSize.getWidth();
-  const PH = doc.internal.pageSize.getHeight();
-  const M = 15;                       // margen
-  const CW = PW - M * 2;              // ancho de contenido
-  let y = M;
-
-  const nombreGranja = (id?: string) => granjas.find(g => g.id === id)?.nombre ?? "—";
-  const fFecha = (d?: string) => d ? new Date(d).toLocaleDateString("es-CO") : "—";
-  const norm = (s: string) => (s ?? "").toString();
-
-  // Salto de página si no cabe `h` mm
-  function need(h: number) {
-    if (y + h > PH - M) { doc.addPage(); y = M; }
-  }
-  function setFill(hex: string) {
-    const n = parseInt(hex.replace("#",""), 16);
-    doc.setFillColor((n>>16)&255, (n>>8)&255, n&255);
-  }
-  function setText(hex: string) {
-    const n = parseInt(hex.replace("#",""), 16);
-    doc.setTextColor((n>>16)&255, (n>>8)&255, n&255);
-  }
-
-  // ── Portada / encabezado corporativo ──
-  setFill("#0D1526"); doc.rect(0, 0, PW, 38, "F");
-  setFill("#C41230"); doc.rect(0, 36, PW, 2, "F");
-  setText("#FFFFFF");
-  doc.setFont("helvetica", "bold"); doc.setFontSize(16);
-  doc.text("Pollos Savicol S.A.S.", M, 15);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8);
-  setText("#94A3B8");
-  doc.text("NIT 860.403.972-4  ·  Auditoría Interna · Control Interno", M, 21);
-  setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(12);
-  doc.text(MODELOS_INFO[modelo].titulo, M, 30);
-  setText("#94A3B8"); doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
-  doc.text(`Generado: ${new Date().toLocaleDateString("es-CO")}  ·  Auditor: ${auditor || "—"}`, M, 34.5);
-  y = 46;
-
-  // ── Indicadores ──
-  const total = kpis.length;
-  const comp = kpis.filter(k => k.estado === "COMPLETADO").length;
-  const enCurso = kpis.filter(k => k.estado === "EN_CURSO").length;
-  const noInic = kpis.filter(k => k.estado === "NO_INICIADO").length;
-  const pct = total ? Math.round(kpis.reduce((a,k)=>a+(k.porcentajeAvance||0),0)/total) : 0;
-  const hallAb = hallazgos.filter(h => h.estado === "ABIERTO").length;
-  const hallCerr = hallazgos.filter(h => h.estado === "CERRADO").length;
-
-  doc.setFont("helvetica", "bold"); doc.setFontSize(12); setText("#0D1526");
-  doc.text("Resumen Ejecutivo", M, y); y += 2;
-  setFill("#10B981"); doc.rect(M, y, 30, 0.8, "F"); y += 7;
-
-  // Tarjetas KPI (4 columnas)
-  const cards = [
-    { n: String(total),  l: "Total KPIs",    c: "#4A7AFF" },
-    { n: String(comp),   l: "Completados",   c: "#22C55E" },
-    { n: String(enCurso),l: "En Curso",      c: "#F97316" },
-    { n: String(noInic), l: "No Iniciados",  c: "#EF4444" },
-  ];
-  const cw = (CW - 9) / 4;
-  cards.forEach((c, i) => {
-    const x = M + i * (cw + 3);
-    setFill("#F8FAFC"); doc.roundedRect(x, y, cw, 18, 2, 2, "F");
-    setText(c.c); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
-    doc.text(c.n, x + cw/2, y + 8, { align: "center" });
-    setText("#64748B"); doc.setFont("helvetica", "normal"); doc.setFontSize(7);
-    doc.text(c.l, x + cw/2, y + 14, { align: "center" });
-  });
-  y += 24;
-
-  // Barra de avance global
-  setText("#475569"); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-  doc.text("Avance global de planes de acción", M, y);
-  setText("#0D1526"); doc.text(`${pct}%`, PW - M, y, { align: "right" }); y += 3;
-  setFill("#E2E8F0"); doc.roundedRect(M, y, CW, 4, 1, 1, "F");
-  setFill("#22C55E"); doc.roundedRect(M, y, CW * pct / 100, 4, 1, 1, "F"); y += 9;
-  setText("#64748B"); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
-  doc.text(`Hallazgos abiertos: ${hallAb}    Hallazgos cerrados: ${hallCerr}    En plan: ${hallazgos.filter(h=>h.estado==="EN_PLAN").length}`, M, y);
-  y += 10;
-
-  // ── Helper: tabla genérica con encabezado y filas ──
-  function tabla(titulo: string, cols: { h: string; w: number }[], filas: string[][]) {
-    need(20);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(12); setText("#0D1526");
-    doc.text(titulo, M, y); y += 2;
-    setFill("#10B981"); doc.rect(M, y, 30, 0.8, "F"); y += 6;
-
-    // Encabezado
-    setFill("#0D1526"); doc.rect(M, y, CW, 7, "F");
-    setText("#FFFFFF"); doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
-    let cx = M + 2;
-    cols.forEach(c => { doc.text(c.h, cx, y + 4.6); cx += c.w; });
-    y += 7;
-
-    // Filas
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7);
-    filas.forEach((fila, ri) => {
-      // Calcular alto de fila según el texto más largo (wrap)
-      const wrapped = fila.map((celda, ci) => doc.splitTextToSize(norm(celda), cols[ci].w - 3));
-      const rowH = Math.max(6, ...wrapped.map(w => w.length * 3.5 + 2.5));
-      need(rowH);
-      if (ri % 2 === 0) { setFill("#F8FAFC"); doc.rect(M, y, CW, rowH, "F"); }
-      setText("#334155");
-      cx = M + 2;
-      wrapped.forEach((w, ci) => { doc.text(w, cx, y + 4); cx += cols[ci].w; });
-      y += rowH;
-    });
-    y += 8;
-  }
-
-  // ── Tabla de Hallazgos ──
-  if (hallazgos.length > 0) {
-    const filtH = granjaFiltroId ? hallazgos.filter(h => h.granjaId === granjaFiltroId) : hallazgos;
-    tabla(
-      "Hallazgos de Auditoría",
-      [{ h: "Hallazgo", w: 58 }, { h: "Granja", w: 38 }, { h: "Fecha", w: 24 }, { h: "Estado", w: 30 }],
-      filtH.map(h => [
-        norm(h.titulo || h.descripcion || "—"),
-        nombreGranja(h.granjaId),
-        fFecha(h.fechaVisita),
-        norm(h.estado || "—").replace(/_/g, " "),
-      ])
-    );
-  }
-
-  // ── Tabla de Planes de Acción (KPIs) ──
-  if (kpis.length > 0) {
-    const filtK = granjaFiltroId ? kpis.filter(k => k.granjaId === granjaFiltroId) : kpis;
-    tabla(
-      "Planes de Acción · Cumplimiento KPI",
-      [{ h: "Plan / Acción", w: 60 }, { h: "Responsable", w: 38 }, { h: "Estado", w: 28 }, { h: "Avance", w: 24 }],
-      filtK.map(k => [
-        norm(k.titulo || k.descripcion || "—"),
-        norm(k.responsable || "—"),
-        norm(k.estado || "—").replace(/_/g, " "),
-        `${k.porcentajeAvance ?? 0}%`,
-      ])
-    );
-  }
-
-  // ── Detalle por granja (modelo 4 o si hay filtro) ──
-  if ((modelo === "4-granja" || granjaFiltroId) && granjas.length > 0) {
-    const gs = granjaFiltroId ? granjas.filter(g => g.id === granjaFiltroId) : granjas;
-    gs.forEach(g => {
-      const kg = kpis.filter(k => k.granjaId === g.id);
-      const hg = hallazgos.filter(h => h.granjaId === g.id);
-      const pg = kg.length ? Math.round(kg.reduce((a,k)=>a+(k.porcentajeAvance||0),0)/kg.length) : 0;
-      need(22);
-      setFill("#F1F5F9"); doc.roundedRect(M, y, CW, 16, 2, 2, "F");
-      setText("#0D1526"); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-      doc.text(norm(g.nombre), M + 3, y + 6);
-      setText("#64748B"); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
-      doc.text(`KPIs: ${kg.length}   Hallazgos: ${hg.length}   Avance: ${pg}%`, M + 3, y + 12);
-      y += 20;
-    });
-  }
-
-  // ── Pie de página en todas las páginas ──
-  const pages = doc.getNumberOfPages();
-  for (let p = 1; p <= pages; p++) {
-    doc.setPage(p);
-    setText("#94A3B8"); doc.setFont("helvetica", "normal"); doc.setFontSize(7);
-    doc.text("Pollos Savicol S.A.S. · Auditoría Interna · Documento confidencial", M, PH - 8);
-    doc.text(`Página ${p} de ${pages}`, PW - M, PH - 8, { align: "right" });
-  }
-
-  const dataUri = doc.output("datauristring");
-  const b64 = dataUri.split(",")[1];
-  if (!b64 || b64.length < 1000) throw new Error("El PDF generado está vacío");
-  return { b64, filename };
-}
-
 
 // ─── Convertir HTML del informe a PDF real usando html2canvas + jsPDF ───────────
 // Renderiza el HTML en el browser → captura con html2canvas → genera PDF con jsPDF
@@ -1990,131 +1644,6 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
   }
 }
 
-// Wrapper sync para compatibilidad con código antiguo
-function htmlToBase64(html: string): string {
-  return btoa(unescape(encodeURIComponent(html)));
-}
-
-export async function enviarInformePorCorreo(
-  modelo: ModeloInforme,
-  destinatario: string,
-  asunto: string,
-  kpis: any[], hallazgos: any[], granjas: any[],
-  auditor: string,
-  apiToken: string,
-  auditorEmail: string,
-  granjaFiltroId?: string,
-  descripcion?: string,
-  pdfBase64Externo?: string,
-  pdfFilenameExterno?: string
-): Promise<{ok:boolean; message:string}> {
-  try {
-    // Generar el HTML completo del informe seleccionado
-    const htmlInforme = (() => {
-      switch(modelo) {
-        case "1-ejecutivo": return generarModelo1(kpis, hallazgos, granjas, auditor);
-        case "2-tecnico":   return generarModelo2(kpis, hallazgos, granjas, auditor);
-        case "3-dashboard": return generarModelo3(kpis, hallazgos, granjas, auditor);
-        case "4-granja":    return generarModelo4(kpis, hallazgos, granjas, auditor, granjaFiltroId);
-        default:            return generarModelo5(kpis, hallazgos, granjas, auditor);
-      }
-    })();
-
-    // Convertir HTML a base64 para adjunto descargable
-    const pdfBase64   = htmlToBase64(htmlInforme);
-    const pdfFilename = `Informe-Auditoria-Savicol-${modelo}-${new Date().toISOString().slice(0,10)}.html`;
-
-    // Generar HTML del correo (resumen ejecutivo)
-    const pct  = kpis.length ? Math.round(kpis.reduce((a,k)=>a+(k.porcentajeAvance||0),0)/kpis.length) : 0;
-    const comp = kpis.filter(k=>k.estado==="COMPLETADO").length;
-    const granja = granjaFiltroId ? granjas.find(g=>g.id===granjaFiltroId) : null;
-
-    const htmlEmail = `
-<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-  <div style="background:linear-gradient(135deg,#0D1526,#C41230);padding:30px;text-align:center;border-radius:8px 8px 0 0">
-    <div style="color:white;font-size:22px;font-weight:800">Pollos Savicol S.A.S.</div>
-    <div style="color:rgba(255,255,255,0.8);font-size:12px;margin-top:4px">Auditoría Interna · Control Interno</div>
-  </div>
-  <div style="background:#f8fafc;padding:24px;border:1px solid #e2e8f0">
-    <h2 style="color:#1a202c;font-size:16px;margin-bottom:16px">${asunto}</h2>
-    <p style="color:#475569;font-size:13px;line-height:1.7">
-      Se adjunta el informe de auditoría <strong>${MODELOS_INFO[modelo].titulo}</strong>
-      ${granja ? `para la granja <strong>${granja.nombre}</strong>` : "de cumplimiento global KPI"}.
-    </p>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0">
-      ${[
-        {n:kpis.length,       l:"Planes KPI",    c:"#4A7AFF"},
-        {n:pct+"%",           l:"Avance Global", c:pct>=70?"#22C55E":pct>=40?"#F97316":"#EF4444"},
-        {n:comp,              l:"Completados",   c:"#22C55E"},
-      ].map(m=>`<div style="background:white;border-radius:8px;padding:12px;text-align:center;border:1px solid #e2e8f0">
-        <div style="font-size:20px;font-weight:800;color:${m.c}">${m.n}</div>
-        <div style="font-size:10px;color:#64748b;margin-top:2px">${m.l}</div>
-      </div>`).join("")}
-    </div>
-    <p style="color:#64748b;font-size:11px;margin-top:12px">
-      Este informe fue generado automáticamente por el Sistema de Auditoría Interna de Pollos Savicol S.A.S.
-      Para acceder al informe completo con gráficos, inicie sesión en la plataforma.
-    </p>
-    <p style="color:#64748b;font-size:11px;margin-top:8px">
-      Auditor: <strong>${auditor}</strong> · Fecha: <strong>${new Date().toLocaleDateString("es-CO")}</strong>
-    </p>
-  </div>
-  <div style="background:#0D1526;padding:12px;text-align:center;border-radius:0 0 8px 8px">
-    <p style="color:rgba(255,255,255,0.5);font-size:10px;margin:0">
-      Pollos Savicol S.A.S. · Auditoría Interna · auditoria@savicol.com.co
-    </p>
-  </div>
-</div>`;
-
-    // Usar el PDF real si fue generado externamente, sino el HTML base64.
-    // IMPORTANTE: si caemos al HTML base64, el nombre DEBE terminar en .html
-    // para que el destinatario nunca reciba un archivo .pdf que en realidad es
-    // HTML (eso causaba que el informe se abriera corrupto o con error).
-    const usandoPdfReal    = !!(pdfBase64Externo && pdfBase64Externo.length > 100);
-    const finalPdfBase64   = usandoPdfReal ? pdfBase64Externo! : pdfBase64;
-    let   finalPdfFilename = pdfFilenameExterno ?? pdfFilename;
-    if (!usandoPdfReal) {
-      // Garantizar coherencia: contenido HTML → extensión .html
-      finalPdfFilename = finalPdfFilename.replace(/\.pdf$/i, ".html");
-      if (!/\.html$/i.test(finalPdfFilename)) finalPdfFilename += ".html";
-    }
-
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1/email/send`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiToken}`,
-      },
-      body: JSON.stringify({
-        to:           destinatario,
-        subject:      asunto,
-        html:         htmlEmail,
-        pdfBase64:    finalPdfBase64,
-        pdfFilename:  finalPdfFilename,
-      }),
-    });
-
-    const data = await response.json().catch(() => ({}));
-
-    // Trazabilidad real: el backend devuelve HTTP 200 incluso cuando Brevo rechaza.
-    // Debemos verificar el campo `ok` del cuerpo, no solo el status HTTP.
-    if (response.ok && data?.ok === true) {
-      return {
-        ok: true,
-        message: `Informe enviado correctamente a ${destinatario}`,
-        messageId: data?.messageId ?? null,
-      };
-    } else {
-      // Propagar el error real (ej. IP de Brevo no autorizada, límite, etc.)
-      const errMsg = data?.error || data?.message || `Error HTTP ${response.status}`;
-      return { ok: false, message: errMsg };
-    }
-  } catch (e: any) {
-    return { ok: false, message: e?.message || "Error al enviar el correo" };
-  }
-}
-
-
 // ─── Modal selector de modelos de informe ─────────────────────────────────────
 function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsList, resultadosCount, onClose, onGenerar, onEnviar }: {
   granjas:    any[];
@@ -2246,17 +1775,6 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
               ))}
             </div>
           </div>
-
-          {/* Filtro de granja (solo para Modelo 4) */}
-          {modeloSel === "4-granja" && (
-            <div>
-              <span className="text-xs text-[#94A3B8] font-semibold mb-2 block">Granja a evaluar</span>
-              <select value={granjaFiltro} onChange={e=>setGranjaFiltro(e.target.value)} className={SEL_STYLE}>
-                <option value="">(primera disponible)</option>
-                {granjas.map(g=><option key={g.id} value={g.id}>{g.nombre}</option>)}
-              </select>
-            </div>
-          )}
 
           {/* Marco legal aplicable — campo editable por informe (Ejecutivo / General) */}
           {(modeloSel === "1-ejecutivo" || modeloSel === "5-general") && (
@@ -2673,9 +2191,7 @@ export default function KPIPage() {
             const htmlInforme = (() => {
               switch (modelo) {
                 case "1-ejecutivo": return generarModelo1(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidad);
-                case "2-tecnico":   return generarModelo2(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
                 case "3-dashboard": return generarModelo3(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
-                case "4-granja":    return generarModelo4(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId, evidenciasMap);
                 default:            return generarModelo5(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidad);
               }
             })();
