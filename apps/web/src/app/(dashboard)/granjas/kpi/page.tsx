@@ -146,12 +146,13 @@ const EMPRESA = {
   color3:    "#F59E0B",  // amber
 };
 
-export type ModeloInforme = "1-ejecutivo" | "3-dashboard" | "5-general";
+export type ModeloInforme = "1-ejecutivo" | "3-dashboard" | "5-general" | "6-hallazgos";
 
 export const MODELOS_INFO: Record<ModeloInforme, { titulo: string; desc: string; icon: string }> = {
   "1-ejecutivo": { titulo: "Ejecutivo Corporativo",    desc: "Hallazgos, planes, mortalidad y evidencias — sin gráficos", icon: "🔷" },
   "3-dashboard": { titulo: "Dashboard Visual",          desc: "Gráficas de KPI, hallazgos y riesgos — sin evidencias",     icon: "🔵" },
   "5-general":   { titulo: "Informe General Completo",  desc: "Ejecutivo + Dashboard con estructura de auditoría",         icon: "⭐" },
+  "6-hallazgos": { titulo: "Informe Hallazgos",         desc: "Solo hallazgos con evidencias, mortalidad e inventarios — sin planes ni KPI", icon: "📋" },
 };
 
 // Datos generales del informe (formulario único, FASE 3). Se piden una vez y se
@@ -603,7 +604,7 @@ function seccionDashboardEjecutivo(kpis: any[], hallazgos: any[], granjas: any[]
 }
 
 // ─── PORTADA COMPARTIDA ───────────────────────────────────────────────────────
-function portada(titulo: string, subtitulo: string, kpis: any[], hallazgos: any[], auditor: string, granjaFiltro?: string, datos?: DatosGenerales): string {
+function portada(titulo: string, subtitulo: string, kpis: any[], hallazgos: any[], auditor: string, granjaFiltro?: string, datos?: DatosGenerales, ocultarKPI?: boolean): string {
   const fecha = fmtFecha(new Date().toISOString());
   const pct   = porcentaje(kpis);
   const auditores = [datos?.auditor1, datos?.auditor2].filter(Boolean).join(" · ") || auditor || "Equipo de Auditoría";
@@ -613,7 +614,9 @@ function portada(titulo: string, subtitulo: string, kpis: any[], hallazgos: any[
   meta.push({ label: "Fecha de Generación", value: fGen });
   if (datos?.fechaVisita) meta.push({ label: "Fecha de Visita", value: fmtFecha(datos.fechaVisita) });
   meta.push({ label: datos?.auditor2 ? "Auditores" : "Auditor Responsable", value: auditores });
-  meta.push({ label: "Avance Global KPI", value: `${pct}% · ${kpis.length} planes` });
+  meta.push(ocultarKPI
+    ? { label: "Hallazgos Reportados", value: `${hallazgos.length}` }
+    : { label: "Avance Global KPI", value: `${pct}% · ${kpis.length} planes` });
   return `
   <div class="cover">
     <div class="logo-box">
@@ -929,6 +932,53 @@ function seccionEvidencias(hallazgos: any[], granjas: any[], evidenciasPorHallaz
     </div>`;
   }).join("");
   return `<div class="section"><div class="section-title">Evidencias Fotográficas</div>${bloques}</div>`;
+}
+
+// ─── SECCIÓN INVENTARIOS (datos reales del módulo Inventarios · /inventarios) ──
+function seccionInventarios(inventarios: any[]): string {
+  if (!inventarios || !inventarios.length) {
+    return `<div class="section"><div class="section-title">Inventarios</div>
+      <p style="font-size:13px;color:#94a3b8"><em>Sin registros de inventario disponibles.</em></p></div>`;
+  }
+  const num = (v: any): number | null => (typeof v === "number" && !isNaN(v) ? v : null);
+  let totalValor = 0, conDiscrepancia = 0, contados = 0;
+  const filas = inventarios.slice(0, 40).map(it => {
+    const saldo = num(it.saldo) ?? num(it.cantidad);
+    const contado = num(it.cantidadContada);
+    const disc = (saldo != null && contado != null) ? contado - saldo : null;
+    if (contado != null) contados++;
+    if (disc != null && disc !== 0) conDiscrepancia++;
+    if (num(it.valorTotal)) totalValor += it.valorTotal;
+    const discColor = disc == null ? "#94a3b8" : disc === 0 ? "#22C55E" : "#EF4444";
+    return `<tr>
+      <td><strong>${it.nombre || "—"}</strong></td>
+      <td>${it.modulo || "—"}</td>
+      <td>${it.categoria || "—"}</td>
+      <td>${it.ubicacion || "—"}</td>
+      <td style="text-align:right">${saldo != null ? saldo.toLocaleString("es-CO") : "—"}${it.unidadMedida ? " " + it.unidadMedida : ""}</td>
+      <td style="text-align:right">${contado != null ? contado.toLocaleString("es-CO") : "—"}</td>
+      <td style="text-align:right;color:${discColor};font-weight:700">${disc != null ? (disc > 0 ? "+" : "") + disc.toLocaleString("es-CO") : "—"}</td>
+      <td><span class="badge ${clsBadge(it.estado)}">${it.estado || "—"}</span></td>
+    </tr>`;
+  }).join("");
+  const pctExactitud = contados > 0 ? Math.round((contados - conDiscrepancia) / contados * 100) : null;
+  const tarjetas = [
+    { l: "Ítems auditados",  v: inventarios.length.toLocaleString("es-CO"), c: "#0D1526" },
+    { l: "Con discrepancia", v: conDiscrepancia.toLocaleString("es-CO"),    c: conDiscrepancia > 0 ? "#EF4444" : "#22C55E" },
+    { l: "Exactitud",        v: pctExactitud != null ? pctExactitud + "%" : "—", c: (pctExactitud ?? 100) >= 90 ? "#22C55E" : (pctExactitud ?? 0) >= 70 ? "#F97316" : "#EF4444" },
+    { l: "Valor total",      v: totalValor > 0 ? "$" + totalValor.toLocaleString("es-CO") : "—", c: "#4A7AFF" },
+  ];
+  return `<div class="section"><div class="section-title">Inventarios</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+      ${tarjetas.map(k => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:3px solid ${k.c};border-radius:8px;padding:12px 8px;text-align:center">
+        <div style="font-size:20px;font-weight:800;color:${k.c}">${k.v}</div>
+        <div style="font-size:11px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.3px">${k.l}</div></div>`).join("")}
+    </div>
+    <table><thead><tr><th>Ítem</th><th>Módulo</th><th>Categoría</th><th>Ubicación</th><th style="text-align:right">Saldo</th><th style="text-align:right">Contado</th><th style="text-align:right">Discrep.</th><th>Estado</th></tr></thead>
+    <tbody>${filas}</tbody></table>
+    ${inventarios.length > 40 ? `<p style="font-size:11px;color:#94a3b8;margin-top:6px">Mostrando 40 de ${inventarios.length} ítems.</p>` : ""}
+    <p style="font-size:11px;color:#94a3b8;margin-top:4px">Exactitud = ítems contados sin discrepancia / ítems contados. Discrepancia = contado − saldo del sistema.</p>
+  </div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1471,14 +1521,55 @@ async function cargarMortalidadInforme(
   } catch { return acc; }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODELO 6 — INFORME HALLAZGOS (solo hallazgos + evidencias + mortalidad + inventarios)
+// Sin planes de acción ni cumplimiento KPI.
+// ═══════════════════════════════════════════════════════════════════════════════
+function generarModelo6(
+  hallazgos: any[], granjas: any[], auditor: string,
+  evidenciasPorHallazgo?: Record<string, any[]>, mortalidad?: MortalidadResumen,
+  datos?: DatosGenerales, inventarios?: any[]
+): string {
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Informe de Hallazgos — Pollos Savicol S.A.S.</title>
+<style>${CSS_BASE}</style></head><body><div class="page">
+${portada("Informe de Hallazgos", "Hallazgos, Evidencias Fotográficas, Mortalidad e Inventarios", [], hallazgos, auditor, undefined, datos, true)}
+
+${seccionHallazgos(hallazgos, granjas, 30)}
+
+${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
+
+${seccionMortalidad(mortalidad, granjas)}
+
+${seccionInventarios(inventarios || [])}
+
+${seccionFirma(auditor, "Auditor Interno", datos)}
+${footer()}
+</div></body></html>`;
+}
+
+// Carga los registros del módulo Inventarios (/inventarios) para el Informe Hallazgos.
+async function cargarInventariosInforme(accessToken: string | null): Promise<any[]> {
+  const API = process.env.NEXT_PUBLIC_API_URL || "";
+  if (!accessToken) return [];
+  try {
+    const r = await fetch(`${API}/api/v1/inventarios`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!r.ok) return [];
+    const data = await r.json();
+    return Array.isArray(data) ? data : [];
+  } catch { return []; }
+}
+
 // Construye el HTML de un modelo (mismo que se descarga y se adjunta al correo).
 function htmlDeModelo(
   modelo: ModeloInforme, kpis: any[], hallazgos: any[], granjas: any[], auditor: string,
-  evidenciasMap?: Record<string, any[]>, marcoLegal?: string, mortalidad?: MortalidadResumen, datos?: DatosGenerales
+  evidenciasMap?: Record<string, any[]>, marcoLegal?: string, mortalidad?: MortalidadResumen,
+  datos?: DatosGenerales, inventarios?: any[]
 ): string {
   switch (modelo) {
     case "1-ejecutivo": return generarModelo1(kpis, hallazgos, granjas, auditor, evidenciasMap, marcoLegal, mortalidad, datos);
     case "3-dashboard": return generarModelo3(kpis, hallazgos, granjas, auditor, evidenciasMap, datos);
+    case "6-hallazgos": return generarModelo6(hallazgos, granjas, auditor, evidenciasMap, mortalidad, datos, inventarios);
     default:            return generarModelo5(kpis, hallazgos, granjas, auditor, evidenciasMap, marcoLegal, mortalidad, datos);
   }
 }
@@ -2260,37 +2351,69 @@ export default function KPIPage() {
           onClose={() => setInformeOpen(false)}
           onGenerar={async (modelosSel, datos, marcoLegal) => {
             const auditorNombre = datos.auditor1 || usuarios?.find((u:any)=>u.role==="AUDITOR")?.name || "Auditor Interno";
+            // Alcance KPI (modelos 1/3/5): hallazgos/granjas derivados de los KPIs filtrados.
             const hIds = new Set(filtered.map(k => k.hallazgoId).filter(Boolean));
             const gIds = new Set(filtered.map(k => k.granjaId).filter(Boolean));
             const hallazgosFiltrados = hallazgos.filter(h => hIds.has(h.id));
             const granjasFiltradas   = granjas.filter(g => gIds.has(g.id));
-            const [evidenciasMap, mortalidad] = await Promise.all([
-              cargarEvidenciasInforme(Array.from(hIds) as string[], accessToken),
+            // Alcance Hallazgos (modelo 6): TODOS los hallazgos reportados según los filtros
+            // del módulo (con o sin plan KPI).
+            const necesitaHallazgos = modelosSel.includes("6-hallazgos");
+            const hallazgosRep = necesitaHallazgos ? hallazgos.filter(h =>
+              (!fGranja     || h.granjaId === fGranja) &&
+              (!fAuditor    || h.auditorId === fAuditor) &&
+              (!fTipoRiesgo || (Array.isArray(h.tiposRiesgo) && (h.tiposRiesgo as string[]).includes(fTipoRiesgo))) &&
+              (!fFechaHallazgo || (h.fechaVisita || "").startsWith(fFechaHallazgo))
+            ) : [];
+            const granjasRep = granjas.filter(g => hallazgosRep.some(h => h.granjaId === g.id));
+            const allHIds = new Set<string>([...(hIds as Set<string>), ...hallazgosRep.map(h => h.id as string)]);
+            const [evidenciasMap, mortalidadKPI] = await Promise.all([
+              cargarEvidenciasInforme(Array.from(allHIds), accessToken),
               cargarMortalidadInforme(Array.from(gIds) as string[], accessToken),
             ]);
+            const mortalidadRep = necesitaHallazgos
+              ? await cargarMortalidadInforme(Array.from(new Set(hallazgosRep.map(h => h.granjaId).filter(Boolean))) as string[], accessToken)
+              : mortalidadKPI;
+            const inventarios = necesitaHallazgos ? await cargarInventariosInforme(accessToken) : [];
             const fecha = new Date().toISOString().slice(0, 10);
             // Un PDF por cada modelo seleccionado.
             for (const modelo of modelosSel) {
-              const html = htmlDeModelo(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidad, datos);
+              const esH = modelo === "6-hallazgos";
+              const html = htmlDeModelo(modelo, filtered, esH ? hallazgosRep : hallazgosFiltrados, esH ? granjasRep : granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, esH ? mortalidadRep : mortalidadKPI, datos, inventarios);
               const { b64 } = await htmlToPDFBase64(html);
               descargarPDFBase64(b64, `Informe-${MODELOS_INFO[modelo].titulo.replace(/\s+/g, "-")}-${fecha}.pdf`);
             }
           }}
           onEnviar={async (modelosSel, datos, descripcion, marcoLegal) => {
             const auditorNombre = datos.auditor1 || usuarios?.find((u:any)=>u.role==="AUDITOR")?.name || "Auditor Interno";
+            // Alcance KPI (modelos 1/3/5) y alcance Hallazgos (modelo 6, todos los reportados).
             const hIds = new Set(filtered.map(k => k.hallazgoId).filter(Boolean));
             const gIds = new Set(filtered.map(k => k.granjaId).filter(Boolean));
             const hallazgosFiltrados = hallazgos.filter(h => hIds.has(h.id));
             const granjasFiltradas   = granjas.filter(g => gIds.has(g.id));
-            const [evidenciasMap, mortalidad] = await Promise.all([
-              cargarEvidenciasInforme(Array.from(hIds) as string[], accessToken),
+            const necesitaHallazgos = modelosSel.includes("6-hallazgos");
+            const hallazgosRep = necesitaHallazgos ? hallazgos.filter(h =>
+              (!fGranja     || h.granjaId === fGranja) &&
+              (!fAuditor    || h.auditorId === fAuditor) &&
+              (!fTipoRiesgo || (Array.isArray(h.tiposRiesgo) && (h.tiposRiesgo as string[]).includes(fTipoRiesgo))) &&
+              (!fFechaHallazgo || (h.fechaVisita || "").startsWith(fFechaHallazgo))
+            ) : [];
+            const granjasRep = granjas.filter(g => hallazgosRep.some(h => h.granjaId === g.id));
+            const allHIds = new Set<string>([...(hIds as Set<string>), ...hallazgosRep.map(h => h.id as string)]);
+            const [evidenciasMap, mortalidadKPI] = await Promise.all([
+              cargarEvidenciasInforme(Array.from(allHIds), accessToken),
               cargarMortalidadInforme(Array.from(gIds) as string[], accessToken),
             ]);
+            const mortalidadRep = necesitaHallazgos
+              ? await cargarMortalidadInforme(Array.from(new Set(hallazgosRep.map(h => h.granjaId).filter(Boolean))) as string[], accessToken)
+              : mortalidadKPI;
+            const inventarios = necesitaHallazgos ? await cargarInventariosInforme(accessToken) : [];
             const fecha = new Date().toISOString().slice(0, 10);
             // Genera el PDF de cada modelo seleccionado (mismo HTML que la descarga).
             const pdfs: { b64: string; filename: string; titulo: string }[] = [];
             for (const modelo of modelosSel) {
-              const html = htmlDeModelo(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidad, datos);
+              const esH = modelo === "6-hallazgos";
+              const html = htmlDeModelo(modelo, filtered, esH ? hallazgosRep : hallazgosFiltrados, esH ? granjasRep : granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, esH ? mortalidadRep : mortalidadKPI, datos, inventarios);
               const { b64 } = await htmlToPDFBase64(html);
               pdfs.push({ b64, filename: `Informe-${MODELOS_INFO[modelo].titulo.replace(/\s+/g, "-")}-${fecha}.pdf`, titulo: MODELOS_INFO[modelo].titulo });
             }
