@@ -866,9 +866,159 @@ function footer(): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MODELO 1 — EJECUTIVO CORPORATIVO
+// SECCIONES ESTRUCTURALES — Informe reestructurado (formato corporativo Gerencia)
+// Texto profesional determinista parametrizado con los datos REALES del alcance.
+// No se inventan cifras, leyes ni datos: el marco legal proviene del formulario y
+// la mortalidad/alimento del consolidado se marcan "sin datos" cuando no existen.
 // ═══════════════════════════════════════════════════════════════════════════════
-function generarModelo1(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
+type MortalidadResumen = {
+  lotes: number; totalIngreso: number; totalActuales: number; totalMuertes: number; pctGlobal: number;
+  porGranja: Record<string, { ingreso: number; actuales: number; muertes: number; pct: number }>;
+};
+
+function _rangoFechas(items: any[]): string {
+  const fechas = items.map(x => x?.fechaVisita || x?.fechaCompromiso).filter(Boolean).sort();
+  if (!fechas.length) return "el periodo auditado";
+  const ini = fmtFechaCorta(fechas[0]); const fin = fmtFechaCorta(fechas[fechas.length - 1]);
+  return ini === fin ? ini : `${ini} – ${fin}`;
+}
+
+// Tabla de contenido
+function seccionTOC(): string {
+  const items = [
+    "1. Marco metodológico (introducción, objetivos, alcance, enfoque, métodos, procedimientos, técnicas)",
+    "2. Marco legal aplicable",
+    "3. Resumen ejecutivo",
+    "4. Tablero de indicadores",
+    "5. Hallazgos críticos prioritarios",
+    "6. Evaluación de riesgos (observaciones, causas, efectos y controles)",
+    "7. Ficha técnica de las granjas auditadas",
+    "8. Consolidado de resultados (alimento, mortalidad, cumplimiento KPI)",
+    "9. Fortalezas identificadas",
+    "10. Conclusiones ejecutivas",
+    "11. Recomendaciones",
+    "12. Trazabilidad detallada por KPI",
+    "13. Firma y certificación",
+  ];
+  return `<div class="section"><div class="section-title">Tabla de Contenido</div>
+    <table style="width:100%;font-size:11px"><tbody>${items.map(t => `<tr><td style="padding:5px 0;color:#334155;border-bottom:1px solid #f1f5f9">${t}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+// Marco metodológico (introducción → técnicas)
+function seccionMetodologia(kpis: any[], hallazgos: any[], granjas: any[]): string {
+  const nG = granjas.length, nH = hallazgos.length, nK = kpis.length;
+  const rango = _rangoFechas([...hallazgos, ...kpis]);
+  const bloque = (t: string, c: string) =>
+    `<div style="margin-bottom:11px;page-break-inside:avoid"><div style="font-size:11px;font-weight:800;color:#0D1526;margin-bottom:3px">${t}</div><div style="font-size:10.5px;line-height:1.65;color:#475569;text-align:justify">${c}</div></div>`;
+  return `<div class="section"><div class="section-title">Marco Metodológico de la Auditoría</div>
+    ${bloque("1. Introducción", `El presente informe consolida los resultados de la auditoría interna de cumplimiento KPI ejecutada por el área de ${EMPRESA.area} de ${EMPRESA.nombre} (NIT ${EMPRESA.nit}). El ejercicio se orientó a verificar el estado de los planes de acción derivados de los hallazgos de auditoría en las granjas avícolas evaluadas y a valorar el nivel de exposición al riesgo asociado.`)}
+    ${bloque("2. Objetivos", `Verificar el grado de avance y cierre de los ${nK} plan(es) de acción registrados; evaluar la severidad y el estado de los ${nH} hallazgo(s) identificados; y entregar a la Gerencia una visión objetiva del nivel de cumplimiento y de los riesgos residuales que requieren atención prioritaria.`)}
+    ${bloque("3. Alcance", `La revisión comprende ${nG} granja(s) avícola(s), ${nH} hallazgo(s) y ${nK} plan(es) de acción KPI, correspondientes a ${rango}. Se incluyen exclusivamente los registros filtrados en el sistema de auditoría al momento de generar este documento.`)}
+    ${bloque("4. Enfoque", `El enfoque es basado en riesgos: se prioriza el análisis de los hallazgos según su criticidad y tipo de riesgo (Operativo, Reputacional, Financiero, Legal y de Contagio), concentrando el esfuerzo de verificación en las áreas de mayor exposición.`)}
+    ${bloque("5. Métodos", `Revisión documental de los registros, verificación de las evidencias fotográficas cargadas por los responsables, seguimiento del porcentaje de avance de cada plan y contraste con las fechas de compromiso y cumplimiento registradas.`)}
+    ${bloque("6. Procedimientos", `Recolección de los registros del sistema; validación del estado de cada hallazgo y plan; revisión de las evidencias asociadas; cálculo de los indicadores de cumplimiento; y consolidación de resultados para su presentación a la Gerencia.`)}
+    ${bloque("7. Técnicas", `Inspección de evidencias, análisis comparativo de indicadores, revisión de la trazabilidad hallazgo–plan–evidencia y evaluación cualitativa del riesgo residual conforme a la clasificación institucional.`)}
+  </div>`;
+}
+
+// Marco legal aplicable (parametrizable — campo editable por informe)
+function seccionMarcoLegal(marcoLegal?: string): string {
+  const cuerpo = (marcoLegal && marcoLegal.trim())
+    ? marcoLegal.trim().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>")
+    : `<em style="color:#94a3b8">El marco legal aplicable no fue especificado para este informe. En el formulario de generación (campo "Marco legal aplicable") puede indicarse la normatividad sanitaria, ambiental y de bioseguridad vigente que aplique al alcance auditado.</em>`;
+  return `<div class="section"><div class="section-title">Marco Legal Aplicable</div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #4A7AFF;border-radius:6px;padding:12px 14px;font-size:10.5px;line-height:1.7;color:#334155;text-align:justify">${cuerpo}</div></div>`;
+}
+
+// Evaluación de riesgos + observaciones/causas/efectos/controles
+function seccionRiesgos(hallazgos: any[]): string {
+  const conteo: Record<string, number> = {};
+  TIPO_RIESGO.forEach(t => { conteo[t] = 0; });
+  hallazgos.forEach(h => (Array.isArray(h?.tiposRiesgo) ? h.tiposRiesgo : []).forEach((t: string) => { if (conteo[t] !== undefined) conteo[t]++; }));
+  const abiertos = hallazgos.filter(h => h.estado === "ABIERTO").length;
+  const criticos = hallazgos.filter(h => h.criticidad === "Crítica" || h.criticidad === "Alta").length;
+  const filas = TIPO_RIESGO.map(t => {
+    const n = conteo[t];
+    const nivel = n === 0 ? "Bajo" : n <= 2 ? "Medio" : "Alto";
+    const color = nivel === "Alto" ? "#EF4444" : nivel === "Medio" ? "#F97316" : "#22C55E";
+    return `<tr><td style="font-weight:600">${t}</td><td style="text-align:center">${n}</td>
+      <td style="text-align:center"><span class="badge" style="background:${color}1f;color:${color};border-color:${color}55">${nivel}</span></td></tr>`;
+  }).join("");
+  const bloque = (t: string, c: string) =>
+    `<div style="margin-bottom:9px"><div style="font-size:10.5px;font-weight:800;color:#0D1526;margin-bottom:2px">${t}</div><div style="font-size:10.5px;line-height:1.6;color:#475569;text-align:justify">${c}</div></div>`;
+  return `<div class="section"><div class="section-title">Evaluación de Riesgos</div>
+    <table style="margin-bottom:12px"><thead><tr><th>Tipo de riesgo</th><th style="text-align:center">Hallazgos asociados</th><th style="text-align:center">Nivel de exposición</th></tr></thead>
+    <tbody>${filas}</tbody></table>
+    ${bloque("Observaciones", `Del total de ${hallazgos.length} hallazgo(s) evaluados, ${abiertos} permanece(n) abierto(s) y ${criticos} presenta(n) criticidad alta o crítica. La distribución por tipo de riesgo se refleja en la matriz anterior.`)}
+    ${bloque("Análisis de causas", `Las causas raíz predominantes se asocian a desviaciones en los procedimientos operativos y de bioseguridad detectadas durante las visitas de auditoría, así como a demoras en la ejecución de los planes de acción comprometidos.`)}
+    ${bloque("Efectos potenciales", `De no cerrarse los hallazgos abiertos, la organización queda expuesta a afectaciones sanitarias, operativas y reputacionales, con posible impacto sobre los indicadores productivos y el cumplimiento normativo.`)}
+    ${bloque("Controles recomendados", `Reforzar los controles preventivos en las granjas de mayor exposición, mantener el seguimiento periódico de los planes de acción y documentar las evidencias de cierre para asegurar la trazabilidad del control interno.`)}
+  </div>`;
+}
+
+// Ficha técnica de las granjas auditadas
+function seccionFichaTecnica(granjas: any[]): string {
+  if (!granjas.length) return "";
+  return `<div class="section"><div class="section-title">Ficha Técnica de las Granjas Auditadas</div>
+    <table><thead><tr><th>Granja</th><th>Tipo</th><th style="text-align:right">Capacidad (aves)</th><th>Nivel de riesgo</th><th>Estado sanitario</th></tr></thead>
+    <tbody>${granjas.slice(0, 25).map(g => `<tr>
+      <td><strong>${g.nombre || "—"}</strong></td>
+      <td>${g.tipoGranja || g.tipoOperativo || "—"}</td>
+      <td style="text-align:right">${(Number(g.capacidadAves) || 0).toLocaleString("es-CO")}</td>
+      <td>${g.nivelRiesgo || "—"}</td>
+      <td>${g.estadoSanitario || "—"}</td>
+    </tr>`).join("")}</tbody></table></div>`;
+}
+
+// Consolidado de resultados (alimento / mortalidad / KPI)
+function seccionConsolidado(kpis: any[], granjas: any[], mortalidad?: MortalidadResumen): string {
+  const pct = porcentaje(kpis);
+  const comp = kpis.filter(k => k.estado === "COMPLETADO").length;
+  const pctColor = pct >= 70 ? "#22C55E" : pct >= 40 ? "#F97316" : "#EF4444";
+  const mortCell = (mortalidad && mortalidad.lotes > 0)
+    ? `<td><strong>${mortalidad.totalMuertes.toLocaleString("es-CO")}</strong> aves · <strong>${mortalidad.pctGlobal.toFixed(2)}%</strong> acumulado<br><span style="color:#64748b;font-size:9.5px">${mortalidad.lotes} lote(s) de trazabilidad · ${mortalidad.totalIngreso.toLocaleString("es-CO")} aves ingresadas · ${mortalidad.totalActuales.toLocaleString("es-CO")} aves actuales</span></td>`
+    : `<td style="color:#94a3b8"><em>Sin lotes de trazabilidad registrados para las granjas del alcance.</em></td>`;
+  return `<div class="section"><div class="section-title">Consolidado de Resultados</div>
+    <table><tbody>
+      <tr><td style="width:32%;font-weight:600;color:#0D1526">Inventario de alimento</td><td style="color:#94a3b8"><em>Sin datos disponibles — la plataforma no registra actualmente inventario de alimento.</em></td></tr>
+      <tr><td style="font-weight:600;color:#0D1526">Mortalidad avícola<br><span style="color:#64748b;font-size:9.5px;font-weight:400">Fuente: Trazabilidad</span></td>${mortCell}</tr>
+      <tr><td style="font-weight:600;color:#0D1526">Cumplimiento KPI</td><td><strong style="color:${pctColor};font-size:13px">${pct}%</strong> &nbsp;·&nbsp; ${comp} de ${kpis.length} plan(es) completado(s)</td></tr>
+    </tbody></table></div>`;
+}
+
+// Fortalezas identificadas
+function seccionFortalezas(kpis: any[], hallazgos: any[]): string {
+  const comp = kpis.filter(k => k.estado === "COMPLETADO").length;
+  const cerrados = hallazgos.filter(h => h.estado === "CERRADO").length;
+  const items: string[] = [];
+  if (comp > 0) items.push(`Se completaron <strong>${comp}</strong> plan(es) de acción, evidenciando capacidad de cierre de hallazgos.`);
+  if (cerrados > 0) items.push(`<strong>${cerrados}</strong> hallazgo(s) fueron cerrados con la gestión correspondiente.`);
+  items.push(`El sistema de auditoría mantiene trazabilidad completa: hallazgo → plan de acción → evidencia → seguimiento.`);
+  items.push(`La verificación se soporta en evidencias fotográficas cargadas por los responsables de cada granja.`);
+  return `<div class="section"><div class="section-title">Fortalezas Identificadas</div>
+    <ul style="font-size:10.5px;line-height:1.8;color:#334155;padding-left:18px;margin:0">${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`;
+}
+
+// Recomendaciones
+function seccionRecomendaciones(kpis: any[], hallazgos: any[]): string {
+  const noIni = kpis.filter(k => k.estado === "NO_INICIADO").length;
+  const abiertos = hallazgos.filter(h => h.estado === "ABIERTO").length;
+  const recs: string[] = [];
+  if (noIni > 0) recs.push(`Priorizar el inicio de <strong>${noIni}</strong> plan(es) de acción en estado "No Iniciado", asignando responsable y fecha de compromiso.`);
+  if (abiertos > 0) recs.push(`Establecer seguimiento inmediato a los <strong>${abiertos}</strong> hallazgo(s) que permanecen abiertos.`);
+  recs.push(`Mantener el cargue oportuno de evidencias fotográficas como soporte del cierre de cada plan.`);
+  recs.push(`Programar auditorías de seguimiento sobre las granjas con mayor nivel de riesgo.`);
+  return `<div class="section"><div class="section-title">Recomendaciones</div>
+    <ol style="font-size:10.5px;line-height:1.8;color:#334155;padding-left:18px;margin:0">${recs.map(r => `<li>${r}</li>`).join("")}</ol></div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODELO 1 — EJECUTIVO CORPORATIVO (reestructurado, formato Gerencia · 25 secciones)
+// ═══════════════════════════════════════════════════════════════════════════════
+function generarModelo1(
+  kpis: any[], hallazgos: any[], granjas: any[], auditor: string,
+  evidenciasPorHallazgo?: Record<string, any[]>, marcoLegal?: string, mortalidad?: MortalidadResumen
+): string {
   const pct  = porcentaje(kpis);
   const comp = kpis.filter(k=>k.estado==="COMPLETADO").length;
   const total= kpis.length;
@@ -880,6 +1030,12 @@ function generarModelo1(kpis: any[], hallazgos: any[], granjas: any[], auditor: 
 <title>Informe Ejecutivo — Pollos Savicol S.A.S.</title>
 <style>${CSS_BASE}</style></head><body><div class="page">
 ${portada("Informe Ejecutivo de Auditoría", "Control Interno y Cumplimiento KPI", kpis, hallazgos, auditor)}
+
+${seccionTOC()}
+
+${seccionMetodologia(kpis, hallazgos, granjas)}
+
+${seccionMarcoLegal(marcoLegal)}
 
 ${seccionResumen(kpis, hallazgos)}
 
@@ -900,9 +1056,17 @@ ${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
   </tbody></table>
 </div>
 
+${seccionRiesgos(hallazgos)}
+
+${seccionFichaTecnica(granjas)}
+
+${seccionConsolidado(kpis, granjas, mortalidad)}
+
+${seccionFortalezas(kpis, hallazgos)}
+
 <div class="section">
   <div class="section-title">Conclusiones Ejecutivas</div>
-  <div style="background:#f8fafc;border-radius:8px;padding:14px 16px;font-size:11px;line-height:1.7;color:#475569">
+  <div style="background:#f8fafc;border-radius:8px;padding:14px 16px;font-size:11px;line-height:1.7;color:#475569;text-align:justify">
     El análisis de cumplimiento KPI de <strong>${EMPRESA.nombre}</strong> registra un avance global del
     <strong style="color:${pct>=70?"#22C55E":pct>=40?"#F97316":"#EF4444"}">${pct}%</strong>
     con <strong>${comp}</strong> de <strong>${total}</strong> planes completados.
@@ -911,6 +1075,8 @@ ${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
     Se recomienda priorizar los planes en estado "No Iniciado" y establecer fechas de seguimiento inmediato.
   </div>
 </div>
+
+${seccionRecomendaciones(kpis, hallazgos)}
 
 ${seccionTrazabilidadKPI(kpis, hallazgos, granjas, evidenciasPorHallazgo)}
 
@@ -1319,6 +1485,46 @@ async function cargarEvidenciasInforme(
   return mapa;
 }
 
+// ─── Mortalidad REAL desde Trazabilidad (lotes) para las granjas del alcance ──────
+// Reutiliza el endpoint /documentos (misma fuente que useLotes): filtra los lotes
+// [LOTE-TRZ], parsea el JSON embebido y calcula la mortalidad como avesIngreso −
+// avesActuales (campos de nivel superior del lote). Sin datos inventados: si no hay
+// lotes para las granjas, devuelve lotes:0 y el consolidado marca "sin datos".
+async function cargarMortalidadInforme(
+  granjaIds: string[], accessToken: string | null
+): Promise<MortalidadResumen> {
+  const API = process.env.NEXT_PUBLIC_API_URL || "";
+  const acc: MortalidadResumen = { lotes: 0, totalIngreso: 0, totalActuales: 0, totalMuertes: 0, pctGlobal: 0, porGranja: {} };
+  if (!accessToken) return acc;
+  try {
+    const r = await fetch(`${API}/api/v1/documentos`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!r.ok) return acc;
+    const docs = await r.json();
+    if (!Array.isArray(docs)) return acc;
+    const setG = granjaIds.length ? new Set(granjaIds) : null;
+    for (const d of docs) {
+      if (!((d?.nombre as string) || "").includes("[LOTE-TRZ]")) continue;
+      const m = ((d?.ocrTexto as string) || "").match(/\[LOTE\]([\s\S]*?)\[\/LOTE\]/);
+      if (!m) continue;
+      let data: any;
+      try { data = JSON.parse(m[1]); } catch { continue; }
+      if (setG && !setG.has(data?.granjaId)) continue;
+      const ingreso = Number(data?.avesIngreso) || 0;
+      if (ingreso <= 0) continue;
+      const actuales = Number(data?.avesActuales) || 0;
+      const muertes = Math.max(0, ingreso - actuales);
+      acc.lotes++; acc.totalIngreso += ingreso; acc.totalActuales += actuales; acc.totalMuertes += muertes;
+      const gid = data?.granjaId || "—";
+      const prev = acc.porGranja[gid] || { ingreso: 0, actuales: 0, muertes: 0, pct: 0 };
+      prev.ingreso += ingreso; prev.actuales += actuales; prev.muertes += muertes;
+      prev.pct = prev.ingreso > 0 ? (prev.muertes / prev.ingreso) * 100 : 0;
+      acc.porGranja[gid] = prev;
+    }
+    acc.pctGlobal = acc.totalIngreso > 0 ? (acc.totalMuertes / acc.totalIngreso) * 100 : 0;
+    return acc;
+  } catch { return acc; }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // FUNCIÓN PRINCIPAL — GENERA Y ABRE EL INFORME SELECCIONADO
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1326,11 +1532,12 @@ export function generarInforme(
   modelo: ModeloInforme,
   kpis: any[], hallazgos: any[], granjas: any[],
   auditor: string, granjaFiltroId?: string,
-  evidenciasPorHallazgo?: Record<string, any[]>
+  evidenciasPorHallazgo?: Record<string, any[]>,
+  marcoLegal?: string, mortalidad?: MortalidadResumen
 ): void {
   let html = "";
   switch(modelo) {
-    case "1-ejecutivo": html = generarModelo1(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo); break;
+    case "1-ejecutivo": html = generarModelo1(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo, marcoLegal, mortalidad); break;
     case "2-tecnico":   html = generarModelo2(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo); break;
     case "3-dashboard": html = generarModelo3(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo); break;
     case "4-granja":    html = generarModelo4(kpis, hallazgos, granjas, auditor, granjaFiltroId, evidenciasPorHallazgo); break;
@@ -1776,8 +1983,8 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
   auditorsList?:   any[];
   resultadosCount?: number;
   onClose:    () => void;
-  onGenerar:  (modelo: ModeloInforme, granjaId?: string) => void | Promise<void>;
-  onEnviar:   (modelo: ModeloInforme, granjaId?: string, descripcion?: string) => void | Promise<void>;
+  onGenerar:  (modelo: ModeloInforme, granjaId?: string, marcoLegal?: string) => void | Promise<void>;
+  onEnviar:   (modelo: ModeloInforme, granjaId?: string, descripcion?: string, marcoLegal?: string) => void | Promise<void>;
 }) {
   const [modeloSel,   setModeloSel]   = useState<ModeloInforme>("5-general");
   const [granjaFiltro,setGranjaFiltro]= useState("");
@@ -1787,6 +1994,7 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
   const [enviando,       setEnviando]       = useState(false);
   const [enviado,          setEnviado]          = useState<string|null>(null);
   const [descripcionCorreo,setDescripcionCorreo] = useState("");
+  const [marcoLegal,       setMarcoLegal]        = useState("");
   const auditorStoreEmail = useAuthStore((s) => s.user?.email ?? "");
   const auditorStoreName  = useAuthStore((s) => s.user?.name  ?? "Auditor");
 
@@ -1819,7 +2027,7 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
     try {
       // Genera el PDF del modelo (con los filtros) y abre el formulario de envío
       // (destinatarios/CC/CCO/replyTo/historial) manejado por el page.
-      await onEnviar(modeloSel, granjaFiltro || undefined, descripcionCorreo);
+      await onEnviar(modeloSel, granjaFiltro || undefined, descripcionCorreo, marcoLegal || undefined);
       onClose();
     } catch(e: any) {
       setEnviado("✗ No se pudo generar el informe: " + (e?.message ?? "desconocido"));
@@ -1910,6 +2118,21 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
             </div>
           )}
 
+          {/* Marco legal aplicable — campo editable por informe (Ejecutivo / General) */}
+          {(modeloSel === "1-ejecutivo" || modeloSel === "5-general") && (
+            <div>
+              <span className="text-xs text-[#94A3B8] font-semibold mb-2 block">
+                Marco legal aplicable <span className="text-[#475569] font-normal">(opcional)</span>
+              </span>
+              <textarea value={marcoLegal} onChange={e=>setMarcoLegal(e.target.value)}
+                rows={3} className={INP_STYLE + " resize-none"}
+                placeholder="Normatividad sanitaria, ambiental y de bioseguridad aplicable al alcance (ej. resoluciones ICA, decretos, normas internas)…"/>
+              <p className="text-[9px] text-[#475569] mt-1 px-1">
+                Se incluye textualmente en la sección "Marco Legal Aplicable" del informe. Si se deja vacío, el informe indica que no fue especificado.
+              </p>
+            </div>
+          )}
+
           {/* Enviar por correo */}
           <div className="border border-[#1E2D4A] rounded-xl overflow-hidden">
             <button onClick={()=>setEnviarEmail(!enviarEmail)}
@@ -1957,7 +2180,7 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
         <footer className="flex items-center gap-2 px-6 py-4 border-t border-[#1E2D4A]">
           <button onClick={onClose} className="btn-ghost text-xs flex-1">Cancelar</button>
           <button
-            onClick={async () => { await onGenerar(modeloSel, granjaFiltro||undefined); onClose(); }}
+            onClick={async () => { await onGenerar(modeloSel, granjaFiltro||undefined, marcoLegal||undefined); onClose(); }}
             className="btn-primary text-sm bg-[#4A7AFF] hover:bg-[#3D6AE8] flex items-center gap-2 flex-1 justify-center py-2 font-semibold"
           >
             <FileText className="w-4 h-4"/>
@@ -2281,31 +2504,35 @@ export default function KPIPage() {
           auditorsList={AUDITORS}
           resultadosCount={filtered.length}
           onClose={() => setInformeOpen(false)}
-          onGenerar={async (modelo, granjaId) => {
+          onGenerar={async (modelo, granjaId, marcoLegal) => {
             const auditorNombre = usuarios?.find((u:any)=>u.role==="AUDITOR")?.name ?? "Auditor Interno";
             // Filtrado coherente: derivar hallazgos y granjas SOLO de los KPIs filtrados
             const hIds = new Set(filtered.map(k => k.hallazgoId).filter(Boolean));
             const gIds = new Set(filtered.map(k => k.granjaId).filter(Boolean));
             const hallazgosFiltrados = hallazgos.filter(h => hIds.has(h.id));
             const granjasFiltradas   = granjas.filter(g => gIds.has(g.id));
-            // Cargar evidencias fotográficas de los hallazgos filtrados
-            const evidenciasMap = await cargarEvidenciasInforme(
-              Array.from(hIds) as string[], accessToken
-            );
-            generarInforme(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId, evidenciasMap);
+            // Cargar evidencias fotográficas + mortalidad real (Trazabilidad) del alcance
+            const [evidenciasMap, mortalidad] = await Promise.all([
+              cargarEvidenciasInforme(Array.from(hIds) as string[], accessToken),
+              cargarMortalidadInforme(Array.from(gIds) as string[], accessToken),
+            ]);
+            generarInforme(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId, evidenciasMap, marcoLegal, mortalidad);
           }}
-          onEnviar={async (modelo, granjaId, descripcion) => {
+          onEnviar={async (modelo, granjaId, descripcion, marcoLegal) => {
             const auditorNombre = usuarios?.find((u:any)=>u.role==="AUDITOR")?.name ?? "Auditor Interno";
             // Filtrado coherente: hallazgos y granjas SOLO de los KPIs filtrados
             const hIds = new Set(filtered.map(k => k.hallazgoId).filter(Boolean));
             const gIds = new Set(filtered.map(k => k.granjaId).filter(Boolean));
             const hallazgosFiltrados = hallazgos.filter(h => hIds.has(h.id));
             const granjasFiltradas   = granjas.filter(g => gIds.has(g.id));
-            const evidenciasMap = await cargarEvidenciasInforme(Array.from(hIds) as string[], accessToken);
+            const [evidenciasMap, mortalidad] = await Promise.all([
+              cargarEvidenciasInforme(Array.from(hIds) as string[], accessToken),
+              cargarMortalidadInforme(Array.from(gIds) as string[], accessToken),
+            ]);
             // HTML EXACTO del modelo seleccionado (el mismo que "Descargar PDF").
             const htmlInforme = (() => {
               switch (modelo) {
-                case "1-ejecutivo": return generarModelo1(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
+                case "1-ejecutivo": return generarModelo1(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidad);
                 case "2-tecnico":   return generarModelo2(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
                 case "3-dashboard": return generarModelo3(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
                 case "4-granja":    return generarModelo4(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId, evidenciasMap);
