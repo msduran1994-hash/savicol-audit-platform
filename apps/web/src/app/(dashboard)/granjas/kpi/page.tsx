@@ -1163,23 +1163,109 @@ ${footer()}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MODELO 3 — DASHBOARD VISUAL
+// CHARTS BI ADICIONALES (Fase 3) — para completar 10 tipos de gráfico en el Dashboard
+// SVG/HTML inline, sin dependencias, con datos REALES filtrados.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Envoltorio de tarjeta de gráfico numerada
+function chartCard(num: number, titulo: string, contenido: string, subtitulo = ""): string {
+  return `<div class="chart-box" style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;page-break-inside:avoid">
+    <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:10px">
+      <span style="background:#4A7AFF;color:#fff;font-size:9px;font-weight:800;min-width:16px;height:16px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${num}</span>
+      <div><div style="font-size:11px;font-weight:700;color:#0D1526">${titulo}</div>${subtitulo ? `<div style="font-size:8.5px;color:#94a3b8">${subtitulo}</div>` : ""}</div>
+    </div>
+    ${contenido}
+  </div>`;
+}
+
+// Barras verticales — Hallazgos por criticidad
+function biColumnasCriticidad(hallazgos: any[]): string {
+  const niveles = [
+    { k: "Baja", c: "#22C55E" }, { k: "Media", c: "#FBBF24" },
+    { k: "Alta", c: "#F97316" }, { k: "Crítica", c: "#EF4444" },
+  ];
+  const conteo = niveles.map(n => ({ ...n, v: hallazgos.filter(h => h.criticidad === n.k).length }));
+  const sinClas = hallazgos.filter(h => !niveles.some(n => n.k === h.criticidad)).length;
+  const data = sinClas > 0 ? [...conteo, { k: "Sin clasif.", c: "#94A3B8", v: sinClas }] : conteo;
+  const max = Math.max(1, ...data.map(d => d.v));
+  const W = 260, H = 150, padB = 24, padT = 14, padL = 8, padR = 8;
+  const plotH = H - padB - padT;
+  const bw = (W - padL - padR) / data.length;
+  const bars = data.map((b, i) => {
+    const h = (b.v / max) * plotH;
+    const w = bw * 0.62, x = padL + i * bw + (bw - w) / 2, y = padT + plotH - h;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${b.c}"/>
+      <text x="${(x + w / 2).toFixed(1)}" y="${(y - 4).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="800" fill="#0D1526">${b.v}</text>
+      <text x="${(x + w / 2).toFixed(1)}" y="${H - padB + 13}" text-anchor="middle" font-size="8" fill="#64748b">${b.k}</text>`;
+  }).join("");
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
+    <line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" stroke="#e2e8f0" stroke-width="1"/>${bars}</svg>`;
+}
+
+// Barras apiladas 100% — Estado KPI por granja
+function biBarrasApiladas(kpis: any[], granjas: any[]): string {
+  const conActividad = granjas
+    .map(g => ({ g, ks: kpis.filter(k => k.granjaId === g.id) }))
+    .filter(x => x.ks.length > 0).slice(0, 8);
+  if (!conActividad.length) return `<p style="font-size:10px;color:#94a3b8;text-align:center;padding:16px">Sin KPIs por granja.</p>`;
+  const rows = conActividad.map(({ g, ks }) => {
+    const c = conteoEstadosBI(ks); const tot = ks.length;
+    const segs = BI_ORDEN.map(e => c[e] > 0 ? `<div style="width:${(c[e] / tot * 100).toFixed(1)}%;background:${BI_COLORS[e]}"></div>` : "").join("");
+    return `<div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;font-size:9.5px;margin-bottom:2px"><span style="color:#334155;font-weight:600">${(g.nombre || "—").slice(0, 24)}</span><span style="color:#94a3b8">${tot} KPI</span></div>
+      <div style="display:flex;height:14px;border-radius:4px;overflow:hidden;background:#f1f5f9">${segs}</div>
+    </div>`;
+  }).join("");
+  const leyenda = BI_ORDEN.map(e => `<span style="display:inline-flex;align-items:center;gap:4px;font-size:8.5px;color:#475569"><span style="width:9px;height:9px;border-radius:2px;background:${BI_COLORS[e]}"></span>${e}</span>`).join("");
+  return `${rows}<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9">${leyenda}</div>`;
+}
+
+// Radar — Perfil de hallazgos por tipo de riesgo
+function biRadarRiesgos(hallazgos: any[]): string {
+  const ejes = TIPO_RIESGO as readonly string[];
+  const conteo = ejes.map(t => hallazgos.filter(h => Array.isArray(h.tiposRiesgo) && h.tiposRiesgo.includes(t)).length);
+  const max = Math.max(1, ...conteo);
+  const W = 240, H = 210, cx = W / 2, cy = H / 2 + 4, R = 74, n = ejes.length;
+  const ang = (i: number) => -Math.PI / 2 + i * 2 * Math.PI / n;
+  const pt = (i: number, frac: number) => [cx + R * frac * Math.cos(ang(i)), cy + R * frac * Math.sin(ang(i))];
+  const rings = [0.25, 0.5, 0.75, 1].map(f => `<polygon points="${ejes.map((_, i) => pt(i, f).map(v => v.toFixed(1)).join(",")).join(" ")}" fill="none" stroke="#e2e8f0" stroke-width="1"/>`).join("");
+  const spokes = ejes.map((_, i) => { const [x, y] = pt(i, 1); return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#e2e8f0" stroke-width="1"/>`; }).join("");
+  const dataPoly = ejes.map((_, i) => pt(i, conteo[i] / max).map(v => v.toFixed(1)).join(",")).join(" ");
+  const dots = ejes.map((_, i) => { const [x, y] = pt(i, conteo[i] / max); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="#4A7AFF"/>`; }).join("");
+  const labels = ejes.map((t, i) => { const [x, y] = pt(i, 1.18); return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="8" font-weight="600" fill="#475569">${t} (${conteo[i]})</text>`; }).join("");
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
+    ${rings}${spokes}<polygon points="${dataPoly}" fill="#4A7AFF33" stroke="#4A7AFF" stroke-width="2"/>${dots}${labels}</svg>`;
+}
+
+// Embudo — Pipeline de cierre de planes KPI
+function biEmbudo(kpis: any[]): string {
+  const c = conteoEstadosBI(kpis);
+  const etapas = [
+    { k: "No Iniciado", v: c["No Iniciado"] }, { k: "En Espera", v: c["En Espera"] },
+    { k: "En Curso", v: c["En Curso"] }, { k: "Completado", v: c["Completado"] },
+  ];
+  const max = Math.max(1, ...etapas.map(e => e.v));
+  return etapas.map(e => {
+    const w = 28 + (e.v / max) * 72;
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="width:66px;font-size:9px;color:#475569;text-align:right;flex-shrink:0">${e.k}</span>
+      <div style="flex:1;display:flex;justify-content:center">
+        <div style="width:${w.toFixed(0)}%;background:${BI_COLORS[e.k as EstadoBI]};color:#fff;font-size:10px;font-weight:700;text-align:center;padding:5px 0;border-radius:4px">${e.v}</div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODELO 3 — DASHBOARD VISUAL (reestructurado · 10 tipos de gráfico)
 // ═══════════════════════════════════════════════════════════════════════════════
 function generarModelo3(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
-  const total = kpis.length;
-  const dona  = donaChart([
-    {v:kpis.filter(k=>k.estado==="COMPLETADO").length, c:"#22C55E", label:"Completado"},
-    {v:kpis.filter(k=>k.estado==="EN_CURSO").length,   c:"#F97316", label:"En Curso"},
-    {v:kpis.filter(k=>k.estado==="EN_ESPERA").length,  c:"#FBBF24", label:"En Espera"},
-    {v:kpis.filter(k=>k.estado==="NO_INICIADO").length,c:"#EF4444", label:"No Iniciado"},
-  ], 160);
-
-  // Avance por granja (top 6)
-  const granjasConAvance = granjas.slice(0,6).map(g => ({
+  // Avance por granja (top 8, solo con KPIs)
+  const granjasConAvance = granjas.map(g => ({
     nombre: g.nombre,
     kpis: kpis.filter(k=>k.granjaId===g.id),
     avance: porcentaje(kpis.filter(k=>k.granjaId===g.id)),
-  })).filter(g=>g.kpis.length>0);
+  })).filter(g=>g.kpis.length>0).slice(0,8);
 
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Dashboard Auditoría — Pollos Savicol S.A.S.</title>
@@ -1207,50 +1293,31 @@ ${portada("Dashboard de Auditoría", "Visualización Ejecutiva de KPIs · Pollos
 </div>
 
 <div class="section">
-  <div class="section-title">Análisis de Cumplimiento KPI</div>
-  <div class="charts-grid">
-    <div class="chart-box">
-      <div class="chart-title">Distribución por Estado</div>
-      <div style="display:flex;justify-content:center;margin-bottom:12px">${dona}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        ${[
-          {label:"Completado",c:"#22C55E",k:kpis.filter(k=>k.estado==="COMPLETADO").length},
-          {label:"En Curso",  c:"#F97316",k:kpis.filter(k=>k.estado==="EN_CURSO").length},
-          {label:"En Espera", c:"#FBBF24",k:kpis.filter(k=>k.estado==="EN_ESPERA").length},
-          {label:"No Iniciado",c:"#EF4444",k:kpis.filter(k=>k.estado==="NO_INICIADO").length},
-        ].map(d=>`<div style="display:flex;align-items:center;gap:5px;font-size:10px">
-          <div style="width:8px;height:8px;border-radius:50%;background:${d.c};flex-shrink:0"></div>
-          <span style="color:#475569;flex:1">${d.label}</span><strong>${d.k}</strong>
-        </div>`).join("")}
-      </div>
-    </div>
-    <div class="chart-box">
-      <div class="chart-title">Avance por Granja</div>
-      ${granjasConAvance.length > 0
-        ? granjasConAvance.map(g=>barraHorizontal(g.nombre.slice(0,18), g.avance, 100, g.avance>=70?"#22C55E":g.avance>=40?"#F97316":"#EF4444")).join("")
-        : "<p style='font-size:11px;color:#64748b;text-align:center'>Sin datos por granja</p>"
-      }
-    </div>
-  </div>
-</div>
+  <div class="section-title">Tablero Visual · Cumplimiento KPI <span style="font-size:9px;font-weight:400;color:#94a3b8">(10 visualizaciones · datos filtrados)</span></div>
 
-<div class="section">
-  <div class="section-title">Estado de Hallazgos</div>
-  <div class="charts-grid">
-    <div class="chart-box">
-      <div class="chart-title">Por Estado</div>
-      ${barraHorizontal("Abiertos",  hallazgos.filter(h=>h.estado==="ABIERTO").length,  hallazgos.length, "#EF4444")}
-      ${barraHorizontal("En Plan",   hallazgos.filter(h=>h.estado==="EN_PLAN").length,   hallazgos.length, "#F97316")}
-      ${barraHorizontal("Cerrados",  hallazgos.filter(h=>h.estado==="CERRADO").length,  hallazgos.length, "#22C55E")}
-    </div>
-    <div class="chart-box">
-      <div class="chart-title">Top KPIs Completados</div>
-      ${kpis.filter(k=>k.estado==="COMPLETADO").slice(0,4).map(k=>`
-      <div style="padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:10px">
-        <div style="font-weight:600;color:#1a202c">${k.accion?.slice(0,40)||"—"}</div>
-        <div style="color:#64748b">${k.responsable||"—"}</div>
-      </div>`).join("") || "<p style='font-size:11px;color:#64748b'>Sin completados aún</p>"}
-    </div>
+  ${chartCard(1, "Indicadores de Cumplimiento", biResumenEjecutivo(kpis), "Tarjetas de indicadores")}
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+    ${chartCard(2, "Distribución por Estado", biDistribucionEstados(kpis), "Gráfico de dona")}
+    ${chartCard(3, "Avance de Cumplimiento", biGaugeCumplimiento(kpis), "Indicador radial (gauge)")}
+    ${chartCard(4, "Hallazgos por Criticidad", biColumnasCriticidad(hallazgos), "Barras verticales")}
+    ${chartCard(5, "Perfil de Riesgos", biRadarRiesgos(hallazgos), "Radar por tipo de riesgo")}
+    ${chartCard(6, "Avance por Granja", granjasConAvance.length
+        ? granjasConAvance.map(g=>barraHorizontal(g.nombre.slice(0,18), g.avance, 100, g.avance>=70?"#22C55E":g.avance>=40?"#F97316":"#EF4444")).join("")
+        : "<p style='font-size:10px;color:#94a3b8;text-align:center;padding:16px'>Sin datos por granja</p>", "Barras horizontales")}
+    ${chartCard(7, "Embudo de Cierre", biEmbudo(kpis), "Pipeline No Iniciado → Completado")}
+  </div>
+
+  <div style="margin-top:14px">
+    ${chartCard(8, "Estado KPI por Granja", biBarrasApiladas(kpis, granjas), "Barras apiladas 100%")}
+  </div>
+
+  <div style="margin-top:14px">
+    ${chartCard(9, "Tendencia Cronológica", biTendenciaCumplimiento(kpis, hallazgos), "Serie temporal por mes")}
+  </div>
+
+  <div style="margin-top:14px">
+    ${chartCard(10, "Matriz Riesgos vs Estado KPI", biRiesgosVsEstado(kpis, hallazgos), "Mapa de calor")}
   </div>
 </div>
 
