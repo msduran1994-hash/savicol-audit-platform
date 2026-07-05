@@ -276,10 +276,16 @@ tr:nth-child(even) td{background:#f9fafb}
 .enespera-color{background:#FBBF24}
 .noiniciado-color{background:#EF4444}
 
+@page{size:A4;margin:10mm 0}
 @media print{
   .no-print{display:none}
   .page{max-width:100%}
   body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .cover{page-break-after:avoid}
+  .divider{page-break-inside:avoid;page-break-after:avoid}
+  .section{page-break-inside:avoid}
+  .section-title{page-break-after:avoid}
+  table,tr,img,svg,.chart-box,.kpi-item,.kpi-card,.firma-section{page-break-inside:avoid}
 }
 `;
 
@@ -1884,49 +1890,88 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
       return new Promise<void>(res => { img.onload = () => res(); img.onerror = () => res(); setTimeout(res, 2000); });
     }));
 
-    // Capturar el ROOT (con su estilo aplicado) en alta resolución
-    const canvas = await html2canvas(root, {
-      scale:            2,
-      useCORS:          true,
-      allowTaint:       true,
-      backgroundColor:  "#ffffff",
-      logging:          false,
-      width:            900,
-      windowWidth:      900,
-    });
+    // ── Paginación por BLOQUES (formato corporativo, sin cortar secciones) ──
+    // Cada hijo de .page (portada, divisores, secciones) es una unidad de salto de
+    // página: si no cabe en lo que resta, salta a la siguiente. Si un bloque es más
+    // alto que una página, se recurre a sus hijos (p. ej. tarjetas KPI, charts); solo
+    // si un elemento atómico sigue sin caber (tabla enorme) se corta como último recurso.
+    const pageEl = root.querySelector(".page") as HTMLElement | null;
+    const pdf    = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+    const pageW  = pdf.internal.pageSize.getWidth();   // 210mm
+    const pageH  = pdf.internal.pageSize.getHeight();  // 297mm
+    const mTop = 8, mBottom = 11;                        // márgenes (footer = nº de página)
+    const usableH = pageH - mTop - mBottom;
+    const mmPerPx = pageW / 900;                         // el layout mide 900px de ancho
+    let y = mTop;
+    let pageVacia = true;
+
+    const capturar = (el: HTMLElement) =>
+      html2canvas(el, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: "#ffffff", logging: false, windowWidth: 900 });
+    const nuevaPagina = () => { pdf.addPage(); y = mTop; pageVacia = true; };
+
+    // Coloca un canvas preservando su proporción (centrado según el ancho real del
+    // elemento); salta de página o corta en tiras si es más alto que una página.
+    const colocarCanvas = (canvas: HTMLCanvasElement, elWidthPx: number) => {
+      if (!canvas.width || !canvas.height) return;
+      const wmm = Math.min(pageW, (elWidthPx / 900) * pageW);
+      const x   = (pageW - wmm) / 2;
+      const hmm = (canvas.height / canvas.width) * wmm;
+      if (hmm <= usableH) {
+        if (hmm > (pageH - mBottom - y) + 0.5 && !pageVacia) nuevaPagina();
+        pdf.addImage(canvas.toDataURL("image/jpeg", 0.9), "JPEG", x, y, wmm, hmm, undefined, "FAST");
+        y += hmm; pageVacia = false;
+      } else {
+        if (!pageVacia) nuevaPagina();
+        const pxPorPagina = Math.floor((usableH / hmm) * canvas.height);
+        let rendered = 0;
+        while (rendered < canvas.height) {
+          if (!pageVacia) nuevaPagina();
+          const sh = Math.min(pxPorPagina, canvas.height - rendered);
+          const pc = document.createElement("canvas");
+          pc.width = canvas.width; pc.height = sh;
+          const ctx = pc.getContext("2d");
+          if (ctx) { ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, pc.width, pc.height); ctx.drawImage(canvas, 0, rendered, canvas.width, sh, 0, 0, canvas.width, sh); }
+          const shmm = (sh / canvas.width) * wmm;
+          pdf.addImage(pc.toDataURL("image/jpeg", 0.9), "JPEG", x, mTop, wmm, shmm, undefined, "FAST");
+          rendered += sh; y = mTop + shmm; pageVacia = false;
+        }
+      }
+    };
+
+    // Coloca un elemento; si es más alto que una página, recurre a sus hijos de bloque
+    const colocarElemento = async (el: HTMLElement, prof: number): Promise<void> => {
+      const hmmAprox = el.offsetHeight * mmPerPx;
+      const hijos = Array.from(el.children).filter((c): c is HTMLElement => c instanceof HTMLElement && c.offsetHeight > 0);
+      // Recursión de UN solo nivel: los hijos directos de las secciones se colocan
+      // enteros, centrados según su ancho real (grillas de 2 columnas se mantienen).
+      if (hmmAprox > usableH && prof < 1 && hijos.length > 1) {
+        for (const hijo of hijos) await colocarElemento(hijo, prof + 1);
+        return;
+      }
+      colocarCanvas(await capturar(el), el.offsetWidth);
+    };
+
+    const bloques = pageEl
+      ? Array.from(pageEl.children).filter((c): c is HTMLElement => c instanceof HTMLElement && c.offsetHeight > 0)
+      : [root];
+    for (const bloque of bloques) {
+      const esDivider = typeof bloque.className === "string" && bloque.className.includes("divider");
+      // Evita divisores huérfanos: si queda poco espacio, empújalo con su sección
+      if (esDivider && !pageVacia && (pageH - mBottom - y) < 48) nuevaPagina();
+      await colocarElemento(bloque, 0);
+    }
 
     document.body.removeChild(container);
     container = null;
 
-    if (!canvas.width || !canvas.height) {
-      throw new Error("El informe se renderizó vacío (canvas sin dimensiones)");
-    }
-
-    // PDF A4 multipágina
-    const pdf      = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
-    const pageW    = pdf.internal.pageSize.getWidth();
-    const pageH    = pdf.internal.pageSize.getHeight();
-    const pxPerMm  = canvas.width / pageW;
-    const pageHpx  = Math.floor(pageH * pxPerMm);
-    let renderedH  = 0;
-    let pageIdx    = 0;
-    while (renderedH < canvas.height) {
-      if (pageIdx > 0) pdf.addPage();
-      const sliceH = Math.min(pageHpx, canvas.height - renderedH);
-      const pageCanvas = document.createElement("canvas");
-      pageCanvas.width  = canvas.width;
-      pageCanvas.height = sliceH;
-      const ctx = pageCanvas.getContext("2d");
-      if (ctx) {
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-        ctx.drawImage(canvas, 0, renderedH, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-      }
-      const sliceData = pageCanvas.toDataURL("image/jpeg", 0.85);
-      const sliceHmm  = (sliceH * pageW) / canvas.width;
-      pdf.addImage(sliceData, "JPEG", 0, 0, pageW, sliceHmm, undefined, "FAST");
-      renderedH += sliceH;
-      pageIdx++;
+    // Numeración de páginas + pie corporativo (en el margen inferior)
+    const totalPaginas = pdf.getNumberOfPages();
+    for (let i = 1; i <= totalPaginas; i++) {
+      pdf.setPage(i);
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(148, 163, 184);
+      pdf.text("Pollos Savicol S.A.S. · Auditoría Interna", 8, pageH - 4);
+      pdf.text(`Página ${i} de ${totalPaginas}`, pageW - 8, pageH - 4, { align: "right" });
     }
 
     const b64 = pdf.output("datauristring").split(",")[1];
