@@ -154,6 +154,20 @@ export const MODELOS_INFO: Record<ModeloInforme, { titulo: string; desc: string;
   "5-general":   { titulo: "Informe General Completo",  desc: "Ejecutivo + Dashboard con estructura de auditoría",         icon: "⭐" },
 };
 
+// Datos generales del informe (formulario único, FASE 3). Se piden una vez y se
+// incorporan automáticamente en portada + firmas de los 3 modelos. Efímero (sin BD).
+export type DatosGenerales = {
+  numeroInforme: string;
+  auditor1: string;
+  auditor2: string;
+  fechaVisita: string;
+  fechaGeneracion: string;
+  gerenteGeneral: string;
+  administrador: string;
+  oficialCumplimiento: string;
+  tituloActividad: string;
+};
+
 // ─── Utilidades ───────────────────────────────────────────────────────────────
 function fmtFecha(d?: string) {
   if (!d) return "—";
@@ -591,9 +605,17 @@ function seccionDashboardEjecutivo(kpis: any[], hallazgos: any[], granjas: any[]
 }
 
 // ─── PORTADA COMPARTIDA ───────────────────────────────────────────────────────
-function portada(titulo: string, subtitulo: string, kpis: any[], hallazgos: any[], auditor: string, granjaFiltro?: string): string {
+function portada(titulo: string, subtitulo: string, kpis: any[], hallazgos: any[], auditor: string, granjaFiltro?: string, datos?: DatosGenerales): string {
   const fecha = fmtFecha(new Date().toISOString());
   const pct   = porcentaje(kpis);
+  const auditores = [datos?.auditor1, datos?.auditor2].filter(Boolean).join(" · ") || auditor || "Equipo de Auditoría";
+  const fGen = datos?.fechaGeneracion ? fmtFecha(datos.fechaGeneracion) : fecha;
+  const meta: { label: string; value: string }[] = [];
+  if (datos?.numeroInforme) meta.push({ label: "N° de Informe", value: datos.numeroInforme });
+  meta.push({ label: "Fecha de Generación", value: fGen });
+  if (datos?.fechaVisita) meta.push({ label: "Fecha de Visita", value: fmtFecha(datos.fechaVisita) });
+  meta.push({ label: datos?.auditor2 ? "Auditores" : "Auditor Responsable", value: auditores });
+  meta.push({ label: "Avance Global KPI", value: `${pct}% · ${kpis.length} planes` });
   return `
   <div class="cover">
     <div class="logo-box">
@@ -605,21 +627,11 @@ function portada(titulo: string, subtitulo: string, kpis: any[], hallazgos: any[
     </div>
     <h1>${titulo}</h1>
     <h2>${subtitulo}</h2>
+    ${datos?.tituloActividad ? `<p style="color:rgba(255,255,255,0.9);font-size:13px;font-weight:600;margin-bottom:4px">${datos.tituloActividad}</p>` : ""}
     ${granjaFiltro ? `<p style="color:rgba(255,255,255,0.7);font-size:12px;margin-bottom:4px">Granja: <strong style="color:white">${granjaFiltro}</strong></p>` : ""}
     <div><span class="confidencial">CONFIDENCIAL</span></div>
     <div class="cover-meta">
-      <div class="cover-meta-item">
-        <div class="cover-meta-label">Fecha de Generación</div>
-        <div class="cover-meta-value">${fecha}</div>
-      </div>
-      <div class="cover-meta-item">
-        <div class="cover-meta-label">Auditor Responsable</div>
-        <div class="cover-meta-value">${auditor || "Equipo de Auditoría"}</div>
-      </div>
-      <div class="cover-meta-item">
-        <div class="cover-meta-label">Avance Global KPI</div>
-        <div class="cover-meta-value">${pct}% · ${kpis.length} planes</div>
-      </div>
+      ${meta.map(m => `<div class="cover-meta-item"><div class="cover-meta-label">${m.label}</div><div class="cover-meta-value">${m.value}</div></div>`).join("")}
     </div>
   </div>`;
 }
@@ -825,35 +837,33 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[]): string {
 }
 
 // ─── SECCIÓN FIRMA DIGITAL ────────────────────────────────────────────────────
-function seccionFirma(auditor: string, cargo="Auditor Interno"): string {
+function seccionFirma(auditor: string, cargo="Auditor Interno", datos?: DatosGenerales): string {
   const fecha = fmtFechaCorta(new Date().toISOString());
   const hash  = `SHA-${Date.now().toString(36).toUpperCase()}`;
+  // Firmantes: con datos generales se usan los roles del formulario; si no, auditor + gerencia.
+  const firmantes: { nombre: string; cargo: string; nota?: string }[] = [];
+  if (datos?.auditor1) firmantes.push({ nombre: datos.auditor1, cargo: "Auditor 1", nota: `Firma digital: ${hash}` });
+  if (datos?.auditor2) firmantes.push({ nombre: datos.auditor2, cargo: "Auditor 2" });
+  if (!datos?.auditor1 && !datos?.auditor2) firmantes.push({ nombre: auditor || "Auditor Interno", cargo, nota: `Firma digital: ${hash}` });
+  firmantes.push({ nombre: datos?.gerenteGeneral || "Gerencia General", cargo: "Gerente General", nota: "V°B° — Pendiente de aprobación" });
+  if (datos?.administrador)        firmantes.push({ nombre: datos.administrador, cargo: "Administrador" });
+  if (datos?.oficialCumplimiento)  firmantes.push({ nombre: datos.oficialCumplimiento, cargo: "Oficial de Cumplimiento" });
+
+  const box = (f: { nombre: string; cargo: string; nota?: string }) => `
+      <div class="firma-box" style="page-break-inside:avoid">
+        <div class="firma-line"></div>
+        <div class="firma-name">${f.nombre}</div>
+        <div class="firma-cargo">${f.cargo}</div>
+        <div class="firma-cargo">${EMPRESA.nombre}</div>
+        ${f.nota ? `<div class="firma-digital">${f.nota}</div>` : ""}
+      </div>`;
   return `
   <div class="section">
-    <div class="section-title">Firma y Certificación</div>
-    <div class="firma-section">
-      <div class="firma-box">
-        <div style="margin-bottom:16px">
-          <div class="sello">POLLOS<br>SAVICOL<br>S.A.S.</div>
-        </div>
-        <div class="firma-line"></div>
-        <div class="firma-name">${auditor || "Auditor Interno"}</div>
-        <div class="firma-cargo">${cargo}</div>
-        <div class="firma-cargo">${EMPRESA.area}</div>
-        <div class="firma-digital">Firma digital: ${hash}</div>
-        <div class="firma-digital">Fecha: ${fecha}</div>
-      </div>
-      <div class="firma-box">
-        <div style="margin-bottom:16px">
-          <div class="sello" style="border-color:#0D1526;color:#0D1526">V°B°<br>GERENCIA</div>
-        </div>
-        <div class="firma-line"></div>
-        <div class="firma-name">Gerencia General</div>
-        <div class="firma-cargo">Pollos Savicol S.A.S.</div>
-        <div class="firma-digital">Pendiente de aprobación</div>
-      </div>
+    <div class="section-title">Firmas y Certificación</div>
+    <div style="display:grid;grid-template-columns:repeat(${firmantes.length >= 3 ? 3 : 2},1fr);gap:28px 30px;margin-top:22px">
+      ${firmantes.map(box).join("")}
     </div>
-    <div style="margin-top:16px;padding:10px 14px;background:#f0f9ff;border-radius:6px;border:1px solid #bae6fd;font-size:10px;color:#0c4a6e">
+    <div style="margin-top:20px;padding:10px 14px;background:#f0f9ff;border-radius:6px;border:1px solid #bae6fd;font-size:10px;color:#0c4a6e">
       <strong>Nota de confidencialidad:</strong> Este informe contiene información confidencial de ${EMPRESA.nombre}.
       Su distribución está restringida a los destinatarios autorizados. Generado automáticamente por el
       Sistema de Auditoría Interna el ${fecha}.
@@ -867,6 +877,60 @@ function footer(): string {
     <strong>${EMPRESA.nombre}</strong> · ${EMPRESA.area} · ${EMPRESA.ciudad} · ${EMPRESA.telefono} · ${EMPRESA.email}
     <br>Documento generado por Audit Platform Software · ${fmtFechaCorta(new Date().toISOString())}
   </div>`;
+}
+
+// ─── SECCIÓN INDICADORES DE MORTALIDAD (real, desde Trazabilidad) ──────────────
+function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: any[]): string {
+  if (!mortalidad || mortalidad.lotes === 0) {
+    return `<div class="section"><div class="section-title">Indicadores de Mortalidad</div>
+      <p style="font-size:11px;color:#94a3b8"><em>Sin lotes de trazabilidad registrados para las granjas del alcance — no hay indicadores de mortalidad disponibles.</em></p></div>`;
+  }
+  const tarjetas = [
+    { l: "Aves ingresadas",  v: mortalidad.totalIngreso.toLocaleString("es-CO"),  c: "#0D1526" },
+    { l: "Aves actuales",    v: mortalidad.totalActuales.toLocaleString("es-CO"), c: "#4A7AFF" },
+    { l: "Mortalidad total", v: mortalidad.totalMuertes.toLocaleString("es-CO"),  c: "#EF4444" },
+    { l: "% Acumulado",      v: mortalidad.pctGlobal.toFixed(2) + "%",            c: mortalidad.pctGlobal >= 8 ? "#EF4444" : mortalidad.pctGlobal >= 4 ? "#F97316" : "#22C55E" },
+  ];
+  const filas = Object.entries(mortalidad.porGranja).map(([gid, m]) => {
+    const g = granjas.find(gr => gr.id === gid);
+    const color = m.pct >= 8 ? "#EF4444" : m.pct >= 4 ? "#F97316" : "#22C55E";
+    return `<tr>
+      <td><strong>${g?.nombre || "—"}</strong></td>
+      <td style="text-align:right">${m.ingreso.toLocaleString("es-CO")}</td>
+      <td style="text-align:right">${m.actuales.toLocaleString("es-CO")}</td>
+      <td style="text-align:right;font-weight:700">${m.muertes.toLocaleString("es-CO")}</td>
+      <td style="text-align:right"><span class="badge" style="background:${color}1f;color:${color}">${m.pct.toFixed(2)}%</span></td>
+    </tr>`;
+  }).join("");
+  return `<div class="section"><div class="section-title">Indicadores de Mortalidad</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+      ${tarjetas.map(k => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:3px solid ${k.c};border-radius:8px;padding:12px 8px;text-align:center">
+        <div style="font-size:20px;font-weight:800;color:${k.c}">${k.v}</div>
+        <div style="font-size:9px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.3px">${k.l}</div></div>`).join("")}
+    </div>
+    <table><thead><tr><th>Granja</th><th style="text-align:right">Ingresadas</th><th style="text-align:right">Actuales</th><th style="text-align:right">Muertes</th><th style="text-align:right">% Mort.</th></tr></thead>
+    <tbody>${filas}</tbody></table>
+    <p style="font-size:9px;color:#94a3b8;margin-top:6px">Fuente: Trazabilidad (${mortalidad.lotes} lote(s)). Mortalidad = aves ingresadas − aves actuales.</p>
+  </div>`;
+}
+
+// ─── SECCIÓN EVIDENCIAS FOTOGRÁFICAS (reutiliza evidenciasGridHTML) ────────────
+function seccionEvidencias(hallazgos: any[], granjas: any[], evidenciasPorHallazgo?: Record<string, any[]>): string {
+  const conFotos = evidenciasPorHallazgo ? hallazgos.filter(h => (evidenciasPorHallazgo[h.id]?.length ?? 0) > 0) : [];
+  if (!conFotos.length) {
+    return `<div class="section"><div class="section-title">Evidencias Fotográficas</div>
+      <p style="font-size:11px;color:#94a3b8"><em>No hay evidencias fotográficas cargadas para los hallazgos del alcance.</em></p></div>`;
+  }
+  const bloques = conFotos.slice(0, 15).map(h => {
+    const g = granjas.find(gr => gr.id === h.granjaId);
+    const evs = evidenciasPorHallazgo![h.id] || [];
+    return `<div style="margin-bottom:16px;page-break-inside:avoid">
+      <div style="font-size:11px;font-weight:700;color:#0D1526;margin-bottom:2px">${h.titulo?.slice(0, 70) || "Hallazgo"}</div>
+      <div style="font-size:9px;color:#64748b;margin-bottom:6px">${g?.nombre || "—"} · ${fmtFechaCorta(h.fechaVisita)} · ${evs.length} foto(s)</div>
+      ${evidenciasGridHTML(evs.map((ev: any) => ({ src: ev.url, titulo: ev.nombre || undefined, pie: ev.categoria || undefined })))}
+    </div>`;
+  }).join("");
+  return `<div class="section"><div class="section-title">Evidencias Fotográficas</div>${bloques}</div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1017,74 +1081,30 @@ function seccionRecomendaciones(kpis: any[], hallazgos: any[]): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MODELO 1 — EJECUTIVO CORPORATIVO (reestructurado, formato Gerencia · 25 secciones)
+// MODELO 1 — EJECUTIVO CORPORATIVO (lean: hallazgos, planes, mortalidad, evidencias)
+// Sin dashboards ni gráficos. Las secciones profesionales van solo en el General.
 // ═══════════════════════════════════════════════════════════════════════════════
 function generarModelo1(
   kpis: any[], hallazgos: any[], granjas: any[], auditor: string,
-  evidenciasPorHallazgo?: Record<string, any[]>, marcoLegal?: string, mortalidad?: MortalidadResumen
+  evidenciasPorHallazgo?: Record<string, any[]>, marcoLegal?: string,
+  mortalidad?: MortalidadResumen, datos?: DatosGenerales
 ): string {
-  const pct  = porcentaje(kpis);
-  const comp = kpis.filter(k=>k.estado==="COMPLETADO").length;
-  const total= kpis.length;
-
-  // Top 3 hallazgos más críticos
-  const top3 = hallazgos.slice(0,3);
-
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Informe Ejecutivo — Pollos Savicol S.A.S.</title>
 <style>${CSS_BASE}</style></head><body><div class="page">
-${portada("Informe Ejecutivo de Auditoría", "Control Interno y Cumplimiento KPI", kpis, hallazgos, auditor)}
-
-${seccionTOC()}
-
-${seccionMetodologia(kpis, hallazgos, granjas)}
-
-${seccionMarcoLegal(marcoLegal)}
+${portada("Informe Ejecutivo de Auditoría", "Control Interno y Cumplimiento KPI", kpis, hallazgos, auditor, undefined, datos)}
 
 ${seccionResumen(kpis, hallazgos)}
 
-${seccionDashboardEjecutivo(kpis, hallazgos, granjas)}
+${seccionMortalidad(mortalidad, granjas)}
 
-<div class="section">
-  <div class="section-title">Hallazgos Críticos Prioritarios</div>
-  <table><thead><tr><th>Hallazgo</th><th>Granja</th><th>Auditor</th><th>Fecha</th><th>Estado</th></tr></thead>
-  <tbody>${top3.map(h=>{
-    const g=granjas.find(gr=>gr.id===h.granjaId);
-    return `<tr>
-      <td><strong>${h.titulo?.slice(0,40)||"—"}</strong></td>
-      <td>${g?.nombre||"—"}</td>
-      <td>${h.auditorNombre||"—"}</td>
-      <td>${fmtFechaCorta(h.fechaVisita)}</td>
-      <td><span class="badge ${clsBadge(h.estado)}">${displayEstado(h.estado)}</span></td>
-    </tr>`;}).join("")}
-  </tbody></table>
-</div>
+${seccionHallazgos(hallazgos, granjas, 20)}
 
-${seccionRiesgos(hallazgos)}
+${seccionKPIs(kpis, granjas, hallazgos)}
 
-${seccionFichaTecnica(granjas)}
+${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
 
-${seccionConsolidado(kpis, granjas, mortalidad)}
-
-${seccionFortalezas(kpis, hallazgos)}
-
-<div class="section">
-  <div class="section-title">Conclusiones Ejecutivas</div>
-  <div style="background:#f8fafc;border-radius:8px;padding:14px 16px;font-size:11px;line-height:1.7;color:#475569;text-align:justify">
-    El análisis de cumplimiento KPI de <strong>${EMPRESA.nombre}</strong> registra un avance global del
-    <strong style="color:${pct>=70?"#22C55E":pct>=40?"#F97316":"#EF4444"}">${pct}%</strong>
-    con <strong>${comp}</strong> de <strong>${total}</strong> planes completados.
-    Se identificaron <strong>${hallazgos.length}</strong> hallazgos en total,
-    de los cuales <strong style="color:#EF4444">${hallazgos.filter(h=>h.estado==="ABIERTO").length}</strong> permanecen abiertos.
-    Se recomienda priorizar los planes en estado "No Iniciado" y establecer fechas de seguimiento inmediato.
-  </div>
-</div>
-
-${seccionRecomendaciones(kpis, hallazgos)}
-
-${seccionTrazabilidadKPI(kpis, hallazgos, granjas, evidenciasPorHallazgo)}
-
-${seccionFirma(auditor)}
+${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
 </div></body></html>`;
 }
@@ -1225,7 +1245,7 @@ function seccionDashboardCompleto(kpis: any[], hallazgos: any[], granjas: any[])
 // ═══════════════════════════════════════════════════════════════════════════════
 // MODELO 3 — DASHBOARD VISUAL (reestructurado · 10 tipos de gráfico)
 // ═══════════════════════════════════════════════════════════════════════════════
-function generarModelo3(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, evidenciasPorHallazgo?: Record<string, any[]>): string {
+function generarModelo3(kpis: any[], hallazgos: any[], granjas: any[], auditor: string, evidenciasPorHallazgo?: Record<string, any[]>, datos?: DatosGenerales): string {
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Dashboard Auditoría — Pollos Savicol S.A.S.</title>
 <style>${CSS_BASE}
@@ -1238,7 +1258,7 @@ function generarModelo3(kpis: any[], hallazgos: any[], granjas: any[], auditor: 
 .metric-n{font-size:22px;font-weight:800}
 .metric-l{font-size:9px;color:#64748b}
 </style></head><body><div class="page">
-${portada("Dashboard de Auditoría", "Visualización Ejecutiva de KPIs · Pollos Savicol S.A.S.", kpis, hallazgos, auditor)}
+${portada("Dashboard de Auditoría", "Visualización Ejecutiva de KPIs · Pollos Savicol S.A.S.", kpis, hallazgos, auditor, undefined, datos)}
 
 <div class="metric-grid">
   ${[
@@ -1253,25 +1273,7 @@ ${portada("Dashboard de Auditoría", "Visualización Ejecutiva de KPIs · Pollos
 
 ${seccionDashboardCompleto(kpis, hallazgos, granjas)}
 
-<div class="section">
-  <div class="section-title">Hallazgos Prioritarios</div>
-  <table><thead><tr><th>#</th><th>Hallazgo</th><th>Granja</th><th>Auditor</th><th>Fecha</th><th>Estado</th></tr></thead>
-  <tbody>${hallazgos.slice(0,8).map((h,i)=>{
-    const g=granjas.find(gr=>gr.id===h.granjaId);
-    return `<tr>
-      <td><strong>${i+1}</strong></td>
-      <td>${h.titulo?.slice(0,35)||"—"}</td>
-      <td>${g?.nombre||"—"}</td>
-      <td>${h.auditorNombre||"—"}</td>
-      <td>${fmtFechaCorta(h.fechaVisita)}</td>
-      <td><span class="badge ${clsBadge(h.estado)}">${displayEstado(h.estado)}</span></td>
-    </tr>`;}).join("")}
-  </tbody></table>
-</div>
-
-${seccionTrazabilidadKPI(kpis, hallazgos, granjas, evidenciasPorHallazgo)}
-
-${seccionFirma(auditor)}
+${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
 </div></body></html>`;
 }
@@ -1283,12 +1285,13 @@ ${footer()}
 // ═══════════════════════════════════════════════════════════════════════════════
 function generarModelo5(
   kpis: any[], hallazgos: any[], granjas: any[], auditor: string,
-  evidenciasPorHallazgo?: Record<string, any[]>, marcoLegal?: string, mortalidad?: MortalidadResumen
+  evidenciasPorHallazgo?: Record<string, any[]>, marcoLegal?: string,
+  mortalidad?: MortalidadResumen, datos?: DatosGenerales
 ): string {
   const total = kpis.length;
   const pct   = porcentaje(kpis);
 
-  const num = `AU-GEN-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+  const num = datos?.numeroInforme || `AU-GEN-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
 
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Informe General Combinado — Pollos Savicol S.A.S.</title>
@@ -1297,7 +1300,7 @@ function generarModelo5(
   font-size:10px;color:#94a3b8;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
 </style></head><body><div class="page">
 
-${portada(`Informe General de Auditoría N° ${num}`, "Evaluación Integral · Todos los Modelos Combinados", kpis, hallazgos, auditor)}
+${portada(`Informe General de Auditoría N° ${num}`, "Evaluación Integral · Ejecutivo + Dashboard", kpis, hallazgos, auditor, undefined, datos)}
 
 <!-- ÍNDICE -->
 <div class="section">
@@ -1311,7 +1314,7 @@ ${portada(`Informe General de Auditoría N° ${num}`, "Evaluación Integral · T
     "VI.   Ficha Técnica y Análisis por Granja",
     "VII.  Consolidado de Resultados (alimento · mortalidad · KPI)",
     "VIII. Conclusiones y Recomendaciones",
-    "IX.   Trazabilidad Detallada y Firma",
+    "IX.   Evidencias Fotográficas y Firma",
   ].map(s=>`<div style="padding:4px 0;font-size:11px;color:#475569;border-bottom:1px dotted #e2e8f0">${s}</div>`).join("")}
 </div>
 
@@ -1399,11 +1402,11 @@ ${seccionFortalezas(kpis, hallazgos)}
   </div>
 </div>
 
-<!-- IX. TRAZABILIDAD DETALLADA Y FIRMA -->
-<div class="divider">IX — Trazabilidad Detallada y Firma</div>
-${seccionTrazabilidadKPI(kpis, hallazgos, granjas, evidenciasPorHallazgo)}
+<!-- IX. EVIDENCIAS Y FIRMA -->
+<div class="divider">IX — Evidencias Fotográficas y Firma</div>
+${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
 
-${seccionFirma(auditor)}
+${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
 </div></body></html>`;
 }
@@ -1470,6 +1473,30 @@ async function cargarMortalidadInforme(
   } catch { return acc; }
 }
 
+// Construye el HTML de un modelo (mismo que se descarga y se adjunta al correo).
+function htmlDeModelo(
+  modelo: ModeloInforme, kpis: any[], hallazgos: any[], granjas: any[], auditor: string,
+  evidenciasMap?: Record<string, any[]>, marcoLegal?: string, mortalidad?: MortalidadResumen, datos?: DatosGenerales
+): string {
+  switch (modelo) {
+    case "1-ejecutivo": return generarModelo1(kpis, hallazgos, granjas, auditor, evidenciasMap, marcoLegal, mortalidad, datos);
+    case "3-dashboard": return generarModelo3(kpis, hallazgos, granjas, auditor, evidenciasMap, datos);
+    default:            return generarModelo5(kpis, hallazgos, granjas, auditor, evidenciasMap, marcoLegal, mortalidad, datos);
+  }
+}
+
+// Descarga un PDF (base64) como archivo, vía Blob (robusto para archivos grandes).
+function descargarPDFBase64(b64: string, filename: string) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // FUNCIÓN PRINCIPAL — GENERA Y ABRE EL INFORME SELECCIONADO
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1478,14 +1505,14 @@ export function generarInforme(
   kpis: any[], hallazgos: any[], granjas: any[],
   auditor: string, granjaFiltroId?: string,
   evidenciasPorHallazgo?: Record<string, any[]>,
-  marcoLegal?: string, mortalidad?: MortalidadResumen
+  marcoLegal?: string, mortalidad?: MortalidadResumen, datos?: DatosGenerales
 ): void {
   let html = "";
   switch(modelo) {
-    case "1-ejecutivo": html = generarModelo1(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo, marcoLegal, mortalidad); break;
-    case "3-dashboard": html = generarModelo3(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo); break;
+    case "1-ejecutivo": html = generarModelo1(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo, marcoLegal, mortalidad, datos); break;
+    case "3-dashboard": html = generarModelo3(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo, datos); break;
     case "5-general":
-    default:            html = generarModelo5(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo, marcoLegal, mortalidad); break;
+    default:            html = generarModelo5(kpis, hallazgos, granjas, auditor, evidenciasPorHallazgo, marcoLegal, mortalidad, datos); break;
   }
   const win = window.open("", "_blank");
   if (win) {
@@ -1652,25 +1679,35 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
   auditorsList?:   any[];
   resultadosCount?: number;
   onClose:    () => void;
-  onGenerar:  (modelo: ModeloInforme, granjaId?: string, marcoLegal?: string) => void | Promise<void>;
-  onEnviar:   (modelo: ModeloInforme, granjaId?: string, descripcion?: string, marcoLegal?: string) => void | Promise<void>;
+  onGenerar:  (modelos: ModeloInforme[], datos: DatosGenerales, marcoLegal?: string) => void | Promise<void>;
+  onEnviar:   (modelos: ModeloInforme[], datos: DatosGenerales, descripcion?: string, marcoLegal?: string) => void | Promise<void>;
 }) {
-  const [modeloSel,   setModeloSel]   = useState<ModeloInforme>("5-general");
-  const [granjaFiltro,setGranjaFiltro]= useState("");
-  const [enviarEmail,    setEnviarEmail]    = useState(false);
-  const [emailDest,      setEmailDest]      = useState("");
-  const [asunto,         setAsunto]         = useState("Informe de Auditoría — Pollos Savicol S.A.S.");
-  const [enviando,       setEnviando]       = useState(false);
-  const [enviado,          setEnviado]          = useState<string|null>(null);
-  const [descripcionCorreo,setDescripcionCorreo] = useState("");
-  const [marcoLegal,       setMarcoLegal]        = useState("");
   const auditorStoreEmail = useAuthStore((s) => s.user?.email ?? "");
   const auditorStoreName  = useAuthStore((s) => s.user?.name  ?? "Auditor");
 
-  const SEL_STYLE = "w-full px-3 py-2 bg-[#0A111F] border border-[#1E2D4A] rounded-lg text-xs text-white focus:outline-none focus:border-[#4A7AFF] transition-colors";
+  const [modelosSel, setModelosSel] = useState<Set<ModeloInforme>>(new Set<ModeloInforme>(["5-general"]));
+  const [enviarEmail,    setEnviarEmail]    = useState(false);
+  const [enviando,       setEnviando]       = useState(false);
+  const [generando,      setGenerando]      = useState(false);
+  const [enviado,          setEnviado]          = useState<string|null>(null);
+  const [descripcionCorreo,setDescripcionCorreo] = useState("");
+  const [marcoLegal,       setMarcoLegal]        = useState("");
+  const [datos, setDatos] = useState<DatosGenerales>({
+    numeroInforme: "", auditor1: auditorStoreName || "", auditor2: "",
+    fechaVisita: "", fechaGeneracion: new Date().toISOString().slice(0, 10),
+    gerenteGeneral: "", administrador: "", oficialCumplimiento: "", tituloActividad: "",
+  });
+  const setD = (k: keyof DatosGenerales, v: string) => setDatos(p => ({ ...p, [k]: v }));
+
   const INP_STYLE = "w-full px-3 py-2 bg-[#0A111F] border border-[#1E2D4A] rounded-lg text-xs text-white placeholder-[#475569] focus:outline-none focus:border-[#4A7AFF] transition-colors";
+  const FLD = "text-[10px] text-[#94A3B8] mb-1 block";
 
   const modelos = Object.entries(MODELOS_INFO) as [ModeloInforme, typeof MODELOS_INFO[ModeloInforme]][];
+  const modelosOrdenados = modelos.filter(([k]) => modelosSel.has(k)).map(([k]) => k);
+  const incluyeGeneral = modelosSel.has("5-general");
+  const toggleModelo = (key: ModeloInforme) => setModelosSel(prev => {
+    const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n;
+  });
 
   // Filtros detectados (legibles) — para validación previa antes de generar
   const filtrosDetectados: { label: string; valor: string }[] = (() => {
@@ -1691,12 +1728,24 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
     return arr;
   })();
 
+  async function handleGenerar() {
+    if (!modelosSel.size) { setEnviado("Selecciona al menos un modelo de informe."); return; }
+    setGenerando(true); setEnviado(null);
+    try {
+      await onGenerar(modelosOrdenados, datos, marcoLegal || undefined);
+      onClose();
+    } catch(e: any) {
+      setEnviado("✗ No se pudo generar el informe: " + (e?.message ?? "desconocido"));
+    } finally {
+      setGenerando(false);
+    }
+  }
+
   async function handleEnviar() {
+    if (!modelosSel.size) { setEnviado("Selecciona al menos un modelo de informe."); return; }
     setEnviando(true); setEnviado(null);
     try {
-      // Genera el PDF del modelo (con los filtros) y abre el formulario de envío
-      // (destinatarios/CC/CCO/replyTo/historial) manejado por el page.
-      await onEnviar(modeloSel, granjaFiltro || undefined, descripcionCorreo, marcoLegal || undefined);
+      await onEnviar(modelosOrdenados, datos, descripcionCorreo, marcoLegal || undefined);
       onClose();
     } catch(e: any) {
       setEnviado("✗ No se pudo generar el informe: " + (e?.message ?? "desconocido"));
@@ -1715,7 +1764,7 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
               <FileText className="w-5 h-5 text-[#4A7AFF]"/>
               Informe de Auditoría
             </h2>
-            <p className="text-xs text-[#94A3B8] mt-0.5">Pollos Savicol S.A.S. · Selecciona el modelo y descarga</p>
+            <p className="text-xs text-[#94A3B8] mt-0.5">Pollos Savicol S.A.S. · Selecciona uno o varios modelos</p>
           </div>
           <button onClick={onClose} className="text-[#94A3B8] hover:text-white p-1"><X className="w-5 h-5"/></button>
         </header>
@@ -1746,47 +1795,91 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
               </div>
             )}
             <p className="text-[9px] text-[#64748B] mt-2">
-              El informe se generará exclusivamente con los registros que cumplen estos filtros. No se incluye información externa.
+              Los informes se generan exclusivamente con los registros que cumplen estos filtros. No se incluye información externa.
             </p>
           </div>
 
-          {/* Selector de modelo */}
+          {/* Datos generales del informe (formulario único, se incorpora en portada y firmas) */}
           <div>
-            <span className="text-xs text-[#94A3B8] font-semibold mb-2 block uppercase tracking-wider">Modelo de Informe</span>
-            <div className="grid grid-cols-1 gap-2">
-              {modelos.map(([key, info]) => (
-                <button key={key} onClick={() => setModeloSel(key)}
-                  className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
-                    modeloSel === key
-                      ? "border-[#4A7AFF] bg-[#4A7AFF]/10"
-                      : "border-[#1E2D4A] bg-[#0A111F] hover:border-[#2A3F6A]"
-                  }`}>
-                  <span className="text-xl shrink-0">{info.icon}</span>
-                  <div>
-                    <div className={`text-sm font-semibold ${modeloSel===key?"text-[#4A7AFF]":"text-white"}`}>
-                      {info.titulo}
-                    </div>
-                    <div className="text-[10px] text-[#64748B] mt-0.5">{info.desc}</div>
-                  </div>
-                  {modeloSel === key && (
-                    <CheckCircle2 className="w-4 h-4 text-[#4A7AFF] ml-auto shrink-0 mt-0.5"/>
-                  )}
-                </button>
-              ))}
+            <span className="text-xs text-[#94A3B8] font-semibold mb-2 block uppercase tracking-wider">Datos Generales del Informe</span>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="col-span-2">
+                <span className={FLD}>Título de la actividad de auditoría</span>
+                <input value={datos.tituloActividad} onChange={e=>setD("tituloActividad", e.target.value)} className={INP_STYLE} placeholder="Ej. Auditoría de cumplimiento KPI — Granjas avícolas"/>
+              </div>
+              <div>
+                <span className={FLD}>N° de Informe</span>
+                <input value={datos.numeroInforme} onChange={e=>setD("numeroInforme", e.target.value)} className={INP_STYLE} placeholder="Ej. AU-2026-014"/>
+              </div>
+              <div>
+                <span className={FLD}>Título / cargo</span>
+                <input value={datos.oficialCumplimiento} onChange={e=>setD("oficialCumplimiento", e.target.value)} className={INP_STYLE} placeholder="Oficial de Cumplimiento"/>
+              </div>
+              <div>
+                <span className={FLD}>Auditor 1</span>
+                <input value={datos.auditor1} onChange={e=>setD("auditor1", e.target.value)} className={INP_STYLE} placeholder="Nombre del auditor principal"/>
+              </div>
+              <div>
+                <span className={FLD}>Auditor 2</span>
+                <input value={datos.auditor2} onChange={e=>setD("auditor2", e.target.value)} className={INP_STYLE} placeholder="Nombre del auditor de apoyo"/>
+              </div>
+              <div>
+                <span className={FLD}>Fecha de visita</span>
+                <input type="date" value={datos.fechaVisita} onChange={e=>setD("fechaVisita", e.target.value)} className={INP_STYLE}/>
+              </div>
+              <div>
+                <span className={FLD}>Fecha de generación</span>
+                <input type="date" value={datos.fechaGeneracion} onChange={e=>setD("fechaGeneracion", e.target.value)} className={INP_STYLE}/>
+              </div>
+              <div>
+                <span className={FLD}>Gerente General</span>
+                <input value={datos.gerenteGeneral} onChange={e=>setD("gerenteGeneral", e.target.value)} className={INP_STYLE} placeholder="Nombre del Gerente General"/>
+              </div>
+              <div>
+                <span className={FLD}>Administrador</span>
+                <input value={datos.administrador} onChange={e=>setD("administrador", e.target.value)} className={INP_STYLE} placeholder="Nombre del Administrador"/>
+              </div>
             </div>
+            <p className="text-[9px] text-[#475569] mt-1.5 px-1">Se incorporan automáticamente en la portada y las firmas de todos los modelos seleccionados.</p>
           </div>
 
-          {/* Marco legal aplicable — campo editable por informe (Ejecutivo / General) */}
-          {(modeloSel === "1-ejecutivo" || modeloSel === "5-general") && (
+          {/* Selección múltiple de modelos */}
+          <div>
+            <span className="text-xs text-[#94A3B8] font-semibold mb-2 block uppercase tracking-wider">Modelos de Informe <span className="text-[#475569] font-normal normal-case">(uno o varios)</span></span>
+            <div className="grid grid-cols-1 gap-2">
+              {modelos.map(([key, info]) => {
+                const sel = modelosSel.has(key);
+                return (
+                  <button key={key} onClick={() => toggleModelo(key)}
+                    className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-all ${
+                      sel ? "border-[#4A7AFF] bg-[#4A7AFF]/10" : "border-[#1E2D4A] bg-[#0A111F] hover:border-[#2A3F6A]"
+                    }`}>
+                    <span className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 ${sel ? "bg-[#4A7AFF] border-[#4A7AFF]" : "border-[#2A3F6A]"}`}>
+                      {sel && <CheckCircle2 className="w-3.5 h-3.5 text-white"/>}
+                    </span>
+                    <span className="text-xl shrink-0">{info.icon}</span>
+                    <div>
+                      <div className={`text-sm font-semibold ${sel?"text-[#4A7AFF]":"text-white"}`}>{info.titulo}</div>
+                      <div className="text-[10px] text-[#64748B] mt-0.5">{info.desc}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[9px] text-[#64748B] mt-1.5 px-1">{modelosSel.size} modelo(s) seleccionado(s) · se genera/envía un PDF por cada uno.</p>
+          </div>
+
+          {/* Marco legal aplicable — solo aplica al Informe General */}
+          {incluyeGeneral && (
             <div>
               <span className="text-xs text-[#94A3B8] font-semibold mb-2 block">
-                Marco legal aplicable <span className="text-[#475569] font-normal">(opcional)</span>
+                Marco legal aplicable <span className="text-[#475569] font-normal">(opcional · Informe General)</span>
               </span>
               <textarea value={marcoLegal} onChange={e=>setMarcoLegal(e.target.value)}
                 rows={3} className={INP_STYLE + " resize-none"}
                 placeholder="Normatividad sanitaria, ambiental y de bioseguridad aplicable al alcance (ej. resoluciones ICA, decretos, normas internas)…"/>
               <p className="text-[9px] text-[#475569] mt-1 px-1">
-                Se incluye textualmente en la sección "Marco Legal Aplicable" del informe. Si se deja vacío, el informe indica que no fue especificado.
+                Se incluye textualmente en la sección "Marco Legal Aplicable" del Informe General. Si se deja vacío, el informe lo indica.
               </p>
             </div>
           )}
@@ -1803,7 +1896,6 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
             </button>
             {enviarEmail && (
               <div className="px-4 pb-4 space-y-3 border-t border-[#1E2D4A] pt-3">
-                {/* Remitente — autocompletado del auditor logueado */}
                 <div>
                   <span className="text-[10px] text-[#94A3B8] mb-1 block">Remitente (tu correo)</span>
                   <div className="flex items-center gap-2 px-3 py-2 bg-[#0A111F] border border-[#2A3F6A] rounded-lg">
@@ -1811,23 +1903,21 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
                     <span className="text-xs text-white flex-1">{auditorStoreName}</span>
                     <span className="text-[10px] text-[#64748B]">{auditorStoreEmail}</span>
                   </div>
-                  <p className="text-[9px] text-[#475569] mt-1 px-1">
-                    Las respuestas llegarán a este correo automáticamente
-                  </p>
+                  <p className="text-[9px] text-[#475569] mt-1 px-1">Las respuestas llegarán a este correo automáticamente</p>
                 </div>
                 <div>
                   <span className="text-[10px] text-[#94A3B8] mb-1 block">Mensaje del correo (opcional)</span>
                   <textarea value={descripcionCorreo} onChange={e=>setDescripcionCorreo(e.target.value)}
                     rows={3} className={INP_STYLE + " resize-none"}
-                    placeholder="Mensaje que acompañará el informe (podrás editarlo y agregar destinatarios, CC y CCO en el siguiente paso)…"/>
+                    placeholder="Mensaje que acompañará los informes (podrás editarlo y agregar destinatarios, CC y CCO en el siguiente paso)…"/>
                 </div>
                 {enviado && (
                   <div className="text-xs px-3 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">{enviado}</div>
                 )}
-                <button onClick={handleEnviar} disabled={enviando}
+                <button onClick={handleEnviar} disabled={enviando || !modelosSel.size}
                   className="w-full btn-primary text-xs bg-amber-500 hover:bg-amber-600 flex items-center justify-center gap-2 py-2 disabled:opacity-50">
                   {enviando ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Bell className="w-3.5 h-3.5"/>}
-                  {enviando ? "Generando informe…" : "Continuar al envío →"}
+                  {enviando ? "Generando informes…" : `Continuar al envío (${modelosSel.size}) →`}
                 </button>
               </div>
             )}
@@ -1837,12 +1927,10 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
 
         <footer className="flex items-center gap-2 px-6 py-4 border-t border-[#1E2D4A]">
           <button onClick={onClose} className="btn-ghost text-xs flex-1">Cancelar</button>
-          <button
-            onClick={async () => { await onGenerar(modeloSel, granjaFiltro||undefined, marcoLegal||undefined); onClose(); }}
-            className="btn-primary text-sm bg-[#4A7AFF] hover:bg-[#3D6AE8] flex items-center gap-2 flex-1 justify-center py-2 font-semibold"
-          >
-            <FileText className="w-4 h-4"/>
-            Descargar PDF
+          <button onClick={handleGenerar} disabled={generando || !modelosSel.size}
+            className="btn-primary text-sm bg-[#4A7AFF] hover:bg-[#3D6AE8] flex items-center gap-2 flex-1 justify-center py-2 font-semibold disabled:opacity-50">
+            {generando ? <Loader2 className="w-4 h-4 animate-spin"/> : <FileText className="w-4 h-4"/>}
+            {generando ? "Generando…" : `Descargar PDF (${modelosSel.size})`}
           </button>
         </footer>
       </div>
@@ -1869,7 +1957,7 @@ export default function KPIPage() {
   const [saveError, setSaveError]     = useState<string | null>(null);
   const [alertsOpen, setAlertsOpen]   = useState(false);
   const [informeOpen,  setInformeOpen]  = useState(false);
-  const [envioKPI, setEnvioKPI] = useState<{ b64: string; filename: string; tipo: string; asunto: string; mensaje: string } | null>(null);
+  const [envioKPI, setEnvioKPI] = useState<{ b64: string; filename: string; tipo: string; asunto: string; mensaje: string; adjuntos: Array<{ name: string; content: string; type: string; size: number }> } | null>(null);
 
   // ── Filtros superiores ────────────────────────────────────────────────────
   const [fEstado,        setFEstado]        = useState("");
@@ -2162,23 +2250,26 @@ export default function KPIPage() {
           auditorsList={AUDITORS}
           resultadosCount={filtered.length}
           onClose={() => setInformeOpen(false)}
-          onGenerar={async (modelo, granjaId, marcoLegal) => {
-            const auditorNombre = usuarios?.find((u:any)=>u.role==="AUDITOR")?.name ?? "Auditor Interno";
-            // Filtrado coherente: derivar hallazgos y granjas SOLO de los KPIs filtrados
+          onGenerar={async (modelosSel, datos, marcoLegal) => {
+            const auditorNombre = datos.auditor1 || usuarios?.find((u:any)=>u.role==="AUDITOR")?.name || "Auditor Interno";
             const hIds = new Set(filtered.map(k => k.hallazgoId).filter(Boolean));
             const gIds = new Set(filtered.map(k => k.granjaId).filter(Boolean));
             const hallazgosFiltrados = hallazgos.filter(h => hIds.has(h.id));
             const granjasFiltradas   = granjas.filter(g => gIds.has(g.id));
-            // Cargar evidencias fotográficas + mortalidad real (Trazabilidad) del alcance
             const [evidenciasMap, mortalidad] = await Promise.all([
               cargarEvidenciasInforme(Array.from(hIds) as string[], accessToken),
               cargarMortalidadInforme(Array.from(gIds) as string[], accessToken),
             ]);
-            generarInforme(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, granjaId, evidenciasMap, marcoLegal, mortalidad);
+            const fecha = new Date().toISOString().slice(0, 10);
+            // Un PDF por cada modelo seleccionado.
+            for (const modelo of modelosSel) {
+              const html = htmlDeModelo(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidad, datos);
+              const { b64 } = await htmlToPDFBase64(html);
+              descargarPDFBase64(b64, `Informe-${MODELOS_INFO[modelo].titulo.replace(/\s+/g, "-")}-${fecha}.pdf`);
+            }
           }}
-          onEnviar={async (modelo, granjaId, descripcion, marcoLegal) => {
-            const auditorNombre = usuarios?.find((u:any)=>u.role==="AUDITOR")?.name ?? "Auditor Interno";
-            // Filtrado coherente: hallazgos y granjas SOLO de los KPIs filtrados
+          onEnviar={async (modelosSel, datos, descripcion, marcoLegal) => {
+            const auditorNombre = datos.auditor1 || usuarios?.find((u:any)=>u.role==="AUDITOR")?.name || "Auditor Interno";
             const hIds = new Set(filtered.map(k => k.hallazgoId).filter(Boolean));
             const gIds = new Set(filtered.map(k => k.granjaId).filter(Boolean));
             const hallazgosFiltrados = hallazgos.filter(h => hIds.has(h.id));
@@ -2187,24 +2278,24 @@ export default function KPIPage() {
               cargarEvidenciasInforme(Array.from(hIds) as string[], accessToken),
               cargarMortalidadInforme(Array.from(gIds) as string[], accessToken),
             ]);
-            // HTML EXACTO del modelo seleccionado (el mismo que "Descargar PDF").
-            const htmlInforme = (() => {
-              switch (modelo) {
-                case "1-ejecutivo": return generarModelo1(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidad);
-                case "3-dashboard": return generarModelo3(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap);
-                default:            return generarModelo5(filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidad);
-              }
-            })();
-            // Convierte ESE HTML a PDF (html2canvas → jsPDF). Si falla lanza error (no
-            // adjunta HTML). El PDF corresponde exactamente al modelo + filtros seleccionados.
-            const { b64 } = await htmlToPDFBase64(htmlInforme);
-            const granja = granjaId ? granjas.find(g => g.id === granjaId) : null;
+            const fecha = new Date().toISOString().slice(0, 10);
+            // Genera el PDF de cada modelo seleccionado (mismo HTML que la descarga).
+            const pdfs: { b64: string; filename: string; titulo: string }[] = [];
+            for (const modelo of modelosSel) {
+              const html = htmlDeModelo(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidad, datos);
+              const { b64 } = await htmlToPDFBase64(html);
+              pdfs.push({ b64, filename: `Informe-${MODELOS_INFO[modelo].titulo.replace(/\s+/g, "-")}-${fecha}.pdf`, titulo: MODELOS_INFO[modelo].titulo });
+            }
+            if (!pdfs.length) return;
+            const [principal, ...resto] = pdfs;
+            const titulos = pdfs.map(p => p.titulo).join(", ");
             setEnvioKPI({
-              b64,
-              filename: `Informe-Auditoria-Savicol-${modelo}-${new Date().toISOString().slice(0, 10)}.pdf`,
-              tipo: `KPI · ${MODELOS_INFO[modelo].titulo}`,
-              asunto: `Informe de Auditoría — ${MODELOS_INFO[modelo].titulo}${granja ? " · " + granja.nombre : ""} · Pollos Savicol S.A.S.`,
-              mensaje: (descripcion?.trim() ? descripcion.trim() + "\n\n" : "") + `Cordial saludo,\n\nAdjunto el Informe de Auditoría (${MODELOS_INFO[modelo].titulo})${granja ? " para la granja " + granja.nombre : " de cumplimiento KPI"}, generado con los filtros activos del módulo.\n\nQuedo atento(a) a sus comentarios.\n\n${auditorNombre}\nControl Interno y Auditoría · Pollos Savicol S.A.S.`,
+              b64: principal.b64,
+              filename: principal.filename,
+              tipo: pdfs.length > 1 ? `KPI · ${pdfs.length} modelos` : `KPI · ${principal.titulo}`,
+              asunto: `Informe de Auditoría — ${datos.tituloActividad || titulos} · Pollos Savicol S.A.S.`,
+              mensaje: (descripcion?.trim() ? descripcion.trim() + "\n\n" : "") + `Cordial saludo,\n\n${pdfs.length > 1 ? `Adjunto los informes de auditoría seleccionados (${titulos})` : `Adjunto el Informe de Auditoría (${principal.titulo})`}, generado(s) con los filtros activos del módulo.\n\nQuedo atento(a) a sus comentarios.\n\n${auditorNombre}\nControl Interno y Auditoría · Pollos Savicol S.A.S.`,
+              adjuntos: resto.map(p => ({ name: p.filename, content: p.b64, type: "application/pdf", size: Math.round(p.b64.length * 0.75) })),
             });
           }}
         />
@@ -2215,6 +2306,7 @@ export default function KPIPage() {
         <EnvioCorreoModal
           tipo={envioKPI.tipo} filename={envioKPI.filename} pdfBase64={envioKPI.b64}
           asuntoDefault={envioKPI.asunto} mensajeDefault={envioKPI.mensaje}
+          adjuntosDefault={envioKPI.adjuntos}
           onClose={() => setEnvioKPI(null)}
         />
       )}

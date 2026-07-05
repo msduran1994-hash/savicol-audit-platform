@@ -15,16 +15,18 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const parseEmails = (s: string): string[] => (s || "").split(/[,;\s]+/).map(e => e.trim()).filter(Boolean);
 const fmtFechaHora = (iso?: string) => { if (!iso) return "—"; const d = new Date(iso); return isNaN(d.getTime()) ? "—" : d.toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" }); };
 
-export function EnvioCorreoModal({ tipo, filename, pdfBase64, asuntoDefault, mensajeDefault, onClose }: {
+export function EnvioCorreoModal({ tipo, filename, pdfBase64, asuntoDefault, mensajeDefault, adjuntosDefault, onClose }: {
   tipo: string; filename: string; pdfBase64: string;
   asuntoDefault: string; mensajeDefault: string; onClose: () => void;
+  // PDFs adicionales pre-adjuntados (ej. varios modelos de informe seleccionados)
+  adjuntosDefault?: Array<{ name: string; content: string; type: string; size: number }>;
 }) {
   const [to, setTo] = useState("");
   const [cc, setCc] = useState("");
   const [cco, setCco] = useState("");
   const [asunto, setAsunto] = useState(asuntoDefault);
   const [mensaje, setMensaje] = useState(mensajeDefault);
-  const [adjuntos, setAdjuntos] = useState<Array<{ name: string; content: string; type: string; size: number }>>([]);
+  const [adjuntos, setAdjuntos] = useState<Array<{ name: string; content: string; type: string; size: number }>>(adjuntosDefault ?? []);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ ok: boolean; estado: string; mode: string; error?: string } | null>(null);
   const [histOpen, setHistOpen] = useState(false);
@@ -121,7 +123,7 @@ export function EnvioCorreoModal({ tipo, filename, pdfBase64, asuntoDefault, men
           ) : (
             <>
               <div className="px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-[#94A3B8]">
-                Se adjunta automáticamente <strong className="text-emerald-300">{filename}</strong>. El remitente es la cuenta verificada de Savicol; las <strong>respuestas</strong> llegan al correo con el que iniciaste sesión.
+                Se adjunta automáticamente <strong className="text-emerald-300">{filename}</strong>{adjuntosDefault?.length ? <> y <strong className="text-emerald-300">{adjuntosDefault.length} informe(s) más</strong></> : null}. El remitente es la cuenta verificada de Savicol; las <strong>respuestas</strong> llegan al correo con el que iniciaste sesión.
               </div>
               <div><label className={LBL}>Destinatario(s) principal(es) *</label><input value={to} onChange={e => setTo(e.target.value)} placeholder="correo1@dominio.com, correo2@dominio.com" className={IN} /></div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
