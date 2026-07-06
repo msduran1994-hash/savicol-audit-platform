@@ -6,7 +6,9 @@ import { useShallow } from "zustand/react/shallow";
 import { CATEGORIA_HALLAZGO, CRITICIDAD, TIPO_RIESGO, TIPO_GRANJA, TIPO_OPERATIVO } from "@/lib/granjas.constants";
 import { AUDITORS } from "@/lib/constants";
 import type { Hallazgo } from "@/lib/granjas.types";
-import { AlertTriangle, Filter, Plus, Sparkles, Image, Paperclip, X, Edit2, Trash2 } from "lucide-react";
+import { AnexosTecnicosEditor } from "@/components/hallazgos/anexos-tecnicos-editor";
+import { parseAnexos, anexosTienenDatos, type AnexosTecnicos } from "@/lib/anexos-tecnicos";
+import { AlertTriangle, Filter, Plus, Sparkles, Image, Paperclip, X, Edit2, Trash2, ChevronDown, ClipboardList } from "lucide-react";
 
 export default function HallazgosPage() {
   const hallazgos      = useGranjasStore(useShallow((s) => s.hallazgos));
@@ -221,6 +223,9 @@ function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
 
   const [submitting, setSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  // Anexos técnicos (5 pestañas opcionales) — se guardan como JSON en el hallazgo.
+  const [anexos, setAnexos] = useState<AnexosTecnicos>(() => parseAnexos(hallazgo?.anexosTecnicos));
+  const [anexosOpen, setAnexosOpen] = useState(false);
 
   function toggleRiesgo(r: typeof TIPO_RIESGO[number]) {
     setForm((f) => {
@@ -260,6 +265,8 @@ function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
       titulo:        form.titulo.trim(),
       descripcion:   form.descripcion.trim(),
       recomendacionesIA: form.recomendacionesIA?.trim() || undefined,
+      // Anexos técnicos: solo si el auditor diligenció algo (opcionales).
+      anexosTecnicos: anexosTienenDatos(anexos) ? JSON.stringify(anexos) : undefined,
       granjaNombre:  granja?.nombre ?? form.granjaNombre,
       auditorNombre: auditor?.name  ?? form.auditorNombre,
       // El tipo de granja debe coincidir con la granja seleccionada (display name del store)
@@ -340,6 +347,25 @@ function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
           <F label="Recomendaciones IA (opcional)">
             <textarea value={form.recomendacionesIA ?? ""} onChange={(e)=>setForm({...form, recomendacionesIA: e.target.value})} rows={2} className="input-base resize-none"/>
           </F>
+
+          {/* Anexos técnicos (opcional) — pestañas ocultas hasta que el auditor las active */}
+          <div className="border border-[#1E2D4A] rounded-xl overflow-hidden">
+            <button type="button" onClick={()=>setAnexosOpen(o=>!o)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#0A111F] transition-colors">
+              <span className="text-xs font-semibold text-white flex items-center gap-2">
+                <ClipboardList className="w-3.5 h-3.5 text-[#4A7AFF]"/>
+                Anexos Técnicos <span className="text-[#475569] font-normal">(opcional)</span>
+                {anexosTienenDatos(anexos) && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#22C55E]/15 text-[#22C55E]">con datos</span>}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-[#64748B] transition-transform ${anexosOpen?"rotate-180":""}`}/>
+            </button>
+            {anexosOpen && (
+              <div className="px-4 pb-4 border-t border-[#1E2D4A] pt-3">
+                <p className="text-[10px] text-[#475569] mb-3">Documenta controles operativos e inventarios relacionados con el hallazgo. Todo es opcional y se guarda junto con el hallazgo.</p>
+                <AnexosTecnicosEditor value={anexos} onChange={setAnexos} />
+              </div>
+            )}
+          </div>
         </form>
 
         {(validationError || error) && (

@@ -79,6 +79,7 @@ export interface Hallazgo {
   estado: "Abierto" | "En Plan" | "Cerrado" | "Verificado";
   descripcion: string;
   recomendacionesIA?: string;
+  anexosTecnicos?: string;    // JSON: pestañas técnicas opcionales (actas/inventarios)
   evidencias?: string[];      // paths a archivos
   createdAt: string;
   updatedAt: string;

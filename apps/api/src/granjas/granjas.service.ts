@@ -49,6 +49,7 @@ export interface CreateHallazgoDto {
   estado?: EstadoHallazgo;
   descripcion: string;
   recomendacionesIA?: string;
+  anexosTecnicos?: string;   // JSON con las pestañas técnicas opcionales
 }
 
 export interface CreateKPIDto {
@@ -216,6 +217,7 @@ export class GranjasService {
       "titulo", "granjaId", "auditoriaId", "auditorId", "auditorNombre",
       "tipoGranja", "tipoOperativo", "fechaVisita", "categoria",
       "tiposRiesgo", "criticidad", "estado", "descripcion", "recomendacionesIA",
+      "anexosTecnicos",
     ];
     const data: any = {};
     for (const k of ALLOWED) {

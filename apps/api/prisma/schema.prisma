@@ -234,6 +234,7 @@ model Hallazgo {
   estado            String   @default("ABIERTO")
   descripcion       String
   recomendacionesIA String?
+  anexosTecnicos    String?  // JSON: pestañas técnicas opcionales (actas/inventarios) del hallazgo
   isDemo            Boolean  @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
