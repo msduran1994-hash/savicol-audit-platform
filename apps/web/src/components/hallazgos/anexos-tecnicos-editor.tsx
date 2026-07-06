@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import {
   AnexosTecnicos, TotalBultosBloque,
-  num, difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
+  difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
   subtotalBloque, cantidadBloque, totalGeneralBultos,
 } from "@/lib/anexos-tecnicos";
 
@@ -108,7 +108,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             { key: "reporteFisico", label: "Reporte Físico", type: "number" },
             { key: "_dif", label: "Diferencia", calc: difConteoPicos },
           ]}
-          emptyRow={{ fechaConteo: "", reporteConteo: 0, reporteFisico: 0 }} />
+          emptyRow={{ fechaConteo: "", reporteConteo: "", reporteFisico: "" }} />
       )}
 
       {tab === "recepcionAves" && (
@@ -119,7 +119,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             { key: "hembras", label: "Hembras", type: "number" },
             { key: "_tot", label: "Total", calc: totalRecepcion },
           ]}
-          emptyRow={{ fecha: "", machos: 0, hembras: 0 }}
+          emptyRow={{ fecha: "", machos: "", hembras: "" }}
           totalCol={{ label: "Total aves recibidas", calc: totalRecepcion }} />
       )}
 
@@ -131,7 +131,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             { key: "lonas", label: "Lonas", type: "number" },
             { key: "_tot", label: "Total", calc: totalInvBultos },
           ]}
-          emptyRow={{ galpon: "", bultos: 0, lonas: 0 }}
+          emptyRow={{ galpon: "", bultos: "", lonas: "" }}
           totalCol={{ label: "Total (bultos + lonas)", calc: totalInvBultos }} />
       )}
 
@@ -144,7 +144,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             { key: "cantidadKg", label: "Cantidad (Kg)", type: "number" },
             { key: "_peso", label: "Peso Total Kg", calc: pesoTotalIngreso },
           ]}
-          emptyRow={{ fecha: "", concepto: "", unidades: 0, cantidadKg: 0 }}
+          emptyRow={{ fecha: "", concepto: "", unidades: "", cantidadKg: "" }}
           totalCol={{ label: "Peso total (Kg)", calc: pesoTotalIngreso }} />
       )}
 
@@ -176,7 +176,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
                   </tr></tfoot>
                 </table>
               </div>
-              <button type="button" onClick={() => editBloque(bi, { filas: [...b.filas, { concepto: "", cantidad: 0, pesoTotalKg: 0 }] })} className="px-3 py-1 rounded text-[11px] bg-[#1A2540] text-white flex items-center gap-1 hover:bg-[#22304d]"><Plus className="w-3 h-3" />Agregar fila</button>
+              <button type="button" onClick={() => editBloque(bi, { filas: [...b.filas, { concepto: "", cantidad: "", pesoTotalKg: "" } as any] })} className="px-3 py-1 rounded text-[11px] bg-[#1A2540] text-white flex items-center gap-1 hover:bg-[#22304d]"><Plus className="w-3 h-3" />Agregar fila</button>
             </div>
           ))}
           <button type="button" onClick={() => setTB({ bloques: [...tb.bloques, { titulo: "", filas: [] }] })} className="px-3 py-1.5 rounded-lg text-xs bg-[#1A2540] text-white flex items-center gap-1.5 hover:bg-[#22304d]"><Plus className="w-3.5 h-3.5" />Agregar bloque</button>
@@ -189,7 +189,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-[#94A3B8] w-24 shrink-0">Diferencias</span>
-              <input type="number" step="any" value={tb.diferencias ?? ""} onChange={e => setTB({ diferencias: num(e.target.value) })} className={INP} />
+              <input type="number" step="any" value={(tb.diferencias as any) || ""} onChange={e => setTB({ diferencias: e.target.value as any })} className={INP} />
             </div>
             <div>
               <span className="text-[11px] text-[#94A3B8] mb-1 block">Observaciones</span>
