@@ -884,39 +884,75 @@ function footer(): string {
   </div>`;
 }
 
-// ─── SECCIÓN INDICADORES DE MORTALIDAD (real, desde Trazabilidad) ──────────────
-function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: any[]): string {
+// ─── SECCIÓN INDICADORES DE MORTALIDAD ────────────────────────────────────────
+// Trazabilidad (lotes) + Mortalidad por Conteo de Picos (de los anexos del hallazgo,
+// con el % respecto al conteo de picos en letra grande y el reporte de detalle).
+function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: any[], hallazgos: any[] = []): string {
+  const fmt = (n: number) => n.toLocaleString("es-CO", { maximumFractionDigits: 2 });
+
+  // Bloque 1 — Trazabilidad (lotes)
+  let traza: string;
   if (!mortalidad || mortalidad.lotes === 0) {
-    return `<div class="section"><div class="section-title">Indicadores de Mortalidad</div>
-      <p style="font-size:12px;color:#94a3b8"><em>Sin lotes de trazabilidad registrados para las granjas del alcance — no hay indicadores de mortalidad disponibles.</em></p></div>`;
-  }
-  const tarjetas = [
-    { l: "Aves ingresadas",  v: mortalidad.totalIngreso.toLocaleString("es-CO"),  c: "#0D1526" },
-    { l: "Aves actuales",    v: mortalidad.totalActuales.toLocaleString("es-CO"), c: "#4A7AFF" },
-    { l: "Mortalidad total", v: mortalidad.totalMuertes.toLocaleString("es-CO"),  c: "#EF4444" },
-    { l: "% Acumulado",      v: mortalidad.pctGlobal.toFixed(2) + "%",            c: mortalidad.pctGlobal >= 8 ? "#EF4444" : mortalidad.pctGlobal >= 4 ? "#F97316" : "#22C55E" },
-  ];
-  const filas = Object.entries(mortalidad.porGranja).map(([gid, m]) => {
-    const g = granjas.find(gr => gr.id === gid);
-    const color = m.pct >= 8 ? "#EF4444" : m.pct >= 4 ? "#F97316" : "#22C55E";
-    return `<tr>
-      <td><strong>${g?.nombre || "—"}</strong></td>
-      <td style="text-align:right">${m.ingreso.toLocaleString("es-CO")}</td>
-      <td style="text-align:right">${m.actuales.toLocaleString("es-CO")}</td>
-      <td style="text-align:right;font-weight:700">${m.muertes.toLocaleString("es-CO")}</td>
-      <td style="text-align:right"><span class="badge" style="background:${color}1f;color:${color}">${m.pct.toFixed(2)}%</span></td>
-    </tr>`;
-  }).join("");
-  return `<div class="section"><div class="section-title">Indicadores de Mortalidad</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
-      ${tarjetas.map(k => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:3px solid ${k.c};border-radius:8px;padding:12px 8px;text-align:center">
-        <div style="font-size:20px;font-weight:800;color:${k.c}">${k.v}</div>
-        <div style="font-size:11px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.3px">${k.l}</div></div>`).join("")}
+    traza = `<p style="font-size:12px;color:#94a3b8"><em>Sin lotes de trazabilidad registrados para las granjas del alcance.</em></p>`;
+  } else {
+    const tarjetas = [
+      { l: "Aves ingresadas",  v: fmt(mortalidad.totalIngreso),  c: "#0D1526" },
+      { l: "Aves actuales",    v: fmt(mortalidad.totalActuales), c: "#4A7AFF" },
+      { l: "Mortalidad total", v: fmt(mortalidad.totalMuertes),  c: "#EF4444" },
+      { l: "% Acumulado",      v: mortalidad.pctGlobal.toFixed(2) + "%", c: mortalidad.pctGlobal >= 8 ? "#EF4444" : mortalidad.pctGlobal >= 4 ? "#F97316" : "#22C55E" },
+    ];
+    const filas = Object.entries(mortalidad.porGranja).map(([gid, m]) => {
+      const g = granjas.find(gr => gr.id === gid);
+      const color = m.pct >= 8 ? "#EF4444" : m.pct >= 4 ? "#F97316" : "#22C55E";
+      return `<tr><td><strong>${g?.nombre || "—"}</strong></td><td style="text-align:right">${fmt(m.ingreso)}</td><td style="text-align:right">${fmt(m.actuales)}</td><td style="text-align:right;font-weight:700">${fmt(m.muertes)}</td><td style="text-align:right"><span class="badge" style="background:${color}1f;color:${color}">${m.pct.toFixed(2)}%</span></td></tr>`;
+    }).join("");
+    traza = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+      ${tarjetas.map(k => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:3px solid ${k.c};border-radius:8px;padding:12px 8px;text-align:center"><div style="font-size:20px;font-weight:800;color:${k.c}">${k.v}</div><div style="font-size:11px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.3px">${k.l}</div></div>`).join("")}
     </div>
-    <table><thead><tr><th>Granja</th><th style="text-align:right">Ingresadas</th><th style="text-align:right">Actuales</th><th style="text-align:right">Muertes</th><th style="text-align:right">% Mort.</th></tr></thead>
-    <tbody>${filas}</tbody></table>
-    <p style="font-size:9px;color:#94a3b8;margin-top:6px">Fuente: Trazabilidad (${mortalidad.lotes} lote(s)). Mortalidad = aves ingresadas − aves actuales.</p>
-  </div>`;
+    <table><thead><tr><th>Granja</th><th style="text-align:right">Ingresadas</th><th style="text-align:right">Actuales</th><th style="text-align:right">Muertes</th><th style="text-align:right">% Mort.</th></tr></thead><tbody>${filas}</tbody></table>
+    <p style="font-size:9px;color:#94a3b8;margin-top:6px">Fuente: Trazabilidad (${mortalidad.lotes} lote(s)). Mortalidad = aves ingresadas − aves actuales.</p>`;
+  }
+
+  // Bloque 2 — Mortalidad por Conteo de Picos (Anexos Técnicos del hallazgo)
+  const conAnexos = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) }))
+    .filter(x => x.a.actaConteoPicos.length > 0 || x.a.recepcionAves.length > 0);
+  let anexosHTML = "";
+  if (conAnexos.length) {
+    let conteo = 0, fisico = 0, aves = 0;
+    conAnexos.forEach(({ a }) => {
+      a.actaConteoPicos.forEach(r => { conteo += anexNum(r.reporteConteo); fisico += anexNum(r.reporteFisico); });
+      a.recepcionAves.forEach(r => aves += totalRecepcion(r));
+    });
+    const mort = conteo - fisico;
+    const base = conteo > 0 ? conteo : aves;
+    const pct = base > 0 ? (mort / base) * 100 : 0;
+    const pctColor = pct >= 8 ? "#EF4444" : pct >= 4 ? "#F97316" : "#22C55E";
+    const detalle = conAnexos.filter(x => x.a.actaConteoPicos.length).map(({ h, a }) => {
+      const g = granjas.find(gr => gr.id === h.granjaId);
+      return `<div style="page-break-inside:avoid;margin-top:8px">
+        <div style="font-size:11px;font-weight:700;color:#0D1526">${h.titulo?.slice(0, 60) || "Hallazgo"} <span style="font-weight:400;color:#64748b">· ${g?.nombre || "—"}</span></div>
+        <table><thead><tr><th>Fecha</th><th style="text-align:right">Conteo de Picos</th><th style="text-align:right">Reporte Físico</th><th style="text-align:right">Mortalidad</th></tr></thead>
+        <tbody>${a.actaConteoPicos.map(r => `<tr><td>${r.fechaConteo || "—"}</td><td style="text-align:right">${fmt(anexNum(r.reporteConteo))}</td><td style="text-align:right">${fmt(anexNum(r.reporteFisico))}</td><td style="text-align:right;font-weight:700;color:${difConteoPicos(r) !== 0 ? "#EF4444" : "#22C55E"}">${fmt(difConteoPicos(r))}</td></tr>`).join("")}</tbody></table></div>`;
+    }).join("");
+    anexosHTML = `
+    <div style="margin-top:18px;border-top:1px solid #e2e8f0;padding-top:14px;page-break-inside:avoid">
+      <div style="font-size:13px;font-weight:800;color:#0D1526;margin-bottom:10px">Mortalidad por Conteo de Picos</div>
+      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px 20px;margin-bottom:12px">
+        <div style="text-align:center;min-width:150px">
+          <div style="font-size:46px;font-weight:800;color:${pctColor};line-height:1">${pct.toFixed(2)}%</div>
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Mortalidad s/ conteo de picos</div>
+        </div>
+        <div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;min-width:280px">
+          ${[{ l: "Aves recibidas", v: fmt(aves) }, { l: "Conteo de picos", v: fmt(conteo) }, { l: "Mortalidad", v: fmt(mort) }].map(k => `<div style="text-align:center"><div style="font-size:20px;font-weight:800;color:#0D1526">${k.v}</div><div style="font-size:10px;color:#64748b;text-transform:uppercase">${k.l}</div></div>`).join("")}
+        </div>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:#4A7AFF;margin-bottom:2px">Reporte de mortalidad (Acta Conteo de Picos)</div>
+      ${detalle}
+      <p style="font-size:9px;color:#94a3b8;margin-top:6px">% mortalidad = mortalidad (conteo de picos − reporte físico) / conteo de picos. Fuente: Anexos Técnicos del hallazgo.</p>
+    </div>`;
+  }
+
+  return `<div class="section"><div class="section-title">Indicadores de Mortalidad</div>${traza}${anexosHTML}</div>`;
 }
 
 // ─── SECCIÓN EVIDENCIAS FOTOGRÁFICAS (reutiliza evidenciasGridHTML) ────────────
@@ -942,8 +978,11 @@ function seccionEvidencias(hallazgos: any[], granjas: any[], evidenciasPorHallaz
 // modo "detalle" = tablas completas · "resumen" = una línea de totales por pestaña.
 const _fmtAnx = (n: number): string => n.toLocaleString("es-CO", { maximumFractionDigits: 2 });
 
+// Solo "Inventario de Alimento" (bultos). La mortalidad (conteo de picos + recepción
+// de aves) se muestra en la sección Indicadores de Mortalidad.
 function seccionAnexosTecnicos(hallazgos: any[], granjas: any[], modo: "resumen" | "detalle"): string {
-  const conAnexos = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) })).filter(x => anexosTienenDatos(x.a));
+  const tieneAlimento = (a: any) => a.inventarioBultos.length > 0 || a.ingresoBultos.length > 0 || a.totalBultos.bloques.some((b: any) => b.filas.length);
+  const conAnexos = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) })).filter(x => tieneAlimento(x.a));
   if (!conAnexos.length) return "";
   const th = (cols: string[]) => `<thead><tr>${cols.map(c => `<th>${c}</th>`).join("")}</tr></thead>`;
   const R = (v: any) => `<td style="text-align:right">${_fmtAnx(anexNum(v))}</td>`;
@@ -952,17 +991,6 @@ function seccionAnexosTecnicos(hallazgos: any[], granjas: any[], modo: "resumen"
     const g = granjas.find(gr => gr.id === h.granjaId);
     const t: string[] = [];
 
-    if (a.actaConteoPicos.length) {
-      if (modo === "detalle") t.push(`<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 4px">Acta Conteo de Picos</div>
-        <table>${th(["Fecha", "Reporte Conteo", "Reporte Físico", "Diferencia"])}<tbody>${a.actaConteoPicos.map(r => `<tr><td>${r.fechaConteo || "—"}</td>${R(r.reporteConteo)}${R(r.reporteFisico)}<td style="text-align:right;font-weight:700;color:${difConteoPicos(r) !== 0 ? "#EF4444" : "#22C55E"}">${_fmtAnx(difConteoPicos(r))}</td></tr>`).join("")}</tbody></table>`);
-      else { const dif = a.actaConteoPicos.reduce((s, r) => s + difConteoPicos(r), 0); t.push(`<div style="font-size:11px;color:#475569">• Acta Conteo de Picos: ${a.actaConteoPicos.length} registro(s) · diferencia total <strong style="color:${dif !== 0 ? "#EF4444" : "#22C55E"}">${_fmtAnx(dif)}</strong></div>`); }
-    }
-    if (a.recepcionAves.length) {
-      const tot = a.recepcionAves.reduce((s, r) => s + totalRecepcion(r), 0);
-      if (modo === "detalle") t.push(`<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 4px">Recepción de Aves</div>
-        <table>${th(["Fecha", "Machos", "Hembras", "Total"])}<tbody>${a.recepcionAves.map(r => `<tr><td>${r.fecha || "—"}</td>${R(r.machos)}${R(r.hembras)}<td style="text-align:right;font-weight:700">${_fmtAnx(totalRecepcion(r))}</td></tr>`).join("")}<tr><td colspan="3" style="text-align:right;font-weight:700">Total aves</td><td style="text-align:right;font-weight:800;color:#22C55E">${_fmtAnx(tot)}</td></tr></tbody></table>`);
-      else t.push(`<div style="font-size:11px;color:#475569">• Recepción de Aves: ${a.recepcionAves.length} registro(s) · <strong>${_fmtAnx(tot)}</strong> aves</div>`);
-    }
     if (a.inventarioBultos.length) {
       const tot = a.inventarioBultos.reduce((s, r) => s + totalInvBultos(r), 0);
       if (modo === "detalle") t.push(`<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 4px">Inventario Bultos Físicos</div>
@@ -991,7 +1019,7 @@ function seccionAnexosTecnicos(hallazgos: any[], granjas: any[], modo: "resumen"
     </div>`;
   }).join("");
 
-  return `<div class="section"><div class="section-title">Anexos Técnicos${modo === "resumen" ? " (resumen)" : ""}</div>${bloques}</div>`;
+  return `<div class="section"><div class="section-title">Anexos Técnicos · Inventario de Alimento${modo === "resumen" ? " (resumen)" : ""}</div>${bloques}</div>`;
 }
 
 // Indicadores agregados de anexos (Dashboard: solo indicadores, sin tablas).
@@ -1224,7 +1252,7 @@ ${portada("Informe Ejecutivo de Auditoría", "Control Interno y Cumplimiento KPI
 
 ${seccionResumen(kpis, hallazgos)}
 
-${seccionMortalidad(mortalidad, granjas)}
+${seccionMortalidad(mortalidad, granjas, hallazgos)}
 
 ${seccionHallazgos(hallazgos, granjas, 20)}
 
@@ -1504,6 +1532,7 @@ ${seccionFichaTecnica(granjas)}
 <!-- VII. CONSOLIDADO DE RESULTADOS -->
 <div class="divider">VII — Consolidado de Resultados</div>
 ${seccionConsolidado(kpis, granjas, mortalidad)}
+${seccionMortalidad(mortalidad, granjas, hallazgos)}
 ${seccionFortalezas(kpis, hallazgos)}
 
 <!-- VIII. CONCLUSIONES -->
@@ -1625,7 +1654,7 @@ ${seccionHallazgos(hallazgos, granjas, 30)}
 
 ${seccionHallazgosDetalle(hallazgos, granjas, evidenciasPorHallazgo)}
 
-${seccionMortalidad(mortalidad, granjas)}
+${seccionMortalidad(mortalidad, granjas, hallazgos)}
 
 ${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
 
