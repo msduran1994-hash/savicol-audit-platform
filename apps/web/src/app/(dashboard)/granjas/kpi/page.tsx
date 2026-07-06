@@ -8,6 +8,10 @@ import { ESTADO_KPI, TIPO_RIESGO } from "@/lib/granjas.constants";
 import { AUDITORS } from "@/lib/constants";
 import type { KPI } from "@/lib/granjas.types";
 import { evidenciasGridHTML } from "@/lib/pdf-evidencias";
+import {
+  parseAnexos, anexosTienenDatos, difConteoPicos, totalRecepcion, totalInvBultos,
+  pesoTotalIngreso, subtotalBloque, cantidadBloque, totalGeneralBultos, num as anexNum,
+} from "@/lib/anexos-tecnicos";
 import { EnvioCorreoModal } from "@/components/informes/envio-correo";
 import {
   Target, Plus, Filter, X, Trash2, Edit2, AlertCircle,
@@ -934,6 +938,90 @@ function seccionEvidencias(hallazgos: any[], granjas: any[], evidenciasPorHallaz
   return `<div class="section"><div class="section-title">Evidencias Fotográficas</div>${bloques}</div>`;
 }
 
+// ─── ANEXOS TÉCNICOS del hallazgo en los informes (Fase B) ────────────────────
+// modo "detalle" = tablas completas · "resumen" = una línea de totales por pestaña.
+const _fmtAnx = (n: number): string => n.toLocaleString("es-CO", { maximumFractionDigits: 2 });
+
+function seccionAnexosTecnicos(hallazgos: any[], granjas: any[], modo: "resumen" | "detalle"): string {
+  const conAnexos = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) })).filter(x => anexosTienenDatos(x.a));
+  if (!conAnexos.length) return "";
+  const th = (cols: string[]) => `<thead><tr>${cols.map(c => `<th>${c}</th>`).join("")}</tr></thead>`;
+  const R = (v: any) => `<td style="text-align:right">${_fmtAnx(anexNum(v))}</td>`;
+
+  const bloques = conAnexos.map(({ h, a }) => {
+    const g = granjas.find(gr => gr.id === h.granjaId);
+    const t: string[] = [];
+
+    if (a.actaConteoPicos.length) {
+      if (modo === "detalle") t.push(`<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 4px">Acta Conteo de Picos</div>
+        <table>${th(["Fecha", "Reporte Conteo", "Reporte Físico", "Diferencia"])}<tbody>${a.actaConteoPicos.map(r => `<tr><td>${r.fechaConteo || "—"}</td>${R(r.reporteConteo)}${R(r.reporteFisico)}<td style="text-align:right;font-weight:700;color:${difConteoPicos(r) !== 0 ? "#EF4444" : "#22C55E"}">${_fmtAnx(difConteoPicos(r))}</td></tr>`).join("")}</tbody></table>`);
+      else { const dif = a.actaConteoPicos.reduce((s, r) => s + difConteoPicos(r), 0); t.push(`<div style="font-size:11px;color:#475569">• Acta Conteo de Picos: ${a.actaConteoPicos.length} registro(s) · diferencia total <strong style="color:${dif !== 0 ? "#EF4444" : "#22C55E"}">${_fmtAnx(dif)}</strong></div>`); }
+    }
+    if (a.recepcionAves.length) {
+      const tot = a.recepcionAves.reduce((s, r) => s + totalRecepcion(r), 0);
+      if (modo === "detalle") t.push(`<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 4px">Recepción de Aves</div>
+        <table>${th(["Fecha", "Machos", "Hembras", "Total"])}<tbody>${a.recepcionAves.map(r => `<tr><td>${r.fecha || "—"}</td>${R(r.machos)}${R(r.hembras)}<td style="text-align:right;font-weight:700">${_fmtAnx(totalRecepcion(r))}</td></tr>`).join("")}<tr><td colspan="3" style="text-align:right;font-weight:700">Total aves</td><td style="text-align:right;font-weight:800;color:#22C55E">${_fmtAnx(tot)}</td></tr></tbody></table>`);
+      else t.push(`<div style="font-size:11px;color:#475569">• Recepción de Aves: ${a.recepcionAves.length} registro(s) · <strong>${_fmtAnx(tot)}</strong> aves</div>`);
+    }
+    if (a.inventarioBultos.length) {
+      const tot = a.inventarioBultos.reduce((s, r) => s + totalInvBultos(r), 0);
+      if (modo === "detalle") t.push(`<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 4px">Inventario Bultos Físicos</div>
+        <table>${th(["N° Galpón", "Bultos", "Lonas", "Total"])}<tbody>${a.inventarioBultos.map(r => `<tr><td>${r.galpon || "—"}</td>${R(r.bultos)}${R(r.lonas)}<td style="text-align:right;font-weight:700">${_fmtAnx(totalInvBultos(r))}</td></tr>`).join("")}<tr><td colspan="3" style="text-align:right;font-weight:700">Total</td><td style="text-align:right;font-weight:800;color:#22C55E">${_fmtAnx(tot)}</td></tr></tbody></table>`);
+      else t.push(`<div style="font-size:11px;color:#475569">• Inventario Bultos Físicos: ${a.inventarioBultos.length} galpón(es) · total <strong>${_fmtAnx(tot)}</strong></div>`);
+    }
+    if (a.ingresoBultos.length) {
+      const tot = a.ingresoBultos.reduce((s, r) => s + pesoTotalIngreso(r), 0);
+      if (modo === "detalle") t.push(`<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 4px">Ingreso de Bultos</div>
+        <table>${th(["Fecha", "Concepto", "Unidades", "Cantidad (Kg)", "Peso Total Kg"])}<tbody>${a.ingresoBultos.map(r => `<tr><td>${r.fecha || "—"}</td><td>${r.concepto || "—"}</td>${R(r.unidades)}${R(r.cantidadKg)}<td style="text-align:right;font-weight:700">${_fmtAnx(pesoTotalIngreso(r))}</td></tr>`).join("")}<tr><td colspan="4" style="text-align:right;font-weight:700">Peso total (Kg)</td><td style="text-align:right;font-weight:800;color:#22C55E">${_fmtAnx(tot)}</td></tr></tbody></table>`);
+      else t.push(`<div style="font-size:11px;color:#475569">• Ingreso de Bultos: ${a.ingresoBultos.length} registro(s) · <strong>${_fmtAnx(tot)}</strong> Kg</div>`);
+    }
+    if (a.totalBultos.bloques.some(b => b.filas.length) || a.totalBultos.observaciones?.trim()) {
+      const totGral = totalGeneralBultos(a.totalBultos);
+      if (modo === "detalle") {
+        const bl = a.totalBultos.bloques.map(b => `<div style="font-size:10px;font-weight:700;color:#0D1526;margin:6px 0 2px">${b.titulo || "Bloque"}</div>
+          <table>${th(["Concepto", "Cantidad", "Peso Total Kg"])}<tbody>${b.filas.map(f => `<tr><td>${f.concepto || "—"}</td>${R(f.cantidad)}${R(f.pesoTotalKg)}</tr>`).join("")}<tr><td style="text-align:right;font-weight:700">Subtotal · ${_fmtAnx(cantidadBloque(b))} und</td><td colspan="2" style="text-align:right;font-weight:700;color:#22C55E">${_fmtAnx(subtotalBloque(b))} Kg</td></tr></tbody></table>`).join("");
+        t.push(`<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 4px">Total de Bultos</div>${bl}
+          <div style="font-size:11px;margin-top:4px"><strong>Total General:</strong> <strong style="color:#22C55E">${_fmtAnx(totGral)} Kg</strong> · Diferencias: ${_fmtAnx(anexNum(a.totalBultos.diferencias))}${a.totalBultos.observaciones?.trim() ? `<br><strong>Observaciones:</strong> ${a.totalBultos.observaciones}` : ""}</div>`);
+      } else t.push(`<div style="font-size:11px;color:#475569">• Total de Bultos: ${a.totalBultos.bloques.length} bloque(s) · total general <strong>${_fmtAnx(totGral)}</strong> Kg · dif. ${_fmtAnx(anexNum(a.totalBultos.diferencias))}</div>`);
+    }
+
+    return `<div style="page-break-inside:avoid;margin-bottom:${modo === "detalle" ? "16" : "8"}px;${modo === "detalle" ? "border:1px solid #e2e8f0;border-radius:8px;padding:12px" : ""}">
+      <div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:${modo === "detalle" ? "8" : "2"}px">${h.titulo?.slice(0, 70) || "Hallazgo"} <span style="font-weight:400;color:#64748b">· ${g?.nombre || "—"}</span></div>
+      ${t.join("")}
+    </div>`;
+  }).join("");
+
+  return `<div class="section"><div class="section-title">Anexos Técnicos${modo === "resumen" ? " (resumen)" : ""}</div>${bloques}</div>`;
+}
+
+// Indicadores agregados de anexos (Dashboard: solo indicadores, sin tablas).
+function indicadoresAnexos(hallazgos: any[]): string {
+  const anexos = hallazgos.map(h => parseAnexos(h.anexosTecnicos)).filter(anexosTienenDatos);
+  if (!anexos.length) return "";
+  let aves = 0, bultosLonas = 0, pesoIngreso = 0, totGralBultos = 0, difPicos = 0;
+  anexos.forEach(a => {
+    a.recepcionAves.forEach(r => aves += totalRecepcion(r));
+    a.inventarioBultos.forEach(r => bultosLonas += totalInvBultos(r));
+    a.ingresoBultos.forEach(r => pesoIngreso += pesoTotalIngreso(r));
+    totGralBultos += totalGeneralBultos(a.totalBultos);
+    a.actaConteoPicos.forEach(r => difPicos += difConteoPicos(r));
+  });
+  const cards = [
+    { l: "Hallazgos c/ anexos", v: _fmtAnx(anexos.length), c: "#4A7AFF" },
+    { l: "Aves recibidas",      v: _fmtAnx(aves),          c: "#22C55E" },
+    { l: "Bultos + lonas",      v: _fmtAnx(bultosLonas),   c: "#8B5CF6" },
+    { l: "Peso ingreso (Kg)",   v: _fmtAnx(pesoIngreso),   c: "#0D1526" },
+    { l: "Total bultos (Kg)",   v: _fmtAnx(totGralBultos), c: "#F97316" },
+    { l: "Dif. conteo picos",   v: _fmtAnx(difPicos),      c: difPicos !== 0 ? "#EF4444" : "#22C55E" },
+  ];
+  return `<div class="section"><div class="section-title">Indicadores de Anexos Técnicos</div>
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">
+      ${cards.map(k => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:3px solid ${k.c};border-radius:8px;padding:12px 8px;text-align:center">
+        <div style="font-size:18px;font-weight:800;color:${k.c}">${k.v}</div>
+        <div style="font-size:11px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.3px">${k.l}</div></div>`).join("")}
+    </div></div>`;
+}
+
 // ─── SECCIÓN DETALLE DE HALLAZGOS (ficha completa por hallazgo + evidencias) ──
 function seccionHallazgosDetalle(hallazgos: any[], granjas: any[], evidenciasPorHallazgo?: Record<string, any[]>): string {
   if (!hallazgos.length) {
@@ -1144,6 +1232,8 @@ ${seccionKPIs(kpis, granjas, hallazgos)}
 
 ${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
 
+${seccionAnexosTecnicos(hallazgos, granjas, "resumen")}
+
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
 </div></body></html>`;
@@ -1313,6 +1403,8 @@ ${portada("Dashboard de Auditoría", "Visualización Ejecutiva de KPIs · Pollos
 
 ${seccionDashboardCompleto(kpis, hallazgos, granjas)}
 
+${indicadoresAnexos(hallazgos)}
+
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
 </div></body></html>`;
@@ -1442,6 +1534,8 @@ ${seccionFortalezas(kpis, hallazgos)}
   </div>
 </div>
 
+${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
+
 <!-- IX. EVIDENCIAS Y FIRMA -->
 <div class="divider">IX — Evidencias Fotográficas y Firma</div>
 ${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
@@ -1532,6 +1626,8 @@ ${seccionHallazgos(hallazgos, granjas, 30)}
 ${seccionHallazgosDetalle(hallazgos, granjas, evidenciasPorHallazgo)}
 
 ${seccionMortalidad(mortalidad, granjas)}
+
+${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
 
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
