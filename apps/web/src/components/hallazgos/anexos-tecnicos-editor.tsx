@@ -8,7 +8,7 @@ import { Plus, Trash2 } from "lucide-react";
 import {
   AnexosTecnicos, TotalBultosBloque,
   difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
-  subtotalBloque, cantidadBloque, totalGeneralBultos,
+  subtotalBloque, cantidadBloque, totalGeneralBultos, difFaltanteMortalidad,
 } from "@/lib/anexos-tecnicos";
 
 const TABS = [
@@ -84,6 +84,10 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
   const editBloque = (bi: number, patch: Partial<TotalBultosBloque>) => setTB({ bloques: tb.bloques.map((b, i) => i === bi ? { ...b, ...patch } : b) });
   const editFila = (bi: number, fi: number, patch: any) => editBloque(bi, { filas: tb.bloques[bi].filas.map((f, i) => i === fi ? { ...f, ...patch } : f) });
 
+  // Resumen de "Recepción de Aves" (conciliación saldo vs mortalidad)
+  const res = value.recepcionAvesResumen;
+  const setRes = (patch: Partial<typeof res>) => set({ recepcionAvesResumen: { ...res, ...patch } });
+
   return (
     <div className="space-y-3">
       {/* Barra de pestañas */}
@@ -112,15 +116,38 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
       )}
 
       {tab === "recepcionAves" && (
-        <SimpleTable k="recepcionAves"
-          cols={[
-            { key: "fecha", label: "Fecha", type: "date" },
-            { key: "machos", label: "Machos", type: "number" },
-            { key: "hembras", label: "Hembras", type: "number" },
-            { key: "_tot", label: "Total", calc: totalRecepcion },
-          ]}
-          emptyRow={{ fecha: "", machos: "", hembras: "" }}
-          totalCol={{ label: "Total aves recibidas", calc: totalRecepcion }} />
+        <div className="space-y-3">
+          <SimpleTable k="recepcionAves"
+            cols={[
+              { key: "fecha", label: "Fecha", type: "date" },
+              { key: "machos", label: "Machos", type: "number" },
+              { key: "hembras", label: "Hembras", type: "number" },
+              { key: "_tot", label: "Total", calc: totalRecepcion },
+            ]}
+            emptyRow={{ fecha: "", machos: "", hembras: "" }}
+            totalCol={{ label: "Total aves recibidas", calc: totalRecepcion }} />
+          {/* Conciliación de saldo vs mortalidad reportada */}
+          <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 space-y-2">
+            <div className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Conciliación de saldo de aves</div>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                ["reporteActaConteoPicos", "Reporte acta conteo de picos"],
+                ["reporteSaldoAves", "Reporte saldo de aves"],
+                ["saldoIdentificadoAves", "Saldo identificado de aves"],
+                ["faltanteAvesCorte", "Faltante aves al corte"],
+              ] as const).map(([k, label]) => (
+                <div key={k}>
+                  <span className="text-[10px] text-[#94A3B8] mb-1 block">{label}</span>
+                  <input type="number" step="any" value={(res[k] as any) || ""} onChange={e => setRes({ [k]: e.target.value } as any)} className={INP} />
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between px-1 pt-2 border-t border-[#1E2D4A]">
+              <span className="text-[11px] text-[#94A3B8]">Diferencia (faltante − mortalidad reportada)</span>
+              <span className="text-sm font-bold" style={{ color: difFaltanteMortalidad(res) !== 0 ? "#EF4444" : "#22C55E" }}>{fmt(difFaltanteMortalidad(res))}</span>
+            </div>
+          </div>
+        </div>
       )}
 
       {tab === "inventarioBultos" && (

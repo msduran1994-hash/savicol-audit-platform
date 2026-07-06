@@ -11,6 +11,7 @@ import { evidenciasGridHTML } from "@/lib/pdf-evidencias";
 import {
   parseAnexos, anexosTienenDatos, difConteoPicos, totalRecepcion, totalInvBultos,
   pesoTotalIngreso, subtotalBloque, cantidadBloque, totalGeneralBultos, num as anexNum,
+  difFaltanteMortalidad, recepcionResumenTieneDatos,
 } from "@/lib/anexos-tecnicos";
 import { EnvioCorreoModal } from "@/components/informes/envio-correo";
 import {
@@ -915,14 +916,20 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
 
   // Bloque 2 — Mortalidad por Conteo de Picos (Anexos Técnicos del hallazgo)
   const conAnexos = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) }))
-    .filter(x => x.a.actaConteoPicos.length > 0 || x.a.recepcionAves.length > 0);
+    .filter(x => x.a.actaConteoPicos.length > 0 || x.a.recepcionAves.length > 0 || recepcionResumenTieneDatos(x.a.recepcionAvesResumen));
   let anexosHTML = "";
   if (conAnexos.length) {
     let conteo = 0, fisico = 0, aves = 0;
+    let repActa = 0, repSaldo = 0, saldoIdent = 0, faltante = 0;
     conAnexos.forEach(({ a }) => {
       a.actaConteoPicos.forEach(r => { conteo += anexNum(r.reporteConteo); fisico += anexNum(r.reporteFisico); });
       a.recepcionAves.forEach(r => aves += totalRecepcion(r));
+      const rr = a.recepcionAvesResumen;
+      repActa += anexNum(rr.reporteActaConteoPicos); repSaldo += anexNum(rr.reporteSaldoAves);
+      saldoIdent += anexNum(rr.saldoIdentificadoAves); faltante += anexNum(rr.faltanteAvesCorte);
     });
+    const difFalt = faltante - repActa;
+    const hayConcil = repActa !== 0 || repSaldo !== 0 || saldoIdent !== 0 || faltante !== 0;
     const mort = conteo - fisico;
     const base = conteo > 0 ? conteo : aves;
     const pct = base > 0 ? (mort / base) * 100 : 0;
@@ -948,7 +955,16 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
       </div>
       <div style="font-size:11px;font-weight:700;color:#4A7AFF;margin-bottom:2px">Reporte de mortalidad (Acta Conteo de Picos)</div>
       ${detalle}
-      <p style="font-size:9px;color:#94a3b8;margin-top:6px">% mortalidad = mortalidad (conteo de picos − reporte físico) / conteo de picos. Fuente: Anexos Técnicos del hallazgo.</p>
+      ${hayConcil ? `
+      <div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:12px 0 2px">Conciliación de saldo de aves</div>
+      <table><tbody>
+        <tr><td>Reporte acta conteo de picos (mortalidad reportada)</td><td style="text-align:right;font-weight:700">${fmt(repActa)}</td></tr>
+        <tr><td>Reporte saldo de aves</td><td style="text-align:right">${fmt(repSaldo)}</td></tr>
+        <tr><td>Saldo identificado de aves</td><td style="text-align:right">${fmt(saldoIdent)}</td></tr>
+        <tr><td>Faltante aves al corte</td><td style="text-align:right;font-weight:700">${fmt(faltante)}</td></tr>
+        <tr><td style="font-weight:700;color:#0D1526">Diferencia (faltante − mortalidad reportada)</td><td style="text-align:right;font-weight:800;font-size:15px;color:${difFalt !== 0 ? "#EF4444" : "#22C55E"}">${fmt(difFalt)}</td></tr>
+      </tbody></table>` : ""}
+      <p style="font-size:9px;color:#94a3b8;margin-top:6px">% mortalidad = mortalidad (conteo de picos − reporte físico) / conteo de picos. Diferencia = faltante aves al corte − mortalidad reportada. Fuente: Anexos Técnicos del hallazgo.</p>
     </div>`;
   }
 
@@ -1260,7 +1276,7 @@ ${seccionKPIs(kpis, granjas, hallazgos)}
 
 ${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
 
-${seccionAnexosTecnicos(hallazgos, granjas, "resumen")}
+${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
 
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}

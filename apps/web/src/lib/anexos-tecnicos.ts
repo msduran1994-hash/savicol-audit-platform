@@ -7,6 +7,13 @@
 
 export interface ActaConteoPicosRow { fechaConteo: string; reporteConteo: number; reporteFisico: number; }
 export interface RecepcionAvesRow   { fecha: string; machos: number; hembras: number; }
+// Resumen al final de la pestaña "Recepción de Aves" (conciliación de saldo vs mortalidad).
+export interface RecepcionAvesResumen {
+  reporteActaConteoPicos: number;   // mortalidad reportada (acta conteo de picos)
+  reporteSaldoAves: number;
+  saldoIdentificadoAves: number;
+  faltanteAvesCorte: number;
+}
 export interface InventarioBultosRow{ galpon: string; bultos: number; lonas: number; }
 export interface IngresoBultosRow   { fecha: string; concepto: string; unidades: number; cantidadKg: number; }
 export interface TotalBultosRow     { concepto: string; cantidad: number; pesoTotalKg: number; }
@@ -16,14 +23,20 @@ export interface TotalBultos        { bloques: TotalBultosBloque[]; diferencias:
 export interface AnexosTecnicos {
   actaConteoPicos:  ActaConteoPicosRow[];
   recepcionAves:    RecepcionAvesRow[];
+  recepcionAvesResumen: RecepcionAvesResumen;
   inventarioBultos: InventarioBultosRow[];
   ingresoBultos:    IngresoBultosRow[];
   totalBultos:      TotalBultos;
 }
 
+export function emptyRecepcionResumen(): RecepcionAvesResumen {
+  return { reporteActaConteoPicos: 0, reporteSaldoAves: 0, saldoIdentificadoAves: 0, faltanteAvesCorte: 0 };
+}
+
 export function emptyAnexos(): AnexosTecnicos {
   return {
-    actaConteoPicos: [], recepcionAves: [], inventarioBultos: [], ingresoBultos: [],
+    actaConteoPicos: [], recepcionAves: [], recepcionAvesResumen: emptyRecepcionResumen(),
+    inventarioBultos: [], ingresoBultos: [],
     totalBultos: { bloques: [], diferencias: 0, observaciones: "" },
   };
 }
@@ -34,9 +47,16 @@ export function parseAnexos(json?: string | null): AnexosTecnicos {
   if (!json) return base;
   try {
     const p = JSON.parse(json) || {};
+    const res = p.recepcionAvesResumen || {};
     return {
       actaConteoPicos:  Array.isArray(p.actaConteoPicos)  ? p.actaConteoPicos  : [],
       recepcionAves:    Array.isArray(p.recepcionAves)    ? p.recepcionAves    : [],
+      recepcionAvesResumen: {
+        reporteActaConteoPicos: num(res.reporteActaConteoPicos),
+        reporteSaldoAves:       num(res.reporteSaldoAves),
+        saldoIdentificadoAves:  num(res.saldoIdentificadoAves),
+        faltanteAvesCorte:      num(res.faltanteAvesCorte),
+      },
       inventarioBultos: Array.isArray(p.inventarioBultos) ? p.inventarioBultos : [],
       ingresoBultos:    Array.isArray(p.ingresoBultos)    ? p.ingresoBultos    : [],
       totalBultos: {
@@ -49,11 +69,18 @@ export function parseAnexos(json?: string | null): AnexosTecnicos {
 }
 
 // ¿El auditor diligenció algo? (para no guardar/render anexos vacíos)
+export function recepcionResumenTieneDatos(r?: RecepcionAvesResumen): boolean {
+  if (!r) return false;
+  return num(r.reporteActaConteoPicos) !== 0 || num(r.reporteSaldoAves) !== 0 ||
+    num(r.saldoIdentificadoAves) !== 0 || num(r.faltanteAvesCorte) !== 0;
+}
+
 export function anexosTienenDatos(a: AnexosTecnicos): boolean {
   return a.actaConteoPicos.length > 0 || a.recepcionAves.length > 0 ||
     a.inventarioBultos.length > 0 || a.ingresoBultos.length > 0 ||
     a.totalBultos.bloques.some(b => b.filas.length > 0) ||
-    !!a.totalBultos.observaciones?.trim();
+    !!a.totalBultos.observaciones?.trim() ||
+    recepcionResumenTieneDatos(a.recepcionAvesResumen);
 }
 
 // ─── Cálculos automáticos ──────────────────────────────────────────────────────
@@ -65,3 +92,5 @@ export const pesoTotalIngreso    = (r: IngresoBultosRow)    => num(r.unidades) *
 export const subtotalBloque      = (b: TotalBultosBloque)   => b.filas.reduce((a, f) => a + num(f.pesoTotalKg), 0);
 export const cantidadBloque      = (b: TotalBultosBloque)   => b.filas.reduce((a, f) => a + num(f.cantidad), 0);
 export const totalGeneralBultos  = (t: TotalBultos)         => t.bloques.reduce((a, b) => a + subtotalBloque(b), 0);
+// Diferencia entre el faltante de aves al corte y la mortalidad reportada (acta conteo de picos).
+export const difFaltanteMortalidad = (r: RecepcionAvesResumen) => num(r.faltanteAvesCorte) - num(r.reporteActaConteoPicos);
