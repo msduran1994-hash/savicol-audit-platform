@@ -19,6 +19,8 @@ export interface IngresoBultosRow   { fecha: string; concepto: string; unidades:
 export interface TotalBultosRow     { concepto: string; cantidad: number; pesoTotalKg: number; }
 export interface TotalBultosBloque  { titulo: string; filas: TotalBultosRow[]; }
 export interface TotalBultos        { bloques: TotalBultosBloque[]; diferencias: number; observaciones: string; }
+// Bitácora de Ingreso a la Granja (sección aparte del hallazgo).
+export interface BitacoraIngresoRow { fecha: string; responsable: string; }
 
 export interface AnexosTecnicos {
   actaConteoPicos:  ActaConteoPicosRow[];
@@ -27,6 +29,7 @@ export interface AnexosTecnicos {
   inventarioBultos: InventarioBultosRow[];
   ingresoBultos:    IngresoBultosRow[];
   totalBultos:      TotalBultos;
+  bitacoraIngreso:  BitacoraIngresoRow[];
 }
 
 export function emptyRecepcionResumen(): RecepcionAvesResumen {
@@ -38,6 +41,7 @@ export function emptyAnexos(): AnexosTecnicos {
     actaConteoPicos: [], recepcionAves: [], recepcionAvesResumen: emptyRecepcionResumen(),
     inventarioBultos: [], ingresoBultos: [],
     totalBultos: { bloques: [], diferencias: 0, observaciones: "" },
+    bitacoraIngreso: [],
   };
 }
 
@@ -64,6 +68,7 @@ export function parseAnexos(json?: string | null): AnexosTecnicos {
         diferencias:  num(p.totalBultos?.diferencias),
         observaciones: typeof p.totalBultos?.observaciones === "string" ? p.totalBultos.observaciones : "",
       },
+      bitacoraIngreso: Array.isArray(p.bitacoraIngreso) ? p.bitacoraIngreso : [],
     };
   } catch { return base; }
 }
@@ -80,7 +85,8 @@ export function anexosTienenDatos(a: AnexosTecnicos): boolean {
     a.inventarioBultos.length > 0 || a.ingresoBultos.length > 0 ||
     a.totalBultos.bloques.some(b => b.filas.length > 0) ||
     !!a.totalBultos.observaciones?.trim() ||
-    recepcionResumenTieneDatos(a.recepcionAvesResumen);
+    recepcionResumenTieneDatos(a.recepcionAvesResumen) ||
+    a.bitacoraIngreso.length > 0;
 }
 
 // ─── Cálculos automáticos ──────────────────────────────────────────────────────

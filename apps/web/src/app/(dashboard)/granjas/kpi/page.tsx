@@ -1066,13 +1066,14 @@ function seccionAnexosTecnicos(hallazgos: any[], granjas: any[], modo: "resumen"
 function indicadoresAnexos(hallazgos: any[]): string {
   const anexos = hallazgos.map(h => parseAnexos(h.anexosTecnicos)).filter(anexosTienenDatos);
   if (!anexos.length) return "";
-  let aves = 0, bultosLonas = 0, pesoIngreso = 0, totGralBultos = 0, difPicos = 0;
+  let aves = 0, bultosLonas = 0, pesoIngreso = 0, totGralBultos = 0, difPicos = 0, bitacora = 0;
   anexos.forEach(a => {
     a.recepcionAves.forEach(r => aves += totalRecepcion(r));
     a.inventarioBultos.forEach(r => bultosLonas += totalInvBultos(r));
     a.ingresoBultos.forEach(r => pesoIngreso += pesoTotalIngreso(r));
     totGralBultos += totalGeneralBultos(a.totalBultos);
     a.actaConteoPicos.forEach(r => difPicos += difConteoPicos(r));
+    bitacora += a.bitacoraIngreso.length;
   });
   const cards = [
     { l: "Hallazgos c/ anexos", v: _fmtAnx(anexos.length), c: "#4A7AFF" },
@@ -1081,9 +1082,10 @@ function indicadoresAnexos(hallazgos: any[]): string {
     { l: "Peso ingreso (Kg)",   v: _fmtAnx(pesoIngreso),   c: "#0D1526" },
     { l: "Total bultos (Kg)",   v: _fmtAnx(totGralBultos), c: "#F97316" },
     { l: "Dif. conteo picos",   v: _fmtAnx(difPicos),      c: difPicos !== 0 ? "#EF4444" : "#22C55E" },
+    { l: "Ingresos a granja",   v: _fmtAnx(bitacora),      c: "#4A7AFF" },
   ];
   return `<div class="section"><div class="section-title">Indicadores de Anexos Técnicos</div>
-    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">
       ${cards.map(k => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:3px solid ${k.c};border-radius:8px;padding:12px 8px;text-align:center">
         <div style="font-size:18px;font-weight:800;color:${k.c}">${k.v}</div>
         <div style="font-size:11px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.3px">${k.l}</div></div>`).join("")}
@@ -1134,6 +1136,30 @@ function graficosMortalidad(hallazgos: any[], granjas: any[]): string {
     </div>
     ${chartCard(5, "Tendencia de Mortalidad", tendencia, "% en el tiempo")}
   </div>`;
+}
+
+// ─── SECCIÓN BITÁCORA DE INGRESO A LA GRANJA (resumen / detalle) ──────────────
+function seccionBitacora(hallazgos: any[], granjas: any[], modo: "resumen" | "detalle"): string {
+  const conBit = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) })).filter(x => x.a.bitacoraIngreso.length > 0);
+  if (!conBit.length) return "";
+  const total = conBit.reduce((s, x) => s + x.a.bitacoraIngreso.length, 0);
+  if (modo === "resumen") {
+    const lineas = conBit.map(({ h, a }) => {
+      const g = granjas.find(gr => gr.id === h.granjaId);
+      return `<div style="font-size:11px;color:#475569">• ${h.titulo?.slice(0, 55) || "Hallazgo"} <span style="color:#94a3b8">· ${g?.nombre || "—"}</span>: <strong>${a.bitacoraIngreso.length}</strong> ingreso(s)</div>`;
+    }).join("");
+    return `<div class="section"><div class="section-title">Bitácora de Ingreso a la Granja (resumen)</div>
+      <p style="font-size:12px;margin-bottom:6px"><strong>${total}</strong> ingreso(s) registrado(s) en ${conBit.length} hallazgo(s).</p>${lineas}</div>`;
+  }
+  const bloques = conBit.map(({ h, a }) => {
+    const g = granjas.find(gr => gr.id === h.granjaId);
+    return `<div style="page-break-inside:avoid;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:4px">${h.titulo?.slice(0, 70) || "Hallazgo"} <span style="font-weight:400;color:#64748b">· ${g?.nombre || "—"}</span></div>
+      <table><thead><tr><th>Fecha de visita</th><th>Nombre del responsable</th></tr></thead>
+      <tbody>${a.bitacoraIngreso.map(r => `<tr><td>${r.fecha || "—"}</td><td>${r.responsable || "—"}</td></tr>`).join("")}</tbody></table></div>`;
+  }).join("");
+  return `<div class="section"><div class="section-title">Bitácora de Ingreso a la Granja</div>
+    <p style="font-size:11px;color:#64748b;margin-bottom:8px">${total} ingreso(s) registrado(s) en ${conBit.length} hallazgo(s), asociados a su hallazgo correspondiente.</p>${bloques}</div>`;
 }
 
 // ─── SECCIÓN DETALLE DE HALLAZGOS (ficha completa por hallazgo + evidencias) ──
@@ -1347,6 +1373,8 @@ ${seccionKPIs(kpis, granjas, hallazgos)}
 ${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
 
 ${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
+
+${seccionBitacora(hallazgos, granjas, "resumen")}
 
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
@@ -1653,6 +1681,8 @@ ${seccionFortalezas(kpis, hallazgos)}
 
 ${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
 
+${seccionBitacora(hallazgos, granjas, "detalle")}
+
 <!-- IX. EVIDENCIAS Y FIRMA -->
 <div class="divider">IX — Evidencias Fotográficas y Firma</div>
 ${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
@@ -1745,6 +1775,8 @@ ${seccionHallazgosDetalle(hallazgos, granjas, evidenciasPorHallazgo)}
 ${seccionMortalidad(mortalidad, granjas, hallazgos)}
 
 ${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
+
+${seccionBitacora(hallazgos, granjas, "detalle")}
 
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
