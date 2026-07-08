@@ -104,28 +104,30 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
         })}
       </div>
 
-      {tab === "actaConteoPicos" && (
-        <SimpleTable k="actaConteoPicos"
-          cols={[
-            { key: "fechaConteo", label: "Fecha Conteo", type: "date" },
-            { key: "reporteConteo", label: "Reporte Conteo", type: "number" },
-            { key: "reporteFisico", label: "Reporte Físico", type: "number" },
-            { key: "_dif", label: "Diferencia", calc: difConteoPicos },
-          ]}
-          emptyRow={{ fechaConteo: "", reporteConteo: "", reporteFisico: "" }} />
-      )}
+      {tab === "actaConteoPicos" && SimpleTable({
+        k: "actaConteoPicos",
+        cols: [
+          { key: "fechaConteo", label: "Fecha Conteo", type: "date" },
+          { key: "reporteConteo", label: "Reporte Conteo", type: "number" },
+          { key: "reporteFisico", label: "Reporte Físico", type: "number" },
+          { key: "_dif", label: "Diferencia", calc: difConteoPicos },
+        ],
+        emptyRow: { fechaConteo: "", reporteConteo: "", reporteFisico: "" },
+      })}
 
       {tab === "recepcionAves" && (
         <div className="space-y-3">
-          <SimpleTable k="recepcionAves"
-            cols={[
+          {SimpleTable({
+            k: "recepcionAves",
+            cols: [
               { key: "fecha", label: "Fecha", type: "date" },
               { key: "machos", label: "Machos", type: "number" },
               { key: "hembras", label: "Hembras", type: "number" },
               { key: "_tot", label: "Total", calc: totalRecepcion },
-            ]}
-            emptyRow={{ fecha: "", machos: "", hembras: "" }}
-            totalCol={{ label: "Total aves recibidas", calc: totalRecepcion }} />
+            ],
+            emptyRow: { fecha: "", machos: "", hembras: "" },
+            totalCol: { label: "Total aves recibidas", calc: totalRecepcion },
+          })}
           {/* Conciliación de saldo vs mortalidad reportada */}
           <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 space-y-2">
             <div className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Conciliación de saldo de aves</div>
@@ -150,30 +152,30 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
         </div>
       )}
 
-      {tab === "inventarioBultos" && (
-        <SimpleTable k="inventarioBultos"
-          cols={[
-            { key: "galpon", label: "N° Galpón", type: "text" },
-            { key: "bultos", label: "Bultos", type: "number" },
-            { key: "lonas", label: "Lonas", type: "number" },
-            { key: "_tot", label: "Total", calc: totalInvBultos },
-          ]}
-          emptyRow={{ galpon: "", bultos: "", lonas: "" }}
-          totalCol={{ label: "Total (bultos + lonas)", calc: totalInvBultos }} />
-      )}
+      {tab === "inventarioBultos" && SimpleTable({
+        k: "inventarioBultos",
+        cols: [
+          { key: "galpon", label: "N° Galpón", type: "text" },
+          { key: "bultos", label: "Bultos", type: "number" },
+          { key: "lonas", label: "Lonas", type: "number" },
+          { key: "_tot", label: "Total", calc: totalInvBultos },
+        ],
+        emptyRow: { galpon: "", bultos: "", lonas: "" },
+        totalCol: { label: "Total (bultos + lonas)", calc: totalInvBultos },
+      })}
 
-      {tab === "ingresoBultos" && (
-        <SimpleTable k="ingresoBultos"
-          cols={[
-            { key: "fecha", label: "Fecha", type: "date" },
-            { key: "concepto", label: "Concepto", type: "text" },
-            { key: "unidades", label: "Unidades", type: "number" },
-            { key: "cantidadKg", label: "Cantidad (Kg)", type: "number" },
-            { key: "_peso", label: "Peso Total Kg", calc: pesoTotalIngreso },
-          ]}
-          emptyRow={{ fecha: "", concepto: "", unidades: "", cantidadKg: "" }}
-          totalCol={{ label: "Peso total (Kg)", calc: pesoTotalIngreso }} />
-      )}
+      {tab === "ingresoBultos" && SimpleTable({
+        k: "ingresoBultos",
+        cols: [
+          { key: "fecha", label: "Fecha", type: "date" },
+          { key: "concepto", label: "Concepto", type: "text" },
+          { key: "unidades", label: "Unidades", type: "number" },
+          { key: "cantidadKg", label: "Cantidad (Kg)", type: "number" },
+          { key: "_peso", label: "Peso Total Kg", calc: pesoTotalIngreso },
+        ],
+        emptyRow: { fecha: "", concepto: "", unidades: "", cantidadKg: "" },
+        totalCol: { label: "Peso total (Kg)", calc: pesoTotalIngreso },
+      })}
 
       {tab === "totalBultos" && (
         <div className="space-y-3">
