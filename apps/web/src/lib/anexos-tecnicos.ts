@@ -94,3 +94,14 @@ export const cantidadBloque      = (b: TotalBultosBloque)   => b.filas.reduce((a
 export const totalGeneralBultos  = (t: TotalBultos)         => t.bloques.reduce((a, b) => a + subtotalBloque(b), 0);
 // Diferencia entre el faltante de aves al corte y la mortalidad reportada (acta conteo de picos).
 export const difFaltanteMortalidad = (r: RecepcionAvesResumen) => num(r.faltanteAvesCorte) - num(r.reporteActaConteoPicos);
+
+// Total de aves recibidas (suma de machos + hembras de la pestaña Recepción de Aves).
+export const avesRecibidasTotal = (a: AnexosTecnicos) => a.recepcionAves.reduce((s, r) => s + totalRecepcion(r), 0);
+
+// % Mortalidad = (Aves Recibidas − Reporte Saldo de Aves) / Aves Recibidas × 100.
+// Devuelve null si el total de aves recibidas no es > 0 (regla de validación).
+export function pctMortalidad(a: AnexosTecnicos): number | null {
+  const recibidas = avesRecibidasTotal(a);
+  if (recibidas <= 0) return null;
+  return ((recibidas - num(a.recepcionAvesResumen.reporteSaldoAves)) / recibidas) * 100;
+}

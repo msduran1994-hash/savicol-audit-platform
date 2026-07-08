@@ -9,6 +9,7 @@ import {
   AnexosTecnicos, TotalBultosBloque,
   difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
   subtotalBloque, cantidadBloque, totalGeneralBultos, difFaltanteMortalidad,
+  pctMortalidad, avesRecibidasTotal,
 } from "@/lib/anexos-tecnicos";
 
 const TABS = [
@@ -147,6 +148,16 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             <div className="flex items-center justify-between px-1 pt-2 border-t border-[#1E2D4A]">
               <span className="text-[11px] text-[#94A3B8]">Diferencia (faltante − mortalidad reportada)</span>
               <span className="text-sm font-bold" style={{ color: difFaltanteMortalidad(res) !== 0 ? "#EF4444" : "#22C55E" }}>{fmt(difFaltanteMortalidad(res))}</span>
+            </div>
+            {/* % Mortalidad (indicador principal) = (aves recibidas − saldo) / aves recibidas */}
+            <div className="flex items-center justify-between rounded-lg bg-[#0D1526] border border-[#4A7AFF]/30 px-3 py-2">
+              <div>
+                <div className="text-[10px] text-[#94A3B8] uppercase tracking-wide">% Mortalidad</div>
+                <div className="text-[9px] text-[#475569]">(aves recibidas − reporte saldo) ÷ aves recibidas · {fmt(avesRecibidasTotal(value))} recibidas</div>
+              </div>
+              {pctMortalidad(value) === null
+                ? <span className="text-[11px] text-amber-400">Requiere aves recibidas &gt; 0</span>
+                : <span className="text-2xl font-bold" style={{ color: pctMortalidad(value)! >= 8 ? "#EF4444" : pctMortalidad(value)! >= 4 ? "#F97316" : "#22C55E" }}>{pctMortalidad(value)!.toFixed(2)}%</span>}
             </div>
           </div>
         </div>

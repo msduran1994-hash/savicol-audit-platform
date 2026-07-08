@@ -11,7 +11,7 @@ import { evidenciasGridHTML } from "@/lib/pdf-evidencias";
 import {
   parseAnexos, anexosTienenDatos, difConteoPicos, totalRecepcion, totalInvBultos,
   pesoTotalIngreso, subtotalBloque, cantidadBloque, totalGeneralBultos, num as anexNum,
-  difFaltanteMortalidad, recepcionResumenTieneDatos,
+  difFaltanteMortalidad, recepcionResumenTieneDatos, pctMortalidad, avesRecibidasTotal,
 } from "@/lib/anexos-tecnicos";
 import { EnvioCorreoModal } from "@/components/informes/envio-correo";
 import {
@@ -930,10 +930,19 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
     });
     const difFalt = faltante - repActa;
     const hayConcil = repActa !== 0 || repSaldo !== 0 || saldoIdent !== 0 || faltante !== 0;
+    // Indicador PRINCIPAL: % Mortalidad = (aves recibidas − reporte saldo) / aves recibidas
+    const mortNueva = aves - repSaldo;
+    const pctNueva = aves > 0 ? (mortNueva / aves) * 100 : null;
+    const pctNColor = (pctNueva ?? 0) >= 8 ? "#EF4444" : (pctNueva ?? 0) >= 4 ? "#F97316" : "#22C55E";
+    const filasMort = conAnexos.filter(x => avesRecibidasTotal(x.a) > 0).map(({ h, a }) => {
+      const g = granjas.find(gr => gr.id === h.granjaId);
+      const rec = avesRecibidasTotal(a); const saldo = anexNum(a.recepcionAvesResumen.reporteSaldoAves); const pm = pctMortalidad(a);
+      const c = (pm ?? 0) >= 8 ? "#EF4444" : (pm ?? 0) >= 4 ? "#F97316" : "#22C55E";
+      return `<tr><td><strong>${h.titulo?.slice(0, 42) || "—"}</strong></td><td>${g?.nombre || "—"}</td><td>${h.auditorNombre || "—"}</td><td style="text-align:right">${fmt(rec)}</td><td style="text-align:right">${fmt(saldo)}</td><td style="text-align:right;font-weight:700">${fmt(rec - saldo)}</td><td style="text-align:right"><span class="badge" style="background:${c}1f;color:${c}">${pm != null ? pm.toFixed(2) + "%" : "—"}</span></td></tr>`;
+    }).join("");
+    // Detalle secundario: conteo de picos
     const mort = conteo - fisico;
-    const base = conteo > 0 ? conteo : aves;
-    const pct = base > 0 ? (mort / base) * 100 : 0;
-    const pctColor = pct >= 8 ? "#EF4444" : pct >= 4 ? "#F97316" : "#22C55E";
+    const pctCP = conteo > 0 ? (mort / conteo) * 100 : 0;
     const detalle = conAnexos.filter(x => x.a.actaConteoPicos.length).map(({ h, a }) => {
       const g = granjas.find(gr => gr.id === h.granjaId);
       return `<div style="page-break-inside:avoid;margin-top:8px">
@@ -941,20 +950,36 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
         <table><thead><tr><th>Fecha</th><th style="text-align:right">Conteo de Picos</th><th style="text-align:right">Reporte Físico</th><th style="text-align:right">Mortalidad</th></tr></thead>
         <tbody>${a.actaConteoPicos.map(r => `<tr><td>${r.fechaConteo || "—"}</td><td style="text-align:right">${fmt(anexNum(r.reporteConteo))}</td><td style="text-align:right">${fmt(anexNum(r.reporteFisico))}</td><td style="text-align:right;font-weight:700;color:${difConteoPicos(r) !== 0 ? "#EF4444" : "#22C55E"}">${fmt(difConteoPicos(r))}</td></tr>`).join("")}</tbody></table></div>`;
     }).join("");
-    anexosHTML = `
-    <div style="margin-top:18px;border-top:1px solid #e2e8f0;padding-top:14px;page-break-inside:avoid">
-      <div style="font-size:13px;font-weight:800;color:#0D1526;margin-bottom:10px">Mortalidad por Conteo de Picos</div>
+
+    const headline = pctNueva != null ? `
+      <div style="font-size:13px;font-weight:800;color:#0D1526;margin-bottom:10px">% Mortalidad</div>
       <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px 20px;margin-bottom:12px">
         <div style="text-align:center;min-width:150px">
-          <div style="font-size:46px;font-weight:800;color:${pctColor};line-height:1">${pct.toFixed(2)}%</div>
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Mortalidad s/ conteo de picos</div>
+          <div style="font-size:46px;font-weight:800;color:${pctNColor};line-height:1">${pctNueva.toFixed(2)}%</div>
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Mortalidad del alcance</div>
         </div>
         <div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;min-width:280px">
-          ${[{ l: "Aves recibidas", v: fmt(aves) }, { l: "Conteo de picos", v: fmt(conteo) }, { l: "Mortalidad", v: fmt(mort) }].map(k => `<div style="text-align:center"><div style="font-size:20px;font-weight:800;color:#0D1526">${k.v}</div><div style="font-size:10px;color:#64748b;text-transform:uppercase">${k.l}</div></div>`).join("")}
+          ${[{ l: "Aves recibidas", v: fmt(aves) }, { l: "Reporte saldo", v: fmt(repSaldo) }, { l: "Mortalidad", v: fmt(mortNueva) }].map(k => `<div style="text-align:center"><div style="font-size:20px;font-weight:800;color:#0D1526">${k.v}</div><div style="font-size:10px;color:#64748b;text-transform:uppercase">${k.l}</div></div>`).join("")}
         </div>
       </div>
-      <div style="font-size:11px;font-weight:700;color:#4A7AFF;margin-bottom:2px">Reporte de mortalidad (Acta Conteo de Picos)</div>
-      ${detalle}
+      ${filasMort ? `<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin-bottom:2px">Detalle por hallazgo</div>
+      <table><thead><tr><th>Hallazgo</th><th>Granja</th><th>Auditor</th><th style="text-align:right">Recibidas</th><th style="text-align:right">Saldo</th><th style="text-align:right">Mortalidad</th><th style="text-align:right">%</th></tr></thead><tbody>${filasMort}</tbody></table>` : ""}
+      <div style="font-size:11px;color:#334155;margin-top:6px"><strong>Interpretación técnica:</strong> mortalidad del ${pctNueva.toFixed(2)}%, ${pctNueva >= 8 ? "crítica — requiere atención inmediata" : pctNueva >= 4 ? "elevada — requiere seguimiento y plan de acción" : "dentro de parámetros aceptables"}.</div>
+      <p style="font-size:9px;color:#94a3b8;margin-top:4px">% Mortalidad = (aves recibidas − reporte saldo de aves) / aves recibidas.</p>` : "";
+
+    const conteoPicos = conteo > 0 ? `
+      <div style="font-size:12px;font-weight:700;color:#0D1526;margin:14px 0 6px">Mortalidad por conteo de picos (detalle)</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;margin-bottom:4px">
+        <span>Conteo de picos: <strong>${fmt(conteo)}</strong></span>
+        <span>Reporte físico: <strong>${fmt(fisico)}</strong></span>
+        <span>Mortalidad: <strong style="color:${mort !== 0 ? "#EF4444" : "#22C55E"}">${fmt(mort)}</strong> (${pctCP.toFixed(2)}%)</span>
+      </div>
+      ${detalle}` : "";
+
+    anexosHTML = `
+    <div style="margin-top:18px;border-top:1px solid #e2e8f0;padding-top:14px;page-break-inside:avoid">
+      ${headline}
+      ${conteoPicos}
       ${hayConcil ? `
       <div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:12px 0 2px">Conciliación de saldo de aves</div>
       <table><tbody>
@@ -964,7 +989,6 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
         <tr><td>Faltante aves al corte</td><td style="text-align:right;font-weight:700">${fmt(faltante)}</td></tr>
         <tr><td style="font-weight:700;color:#0D1526">Diferencia (faltante − mortalidad reportada)</td><td style="text-align:right;font-weight:800;font-size:15px;color:${difFalt !== 0 ? "#EF4444" : "#22C55E"}">${fmt(difFalt)}</td></tr>
       </tbody></table>` : ""}
-      <p style="font-size:9px;color:#94a3b8;margin-top:6px">% mortalidad = mortalidad (conteo de picos − reporte físico) / conteo de picos. Diferencia = faltante aves al corte − mortalidad reportada. Fuente: Anexos Técnicos del hallazgo.</p>
     </div>`;
   }
 
@@ -1064,6 +1088,52 @@ function indicadoresAnexos(hallazgos: any[]): string {
         <div style="font-size:18px;font-weight:800;color:${k.c}">${k.v}</div>
         <div style="font-size:11px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.3px">${k.l}</div></div>`).join("")}
     </div></div>`;
+}
+
+// ─── GRÁFICOS DE MORTALIDAD (Dashboard) — % por granja/auditor/período + tendencia + comparativo ──
+function graficosMortalidad(hallazgos: any[], granjas: any[]): string {
+  const datos = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) }))
+    .filter(x => avesRecibidasTotal(x.a) > 0)
+    .map(({ h, a }) => ({
+      h, granjaId: h.granjaId, auditor: h.auditorNombre || "—", mes: (h.fechaVisita || "").slice(0, 7),
+      recibidas: avesRecibidasTotal(a), saldo: anexNum(a.recepcionAvesResumen.reporteSaldoAves), pct: pctMortalidad(a) ?? 0,
+    }));
+  if (!datos.length) return "";
+  const colorPct = (p: number) => p >= 8 ? "#EF4444" : p >= 4 ? "#F97316" : "#22C55E";
+  // Agregación ponderada por grupo: % = (Σrecibidas − Σsaldo) / Σrecibidas
+  const agrupar = (keyFn: (d: typeof datos[number]) => string, nombreFn?: (k: string) => string) => {
+    const m: Record<string, { rec: number; saldo: number }> = {};
+    datos.forEach(d => { const k = keyFn(d) || "—"; (m[k] ||= { rec: 0, saldo: 0 }); m[k].rec += d.recibidas; m[k].saldo += d.saldo; });
+    return Object.entries(m).map(([k, v]) => ({ label: nombreFn ? nombreFn(k) : k, pct: v.rec > 0 ? ((v.rec - v.saldo) / v.rec) * 100 : 0 }));
+  };
+  const barras = (arr: { label: string; pct: number }[]) => arr.length
+    ? arr.map(x => barraHorizontal((x.label || "—").slice(0, 20), Math.round(x.pct * 100) / 100, 100, colorPct(x.pct))).join("")
+    : "<p style='font-size:10px;color:#94a3b8;text-align:center'>Sin datos</p>";
+  const porGranja  = agrupar(d => d.granjaId, gid => granjas.find(g => g.id === gid)?.nombre || "—");
+  const porAuditor = agrupar(d => d.auditor);
+  const porMes     = agrupar(d => d.mes).sort((a, b) => a.label.localeCompare(b.label));
+  const comparativo = datos.map(d => barraHorizontal((d.h.titulo || "—").slice(0, 20), Math.round(d.pct * 100) / 100, 100, colorPct(d.pct))).join("");
+  // Tendencia porcentual (línea por mes)
+  const tendencia = (() => {
+    if (porMes.length < 2) return barras(porMes);
+    const W = 520, H = 160, padL = 30, padB = 24, padT = 14, padR = 12, plotW = W - padL - padR, plotH = H - padB - padT;
+    const maxV = Math.max(1, ...porMes.map(p => p.pct));
+    const xAt = (i: number) => padL + i * plotW / (porMes.length - 1);
+    const yAt = (v: number) => padT + plotH - (v / maxV) * plotH;
+    const poly = porMes.map((p, i) => `${xAt(i).toFixed(1)},${yAt(p.pct).toFixed(1)}`).join(" ");
+    const dots = porMes.map((p, i) => `<circle cx="${xAt(i).toFixed(1)}" cy="${yAt(p.pct).toFixed(1)}" r="3" fill="#EF4444"/><text x="${xAt(i).toFixed(1)}" y="${(yAt(p.pct) - 6).toFixed(1)}" text-anchor="middle" font-size="8" fill="#0D1526">${p.pct.toFixed(1)}%</text>`).join("");
+    const xl = porMes.map((p, i) => `<text x="${xAt(i).toFixed(1)}" y="${H - padB + 12}" text-anchor="middle" font-size="8" fill="#64748b">${p.label.slice(2)}</text>`).join("");
+    return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto"><polyline points="${poly}" fill="none" stroke="#EF4444" stroke-width="2"/>${dots}${xl}</svg>`;
+  })();
+  return `<div class="section"><div class="section-title">Mortalidad · Análisis</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px">
+      ${chartCard(1, "Mortalidad por Granja", barras(porGranja), "% ponderado por granja")}
+      ${chartCard(2, "Mortalidad por Auditor", barras(porAuditor), "% ponderado por auditor")}
+      ${chartCard(3, "Mortalidad por Período", barras(porMes), "% por mes")}
+      ${chartCard(4, "Comparativo entre Hallazgos", comparativo, "% por hallazgo")}
+    </div>
+    ${chartCard(5, "Tendencia de Mortalidad", tendencia, "% en el tiempo")}
+  </div>`;
 }
 
 // ─── SECCIÓN DETALLE DE HALLAZGOS (ficha completa por hallazgo + evidencias) ──
@@ -1448,6 +1518,8 @@ ${portada("Dashboard de Auditoría", "Visualización Ejecutiva de KPIs · Pollos
 ${seccionDashboardCompleto(kpis, hallazgos, granjas)}
 
 ${indicadoresAnexos(hallazgos)}
+
+${graficosMortalidad(hallazgos, granjas)}
 
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
