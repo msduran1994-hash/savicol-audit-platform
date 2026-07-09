@@ -215,6 +215,12 @@ export interface ResumenEjecutivo {
   secciones: { titulo: string; lineas: string[] }[];
 }
 
+// Ejecuta un generador de resumen de forma segura: si algo lanza (dato límite), degrada
+// a null en vez de romper el render. Usado por el editor y por los informes.
+export function safeResumen(fn: () => ResumenEjecutivo | null): ResumenEjecutivo | null {
+  try { return fn(); } catch { return null; }
+}
+
 const f2 = (n: number) => n.toLocaleString("es-CO", { maximumFractionDigits: 2 });
 const nivelMort = (p: number) => p >= 8 ? "crítica" : p >= 4 ? "elevada" : "dentro de parámetros aceptables";
 const colorMort = (p: number) => p >= 8 ? "#EF4444" : p >= 4 ? "#F97316" : "#22C55E";

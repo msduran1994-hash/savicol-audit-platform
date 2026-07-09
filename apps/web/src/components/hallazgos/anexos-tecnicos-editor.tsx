@@ -11,7 +11,7 @@ import {
   subtotalBloque, cantidadBloque, totalGeneralBultos, difFaltanteMortalidad,
   pctMortalidad, avesRecibidasTotal, num,
   calcMortalidadDiaria, calcBultosConsumidos,
-  resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos,
+  resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
 } from "@/lib/anexos-tecnicos";
 import { ResumenEjecutivoPanel } from "./resumen-ejecutivo-panel";
 
@@ -166,7 +166,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             <div><div className="text-[10px] text-[#94A3B8]">Saldo final</div><div className="text-sm font-bold text-[#22C55E]">{calc.aves > 0 ? fmt(calc.saldoFinal) : "—"}</div></div>
           </div>
         )}
-        <ResumenEjecutivoPanel resumen={resumenMortalidadDiaria(md)} />
+        <ResumenEjecutivoPanel resumen={safeResumen(() => resumenMortalidadDiaria(md))} />
       </div>
     );
   }
@@ -221,7 +221,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             <div><div className="text-[10px] text-[#94A3B8]">Consumo/ave (kg)</div><div className="text-sm font-bold text-[#8B5CF6]">{calc.consumoAcumuladoAveFinal === null ? "—" : fmt(calc.consumoAcumuladoAveFinal)}</div></div>
           </div>
         )}
-        <ResumenEjecutivoPanel resumen={resumenBultosConsumidos(bc, md, avesRecibidasTotal(value))} />
+        <ResumenEjecutivoPanel resumen={safeResumen(() => resumenBultosConsumidos(bc, md, avesRecibidasTotal(value)))} />
       </div>
     );
   }
@@ -300,7 +300,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
                 : <span className="text-2xl font-bold" style={{ color: pctMortalidad(value)! >= 8 ? "#EF4444" : pctMortalidad(value)! >= 4 ? "#F97316" : "#22C55E" }}>{pctMortalidad(value)!.toFixed(2)}%</span>}
             </div>
           </div>
-          <ResumenEjecutivoPanel resumen={resumenRecepcionAves(value)} />
+          <ResumenEjecutivoPanel resumen={safeResumen(() => resumenRecepcionAves(value))} />
         </div>
       )}
 
@@ -330,7 +330,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             emptyRow: { fecha: "", concepto: "", unidades: "", cantidadKg: "" },
             totalCol: { label: "Peso total (Kg)", calc: pesoTotalIngreso },
           })}
-          <ResumenEjecutivoPanel resumen={resumenIngresoBultos(value)} />
+          <ResumenEjecutivoPanel resumen={safeResumen(() => resumenIngresoBultos(value))} />
         </div>
       )}
 

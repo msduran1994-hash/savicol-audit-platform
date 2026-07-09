@@ -13,7 +13,7 @@ import {
   pesoTotalIngreso, subtotalBloque, cantidadBloque, totalGeneralBultos, num as anexNum,
   difFaltanteMortalidad, recepcionResumenTieneDatos, pctMortalidad, avesRecibidasTotal,
   calcMortalidadDiaria, calcBultosConsumidos, registroMortalidadTieneDatos,
-  resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos,
+  resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
   type ResumenEjecutivo,
 } from "@/lib/anexos-tecnicos";
 import { EnvioCorreoModal } from "@/components/informes/envio-correo";
@@ -1340,10 +1340,10 @@ function seccionResumenesEjecutivos(hallazgos: any[], granjas: any[], modo: "sin
   const items = hallazgos.map(h => {
     const a = parseAnexos(h.anexosTecnicos);
     const resumenes = [
-      resumenMortalidadDiaria(a.registroMortalidadDiaria),
-      resumenBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a)),
-      resumenRecepcionAves(a),
-      resumenIngresoBultos(a),
+      safeResumen(() => resumenMortalidadDiaria(a.registroMortalidadDiaria)),
+      safeResumen(() => resumenBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a))),
+      safeResumen(() => resumenRecepcionAves(a)),
+      safeResumen(() => resumenIngresoBultos(a)),
     ].filter(Boolean) as ResumenEjecutivo[];
     return { h, resumenes };
   }).filter(x => x.resumenes.length > 0);
