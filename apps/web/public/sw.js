@@ -8,7 +8,7 @@
      para que cada despliegue tome efecto de inmediato (evita servir JS viejo).
    - Versionar CACHE invalida cachés antiguas en cada actualización.
    ═══════════════════════════════════════════════════════════════════════════ */
-const CACHE = "savicol-pwa-v3";
+const CACHE = "savicol-pwa-v4";
 const OFFLINE_URL = "/";
 
 // Rutas/orígenes que NUNCA deben cachearse (datos en vivo y seguridad)
