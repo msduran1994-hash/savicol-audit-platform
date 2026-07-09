@@ -9,7 +9,8 @@ import {
   AnexosTecnicos, TotalBultosBloque,
   difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
   subtotalBloque, cantidadBloque, totalGeneralBultos, difFaltanteMortalidad,
-  pctMortalidad, avesRecibidasTotal,
+  pctMortalidad, avesRecibidasTotal, num,
+  calcMortalidadDiaria, calcBultosConsumidos,
 } from "@/lib/anexos-tecnicos";
 
 const TABS = [
@@ -18,6 +19,8 @@ const TABS = [
   { key: "inventarioBultos", label: "Inventario Bultos" },
   { key: "ingresoBultos",    label: "Ingreso de Bultos" },
   { key: "totalBultos",      label: "Total de Bultos" },
+  { key: "mortalidadDiaria", label: "Mortalidad Diaria" },
+  { key: "bultosConsumidos", label: "Bultos Consumidos" },
 ] as const;
 type TabKey = typeof TABS[number]["key"];
 type SimpleKey = "actaConteoPicos" | "recepcionAves" | "inventarioBultos" | "ingresoBultos";
@@ -89,13 +92,146 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
   const res = value.recepcionAvesResumen;
   const setRes = (patch: Partial<typeof res>) => set({ recepcionAvesResumen: { ...res, ...patch } });
 
+  // ── Pestañas 6 y 7: registros semanales (mortalidad diaria / bultos consumidos) ──
+  const md: any = value.registroMortalidadDiaria;
+  const setMD = (patch: any) => set({ registroMortalidadDiaria: { ...md, ...patch } });
+  const setMDDia = (w: number, d: number, v: string) => setMD({ semanas: md.semanas.map((sem: any[], wi: number) => wi === w ? sem.map((c, di) => di === d ? v : c) : sem) });
+  const bc: any = value.registroBultosConsumidos;
+  const setBC = (patch: any) => set({ registroBultosConsumidos: { ...bc, ...patch } });
+  const setBCDia = (w: number, d: number, v: string) => setBC({ semanas: bc.semanas.map((sem: any[], wi: number) => wi === w ? sem.map((c, di) => di === d ? v : c) : sem) });
+  const nuevaSemana = () => ["", "", "", "", "", "", ""];
+
+  // Bloque semanal reutilizable (encabezado + botón eliminar). Se llama como función (foco estable).
+  function SemanaCard(key: any, titulo: string, onDel: () => void, children: any) {
+    return (
+      <div key={key} className="rounded-lg border border-[#1E2D4A] p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-semibold text-[#4A7AFF]">{titulo}</span>
+          <button type="button" onClick={onDel} className="text-[#94A3B8] hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+        </div>
+        {children}
+      </div>
+    );
+  }
+
+  function MortalidadDiariaTab() {
+    const calc = calcMortalidadDiaria(md);
+    const recibidas = avesRecibidasTotal(value);
+    return (
+      <div className="space-y-3">
+        <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-[#94A3B8] shrink-0">Aves iniciales (encasetadas)</span>
+            <input type="number" step="any" value={md.avesIniciales || ""} onChange={e => setMD({ avesIniciales: e.target.value })} placeholder={recibidas > 0 ? String(recibidas) : "Ej: 20000"} className={INP + " max-w-[160px]"} />
+            {recibidas > 0 && <button type="button" onClick={() => setMD({ avesIniciales: recibidas })} className="px-2 py-1 rounded text-[10px] bg-[#1A2540] text-[#4A7AFF] hover:bg-[#22304d]">Usar aves recibidas ({fmt(recibidas)})</button>}
+          </div>
+          {num(md.avesIniciales) <= 0 && <p className="text-[10px] text-amber-400 mt-1.5">Ingresa las aves iniciales para calcular % y saldo de aves.</p>}
+        </div>
+        {md.semanas.length === 0 && <p className="text-[11px] text-[#475569]">Sin semanas. Usa "Agregar semana".</p>}
+        {calc.semanas.map(sem => SemanaCard(sem.semana, `Semana ${sem.semana}`,
+          () => setMD({ semanas: md.semanas.filter((_: any, wi: number) => wi !== sem.semana - 1) }),
+          <div className="overflow-x-auto rounded border border-[#1E2D4A]">
+            <table className="w-full text-xs">
+              <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
+                <th className="px-2 py-1 text-left">Día</th><th className="px-2 py-1 text-left">Mortalidad</th>
+                <th className="px-2 py-1 text-left">Acumulado</th><th className="px-2 py-1 text-left">% Acum.</th><th className="px-2 py-1 text-left">Saldo aves</th>
+              </tr></thead>
+              <tbody>
+                {sem.dias.map(d => (
+                  <tr key={d.dia} className="border-t border-[#1E2D4A]">
+                    <td className="px-2 py-1 text-[#94A3B8]">Día {d.diaGlobal}</td>
+                    <td className="px-2 py-1"><input type="number" step="any" value={md.semanas[sem.semana - 1][d.dia - 1] ?? ""} onChange={e => setMDDia(sem.semana - 1, d.dia - 1, e.target.value)} className={INP} /></td>
+                    <td className="px-2 py-1 text-[#22C55E] font-semibold">{fmt(d.totalAcumulado)}</td>
+                    <td className="px-2 py-1">{d.pctAcumulado === null ? "—" : d.pctAcumulado.toFixed(2) + "%"}</td>
+                    <td className="px-2 py-1">{calc.aves > 0 ? fmt(d.saldo) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr className="border-t border-[#2A3F6A] bg-[#0A111F]">
+                <td className="px-2 py-1 text-right font-semibold text-[#94A3B8]">Total semana</td>
+                <td className="px-2 py-1 font-bold text-[#22C55E]">{fmt(sem.totalSemanal)}</td>
+                <td className="px-2 py-1"></td>
+                <td className="px-2 py-1 font-bold" colSpan={2}>% semanal: {sem.pctSemanal === null ? "—" : sem.pctSemanal.toFixed(2) + "%"}</td>
+              </tr></tfoot>
+            </table>
+          </div>
+        ))}
+        <button type="button" onClick={() => setMD({ semanas: [...md.semanas, nuevaSemana()] })} className="px-3 py-1.5 rounded-lg text-xs bg-[#1A2540] text-white flex items-center gap-1.5 hover:bg-[#22304d]"><Plus className="w-3.5 h-3.5" />Agregar semana</button>
+        {calc.semanas.length > 0 && (
+          <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 grid grid-cols-3 gap-2 text-center">
+            <div><div className="text-[10px] text-[#94A3B8]">Mortalidad total</div><div className="text-sm font-bold text-[#EF4444]">{fmt(calc.totalGeneral)}</div></div>
+            <div><div className="text-[10px] text-[#94A3B8]">% acumulado</div><div className="text-sm font-bold text-[#F97316]">{calc.pctAcumuladoFinal === null ? "—" : calc.pctAcumuladoFinal.toFixed(2) + "%"}</div></div>
+            <div><div className="text-[10px] text-[#94A3B8]">Saldo final</div><div className="text-sm font-bold text-[#22C55E]">{calc.aves > 0 ? fmt(calc.saldoFinal) : "—"}</div></div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function BultosConsumidosTab() {
+    const calc = calcBultosConsumidos(bc, md, avesRecibidasTotal(value));
+    const sinBase = num(md.avesIniciales) <= 0 && avesRecibidasTotal(value) <= 0;
+    return (
+      <div className="space-y-3">
+        <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-[#94A3B8] shrink-0">Kg por bulto</span>
+            <input type="number" step="any" value={bc.kgPorBulto ?? ""} onChange={e => setBC({ kgPorBulto: e.target.value })} placeholder="40" className={INP + " max-w-[120px]"} />
+            <span className="text-[10px] text-[#475569]">Consumo/ave = (bultos × kg) ÷ saldo de aves vivas del día</span>
+          </div>
+          {sinBase && <p className="text-[10px] text-amber-400 mt-1.5">Define las aves iniciales (pestaña Mortalidad Diaria) o registra la recepción de aves para calcular el consumo por ave.</p>}
+        </div>
+        {bc.semanas.length === 0 && <p className="text-[11px] text-[#475569]">Sin semanas. Usa "Agregar semana".</p>}
+        {calc.semanas.map(sem => SemanaCard(sem.semana, `Semana ${sem.semana}`,
+          () => setBC({ semanas: bc.semanas.filter((_: any, wi: number) => wi !== sem.semana - 1) }),
+          <div className="overflow-x-auto rounded border border-[#1E2D4A]">
+            <table className="w-full text-xs">
+              <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
+                <th className="px-2 py-1 text-left">Día</th><th className="px-2 py-1 text-left">Bultos</th>
+                <th className="px-2 py-1 text-left">Acumulado</th><th className="px-2 py-1 text-left">Saldo aves</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th>
+              </tr></thead>
+              <tbody>
+                {sem.dias.map(d => (
+                  <tr key={d.dia} className="border-t border-[#1E2D4A]">
+                    <td className="px-2 py-1 text-[#94A3B8]">Día {d.diaGlobal}</td>
+                    <td className="px-2 py-1"><input type="number" step="any" value={bc.semanas[sem.semana - 1][d.dia - 1] ?? ""} onChange={e => setBCDia(sem.semana - 1, d.dia - 1, e.target.value)} className={INP} /></td>
+                    <td className="px-2 py-1 text-[#22C55E] font-semibold">{fmt(d.totalAcumulado)}</td>
+                    <td className="px-2 py-1">{d.saldoVivo > 0 ? fmt(d.saldoVivo) : "—"}</td>
+                    <td className="px-2 py-1 text-[#8B5CF6] font-semibold">{d.consumoAveDia === null ? "—" : fmt(d.consumoAveDia)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr className="border-t border-[#2A3F6A] bg-[#0A111F]">
+                <td className="px-2 py-1 text-right font-semibold text-[#94A3B8]">Total semana</td>
+                <td className="px-2 py-1 font-bold text-[#22C55E]">{fmt(sem.totalBultos)}</td>
+                <td className="px-2 py-1"></td>
+                <td className="px-2 py-1 font-bold" colSpan={2}>Sem/ave: {sem.consumoSemanalAve === null ? "—" : fmt(sem.consumoSemanalAve)} kg · Acum/ave: {sem.consumoAcumuladoAve === null ? "—" : fmt(sem.consumoAcumuladoAve)} kg</td>
+              </tr></tfoot>
+            </table>
+          </div>
+        ))}
+        <button type="button" onClick={() => setBC({ semanas: [...bc.semanas, nuevaSemana()] })} className="px-3 py-1.5 rounded-lg text-xs bg-[#1A2540] text-white flex items-center gap-1.5 hover:bg-[#22304d]"><Plus className="w-3.5 h-3.5" />Agregar semana</button>
+        {calc.semanas.length > 0 && (
+          <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 grid grid-cols-3 gap-2 text-center">
+            <div><div className="text-[10px] text-[#94A3B8]">Total bultos</div><div className="text-sm font-bold text-[#4A7AFF]">{fmt(calc.totalBultos)}</div></div>
+            <div><div className="text-[10px] text-[#94A3B8]">Total kg</div><div className="text-sm font-bold text-[#0EA5E9]">{fmt(calc.totalKg)}</div></div>
+            <div><div className="text-[10px] text-[#94A3B8]">Consumo/ave (kg)</div><div className="text-sm font-bold text-[#8B5CF6]">{calc.consumoAcumuladoAveFinal === null ? "—" : fmt(calc.consumoAcumuladoAveFinal)}</div></div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {/* Barra de pestañas */}
       <div className="flex flex-wrap gap-1.5">
         {TABS.map(t => {
           const activo = tab === t.key;
-          const n = t.key === "totalBultos" ? tb.bloques.length : (value[t.key] as any[]).length;
+          const n = t.key === "totalBultos" ? tb.bloques.length
+            : t.key === "mortalidadDiaria" ? value.registroMortalidadDiaria.semanas.length
+            : t.key === "bultosConsumidos" ? value.registroBultosConsumidos.semanas.length
+            : (value[t.key] as any[]).length;
           return (
             <button key={t.key} type="button" onClick={() => setTab(t.key)}
               className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${activo ? "bg-[#4A7AFF]/15 text-[#4A7AFF] border-[#4A7AFF]/40" : "bg-[#0A111F] text-[#94A3B8] border-[#1E2D4A] hover:text-white"}`}>
@@ -238,6 +374,9 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
           </div>
         </div>
       )}
+
+      {tab === "mortalidadDiaria" && MortalidadDiariaTab()}
+      {tab === "bultosConsumidos" && BultosConsumidosTab()}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   parseAnexos, anexosTienenDatos, difConteoPicos, totalRecepcion, totalInvBultos,
   pesoTotalIngreso, subtotalBloque, cantidadBloque, totalGeneralBultos, num as anexNum,
   difFaltanteMortalidad, recepcionResumenTieneDatos, pctMortalidad, avesRecibidasTotal,
+  calcMortalidadDiaria, calcBultosConsumidos, registroMortalidadTieneDatos,
 } from "@/lib/anexos-tecnicos";
 import { EnvioCorreoModal } from "@/components/informes/envio-correo";
 import {
@@ -1192,6 +1193,131 @@ function seccionColaboradores(hallazgos: any[], granjas: any[], modo: "resumen" 
     <p style="font-size:11px;color:#64748b;margin-bottom:8px">${total} colaborador(es) registrado(s) en ${conCol.length} hallazgo(s), asociados a su hallazgo correspondiente.</p>${bloques}</div>`;
 }
 
+// ─── Gráfico de línea de tendencia reutilizable (SVG, para el PDF) ─────────────
+function lineTrendSVG(puntos: { label: string; value: number }[], color: string, sufijo = ""): string {
+  if (!puntos.length) return "<p style='font-size:10px;color:#94a3b8;text-align:center'>Sin datos</p>";
+  if (puntos.length === 1) {
+    const p = puntos[0];
+    return `<div style="text-align:center;padding:14px"><div style="font-size:24px;font-weight:800;color:${color}">${_fmtAnx(p.value)}${sufijo}</div><div style="font-size:10px;color:#64748b">${p.label}</div></div>`;
+  }
+  const W = 520, H = 160, padL = 34, padB = 24, padT = 14, padR = 12, plotW = W - padL - padR, plotH = H - padB - padT;
+  const maxV = Math.max(1, ...puntos.map(p => p.value));
+  const xAt = (i: number) => padL + i * plotW / (puntos.length - 1);
+  const yAt = (v: number) => padT + plotH - (v / maxV) * plotH;
+  const poly = puntos.map((p, i) => `${xAt(i).toFixed(1)},${yAt(p.value).toFixed(1)}`).join(" ");
+  const dots = puntos.map((p, i) => `<circle cx="${xAt(i).toFixed(1)}" cy="${yAt(p.value).toFixed(1)}" r="3" fill="${color}"/><text x="${xAt(i).toFixed(1)}" y="${(yAt(p.value) - 6).toFixed(1)}" text-anchor="middle" font-size="8" fill="#0D1526">${_fmtAnx(p.value)}${sufijo}</text>`).join("");
+  const xl = puntos.map((p, i) => `<text x="${xAt(i).toFixed(1)}" y="${H - padB + 12}" text-anchor="middle" font-size="8" fill="#64748b">${p.label}</text>`).join("");
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto"><polyline points="${poly}" fill="none" stroke="${color}" stroke-width="2"/>${dots}${xl}</svg>`;
+}
+
+// Consolida la producción diaria (mortalidad/bultos) por índice de semana entre hallazgos del alcance.
+function consolidarProduccionDiaria(hallazgos: any[]) {
+  const mortSemana: number[] = [], bultosSemana: number[] = [], feedKgSemana: number[] = [];
+  let avesMort = 0, avesBultos = 0;
+  hallazgos.forEach(h => {
+    const a = parseAnexos(h.anexosTecnicos);
+    if (registroMortalidadTieneDatos(a.registroMortalidadDiaria)) {
+      const c = calcMortalidadDiaria(a.registroMortalidadDiaria);
+      avesMort += c.aves;
+      c.semanas.forEach((s, i) => { mortSemana[i] = (mortSemana[i] || 0) + s.totalSemanal; });
+    }
+    if (a.registroBultosConsumidos.semanas.some((w: any[]) => w.length)) {
+      const base = anexNum(a.registroMortalidadDiaria.avesIniciales) > 0 ? anexNum(a.registroMortalidadDiaria.avesIniciales) : avesRecibidasTotal(a);
+      avesBultos += base;
+      const c = calcBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a));
+      c.semanas.forEach((s, i) => { bultosSemana[i] = (bultosSemana[i] || 0) + s.totalBultos; feedKgSemana[i] = (feedKgSemana[i] || 0) + s.totalBultos * c.kgPorBulto; });
+    }
+  });
+  return { mortSemana, bultosSemana, feedKgSemana, avesMort, avesBultos };
+}
+
+// ─── GRÁFICOS DE PRODUCCIÓN DIARIA (Dashboard) — tendencia semanal/acumulada ──
+function graficosProduccionDiaria(hallazgos: any[], granjas: any[]): string {
+  const { mortSemana, bultosSemana, feedKgSemana, avesMort, avesBultos } = consolidarProduccionDiaria(hallazgos);
+  if (!mortSemana.length && !bultosSemana.length) return "";
+  const lbl = (i: number) => `Sem ${i + 1}`;
+  const mortSemPts = mortSemana.map((v, i) => ({ label: lbl(i), value: v }));
+  let acc = 0; const mortAcumPts = mortSemana.map((v, i) => ({ label: lbl(i), value: (acc += v) }));
+  acc = 0; const pctAcumPts = mortSemana.map((v, i) => { acc += v; return { label: lbl(i), value: avesMort > 0 ? (acc / avesMort) * 100 : 0 }; });
+  const bulSemPts = bultosSemana.map((v, i) => ({ label: lbl(i), value: v }));
+  let ab = 0; const bulAcumPts = bultosSemana.map((v, i) => ({ label: lbl(i), value: (ab += v) }));
+  let af = 0; const consAvePts = feedKgSemana.map((v, i) => { af += v; return { label: lbl(i), value: avesBultos > 0 ? af / avesBultos : 0 }; });
+  return `<div class="section"><div class="section-title">Producción Diaria · Tendencias</div>
+    ${mortSemana.length ? `<div style="font-size:12px;font-weight:700;color:#EF4444;margin:2px 0 8px">Registro Mortalidad Diaria</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:10px">
+        ${chartCard(1, "Mortalidad Semanal", lineTrendSVG(mortSemPts, "#EF4444"), "aves por semana")}
+        ${chartCard(2, "Mortalidad Acumulada", lineTrendSVG(mortAcumPts, "#F97316"), "aves acumuladas")}
+      </div>
+      ${chartCard(3, "% Mortalidad Acumulada", lineTrendSVG(pctAcumPts, "#EF4444", "%"), `sobre ${_fmtAnx(avesMort)} aves iniciales`)}` : ""}
+    ${bultosSemana.length ? `<div style="font-size:12px;font-weight:700;color:#4A7AFF;margin:16px 0 8px">Bultos Consumidos por Día</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:10px">
+        ${chartCard(4, "Consumo Semanal", lineTrendSVG(bulSemPts, "#4A7AFF"), "bultos por semana")}
+        ${chartCard(5, "Consumo Acumulado", lineTrendSVG(bulAcumPts, "#0EA5E9"), "bultos acumulados")}
+      </div>
+      ${chartCard(6, "Consumo por Ave (kg acumulado)", lineTrendSVG(consAvePts, "#8B5CF6", " kg"), `sobre ${_fmtAnx(avesBultos)} aves`)}` : ""}
+  </div>`;
+}
+
+// ─── SECCIÓN REGISTRO MORTALIDAD DIARIA (resumen / detalle) ───────────────────
+function seccionMortalidadDiaria(hallazgos: any[], granjas: any[], modo: "resumen" | "detalle"): string {
+  const con = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) })).filter(x => registroMortalidadTieneDatos(x.a.registroMortalidadDiaria));
+  if (!con.length) return "";
+  const R = (v: number) => `<td style="text-align:right">${_fmtAnx(v)}</td>`;
+  const pctTxt = (p: number | null) => p === null ? "—" : p.toFixed(2) + "%";
+  if (modo === "resumen") {
+    const filas = con.map(({ h, a }) => {
+      const g = granjas.find(gr => gr.id === h.granjaId);
+      const c = calcMortalidadDiaria(a.registroMortalidadDiaria);
+      return `<tr><td>${h.titulo?.slice(0, 45) || "Hallazgo"}</td><td>${g?.nombre || "—"}</td>${R(c.aves)}${R(c.totalGeneral)}<td style="text-align:right;font-weight:700">${pctTxt(c.pctAcumuladoFinal)}</td>${R(c.saldoFinal)}</tr>`;
+    }).join("");
+    return `<div class="section"><div class="section-title">Registro Mortalidad Diaria (resumen)</div>
+      <table><thead><tr><th>Hallazgo</th><th>Granja</th><th>Aves inic.</th><th>Mort. total</th><th>% acum.</th><th>Saldo</th></tr></thead><tbody>${filas}</tbody></table></div>`;
+  }
+  const bloques = con.map(({ h, a }) => {
+    const g = granjas.find(gr => gr.id === h.granjaId);
+    const c = calcMortalidadDiaria(a.registroMortalidadDiaria);
+    const tablas = c.semanas.map(s => `<div style="font-size:11px;font-weight:700;color:#EF4444;margin:8px 0 3px">Semana ${s.semana} · total ${_fmtAnx(s.totalSemanal)} · % semanal ${pctTxt(s.pctSemanal)}</div>
+      <table><thead><tr><th>Día</th><th>Mortalidad</th><th>Acumulado</th><th>% Acum.</th><th>Saldo aves</th></tr></thead>
+      <tbody>${s.dias.map(d => `<tr><td>Día ${d.diaGlobal}</td>${R(d.mortalidad)}${R(d.totalAcumulado)}<td style="text-align:right">${pctTxt(d.pctAcumulado)}</td>${R(d.saldo)}</tr>`).join("")}</tbody></table>`).join("");
+    const nivel = c.pctAcumuladoFinal === null ? "" : c.pctAcumuladoFinal >= 8 ? "crítica" : c.pctAcumuladoFinal >= 4 ? "elevada" : "dentro de parámetros aceptables";
+    const interp = c.pctAcumuladoFinal === null ? "" : `<p style="font-size:11px;margin-top:6px"><strong>Interpretación:</strong> mortalidad acumulada de <strong>${pctTxt(c.pctAcumuladoFinal)}</strong> sobre ${_fmtAnx(c.aves)} aves iniciales (${nivel}); saldo estimado de <strong>${_fmtAnx(c.saldoFinal)}</strong> aves.</p>`;
+    return `<div style="page-break-inside:avoid;margin-bottom:16px;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+      <div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:6px">${h.titulo?.slice(0, 70) || "Hallazgo"} <span style="font-weight:400;color:#64748b">· ${g?.nombre || "—"} · ${_fmtAnx(c.aves)} aves iniciales</span></div>
+      ${tablas}${interp}</div>`;
+  }).join("");
+  return `<div class="section"><div class="section-title">Registro Mortalidad Diaria</div>${bloques}</div>`;
+}
+
+// ─── SECCIÓN BULTOS CONSUMIDOS POR DÍA (resumen / detalle) ────────────────────
+function seccionBultosConsumidos(hallazgos: any[], granjas: any[], modo: "resumen" | "detalle"): string {
+  const con = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) })).filter(x => x.a.registroBultosConsumidos.semanas.some((w: any[]) => w.length));
+  if (!con.length) return "";
+  const R = (v: number) => `<td style="text-align:right">${_fmtAnx(v)}</td>`;
+  const kg = (v: number | null) => v === null ? "—" : _fmtAnx(v) + " kg";
+  const calcOf = (a: any) => calcBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a));
+  if (modo === "resumen") {
+    const filas = con.map(({ h, a }) => {
+      const g = granjas.find(gr => gr.id === h.granjaId);
+      const c = calcOf(a);
+      return `<tr><td>${h.titulo?.slice(0, 45) || "Hallazgo"}</td><td>${g?.nombre || "—"}</td>${R(c.totalBultos)}${R(c.totalKg)}<td style="text-align:right;font-weight:700">${kg(c.consumoAcumuladoAveFinal)}</td></tr>`;
+    }).join("");
+    return `<div class="section"><div class="section-title">Bultos Consumidos por Día (resumen)</div>
+      <table><thead><tr><th>Hallazgo</th><th>Granja</th><th>Total bultos</th><th>Total kg</th><th>Consumo/ave</th></tr></thead><tbody>${filas}</tbody></table></div>`;
+  }
+  const bloques = con.map(({ h, a }) => {
+    const g = granjas.find(gr => gr.id === h.granjaId);
+    const c = calcOf(a);
+    const tablas = c.semanas.map(s => `<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 3px">Semana ${s.semana} · ${_fmtAnx(s.totalBultos)} bultos · sem/ave ${kg(s.consumoSemanalAve)} · acum/ave ${kg(s.consumoAcumuladoAve)}</div>
+      <table><thead><tr><th>Día</th><th>Bultos</th><th>Acumulado</th><th>Saldo aves</th><th>Consumo/ave (kg)</th></tr></thead>
+      <tbody>${s.dias.map(d => `<tr><td>Día ${d.diaGlobal}</td>${R(d.bultos)}${R(d.totalAcumulado)}${R(d.saldoVivo)}<td style="text-align:right">${kg(d.consumoAveDia)}</td></tr>`).join("")}</tbody></table>`).join("");
+    const interp = `<p style="font-size:11px;margin-top:6px"><strong>Interpretación:</strong> consumo acumulado de <strong>${_fmtAnx(c.totalKg)} kg</strong> (${_fmtAnx(c.totalBultos)} bultos × ${_fmtAnx(c.kgPorBulto)} kg), equivalente a <strong>${kg(c.consumoAcumuladoAveFinal)}</strong> por ave sobre el saldo de aves vivas.</p>`;
+    return `<div style="page-break-inside:avoid;margin-bottom:16px;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+      <div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:6px">${h.titulo?.slice(0, 70) || "Hallazgo"} <span style="font-weight:400;color:#64748b">· ${g?.nombre || "—"} · ${_fmtAnx(c.kgPorBulto)} kg/bulto</span></div>
+      ${tablas}${interp}</div>`;
+  }).join("");
+  return `<div class="section"><div class="section-title">Bultos Consumidos por Día</div>${bloques}</div>`;
+}
+
 // ─── SECCIÓN DETALLE DE HALLAZGOS (ficha completa por hallazgo + evidencias) ──
 function seccionHallazgosDetalle(hallazgos: any[], granjas: any[], evidenciasPorHallazgo?: Record<string, any[]>): string {
   if (!hallazgos.length) {
@@ -1408,6 +1534,10 @@ ${seccionBitacora(hallazgos, granjas, "resumen")}
 
 ${seccionColaboradores(hallazgos, granjas, "resumen")}
 
+${seccionMortalidadDiaria(hallazgos, granjas, "resumen")}
+
+${seccionBultosConsumidos(hallazgos, granjas, "resumen")}
+
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
 </div></body></html>`;
@@ -1581,6 +1711,8 @@ ${indicadoresAnexos(hallazgos)}
 
 ${graficosMortalidad(hallazgos, granjas)}
 
+${graficosProduccionDiaria(hallazgos, granjas)}
+
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
 </div></body></html>`;
@@ -1717,6 +1849,10 @@ ${seccionBitacora(hallazgos, granjas, "detalle")}
 
 ${seccionColaboradores(hallazgos, granjas, "detalle")}
 
+${seccionMortalidadDiaria(hallazgos, granjas, "detalle")}
+
+${seccionBultosConsumidos(hallazgos, granjas, "detalle")}
+
 <!-- IX. EVIDENCIAS Y FIRMA -->
 <div class="divider">IX — Evidencias Fotográficas y Firma</div>
 ${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
@@ -1813,6 +1949,10 @@ ${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
 ${seccionBitacora(hallazgos, granjas, "detalle")}
 
 ${seccionColaboradores(hallazgos, granjas, "detalle")}
+
+${seccionMortalidadDiaria(hallazgos, granjas, "detalle")}
+
+${seccionBultosConsumidos(hallazgos, granjas, "detalle")}
 
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
