@@ -8,11 +8,12 @@
 //  3. Forzar logout vía /auth/logout?reason=idle_timeout y redirect a /login
 //  4. Permitir al usuario "Continuar sesión" desde el modal
 // ═══════════════════════════════════════════════════════════════════════════════
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Shield, Clock, AlertTriangle, LogOut, RefreshCw } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { useIdleTimeout } from "@/hooks/useIdleTimeout";
 import { getPolicy, hasIdleTimeout } from "@/lib/session-policy";
+import { refreshAccessToken } from "@/lib/api";
 
 export function SessionWatcher() {
   const { user, logout } = useAuthStore();
@@ -22,6 +23,17 @@ export function SessionWatcher() {
   const enabled = !!user && hasIdleTimeout(policy);
   const warningMs = policy.warningMinutes * 60_000;
   const timeoutMs = policy.timeoutMinutes * 60_000;
+
+  // Refresco proactivo del access token (cada 13 min < 15 min de expiración) mientras
+  // hay sesión. Evita que el token expire en silencio durante el uso real —incluidas
+  // las llamadas fetch() directas que no pasan por el interceptor de axios—. El cierre
+  // por inactividad (40 min, con aviso) sigue siendo el ÚNICO cierre automático.
+  useEffect(() => {
+    if (!user) return;
+    const REFRESH_EVERY_MS = 12 * 60_000; // < 15 min TTL, con margen ante throttling/skew del temporizador
+    const id = setInterval(() => { refreshAccessToken().catch(() => { /* el interceptor 401 gestiona el fallo real */ }); }, REFRESH_EVERY_MS);
+    return () => clearInterval(id);
+  }, [user]);
 
   const doLogout = useCallback(async (reason: "idle_timeout" | "manual") => {
     try {

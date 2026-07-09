@@ -19,10 +19,40 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-/* ── Response interceptor: refresca el token si 401 ─────── */
-let refreshing = false;
-let refreshQueue: Array<(token: string) => void> = [];
+/* ── Refresco de token (reutilizable: interceptor 401 + refresco proactivo) ──── */
+// Single-flight: si ya hay un refresco en curso, todas las llamadas comparten la
+// MISMA promesa. Esto evita que el refresco proactivo (temporizador) y el reactivo
+// (401) disparen dos POST /auth/refresh a la vez —lo que crearía dos sesiones y
+// podría dejar guardado un token que no es el de la sesión más reciente (→ logout).
+let refreshPromise: Promise<string> | null = null;
 
+/**
+ * Renueva el access token usando el refresh token almacenado. El backend rota
+ * AMBOS tokens, así que persistimos los dos. Enviamos el refresh token en el body
+ * (camino fiable cross-origin Vercel↔Railway) y withCredentials mantiene la cookie
+ * httpOnly como respaldo. Devuelve el nuevo access token o lanza si el refresh falla.
+ */
+export function refreshAccessToken(): Promise<string> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    try {
+      const res = await axios.post(
+        `${BASE_URL}/api/v1/auth/refresh`,
+        { refreshToken: useAuthStore.getState().refreshToken },
+        { withCredentials: true }
+      );
+      const newToken: string = res.data.accessToken;
+      const newRefresh: string | undefined = res.data.refreshToken;
+      useAuthStore.getState().setTokens(newToken, newRefresh);
+      return newToken;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
+
+/* ── Response interceptor: refresca el token si 401 ─────── */
 api.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
@@ -30,40 +60,16 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
-
-      if (refreshing) {
-        // Esperar en cola al nuevo token
-        return new Promise((resolve) => {
-          refreshQueue.push((token: string) => {
-            original.headers.Authorization = `Bearer ${token}`;
-            resolve(api(original));
-          });
-        });
-      }
-
-      refreshing = true;
       try {
-        // Enviamos el refresh token en el body (camino fiable cross-origin);
-        // withCredentials mantiene también la cookie como respaldo.
-        const res = await axios.post(
-          `${BASE_URL}/api/v1/auth/refresh`,
-          { refreshToken: useAuthStore.getState().refreshToken },
-          { withCredentials: true }
-        );
-        const newToken: string = res.data.accessToken;
-        const newRefresh: string | undefined = res.data.refreshToken;
-        // El refresh rota ambos tokens → guardamos los dos.
-        useAuthStore.getState().setTokens(newToken, newRefresh);
-        refreshQueue.forEach((cb) => cb(newToken));
-        refreshQueue = [];
+        // Todas las peticiones 401 concurrentes comparten el mismo refresco (single-flight)
+        // y luego reintentan su propia petición con el token nuevo.
+        const newToken = await refreshAccessToken();
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       } catch {
         useAuthStore.getState().logout();
         if (typeof window !== "undefined") window.location.href = "/login";
         return Promise.reject(error);
-      } finally {
-        refreshing = false;
       }
     }
 

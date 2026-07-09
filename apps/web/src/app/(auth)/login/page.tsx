@@ -121,7 +121,7 @@ export default function LoginPage() {
       const data = await res.json();
       if (data.mfaRequired) { router.push("/mfa"); return; }
       if (data.accessToken) {
-        setUser(data.user, data.accessToken);
+        setUser(data.user, data.accessToken, data.refreshToken);
         router.push("/");
       } else {
         throw new Error(data.message || "Credenciales inválidas");

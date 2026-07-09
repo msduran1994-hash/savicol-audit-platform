@@ -35,7 +35,7 @@ export default function MfaPage() {
         tempToken,
         code: data.code,
       }, { withCredentials: true });
-      setUser(res.data.user, res.data.accessToken);
+      setUser(res.data.user, res.data.accessToken, res.data.refreshToken);
       setMfaPending(null);
       toast.success("Acceso verificado");
       router.push("/");
