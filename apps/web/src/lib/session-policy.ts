@@ -5,7 +5,7 @@
 // Valores en MINUTOS. Si el warning >= timeout no se muestra modal.
 //
 // Política corporativa unificada:
-//   La sesión se cierra ÚNICAMENTE tras 30 minutos de inactividad real
+//   La sesión se cierra ÚNICAMENTE tras 40 minutos de inactividad real
 //   (mouse, teclado, scroll, guardados, navegación). Igual para todos los roles.
 //   Se muestra una advertencia 2 minutos antes del cierre para permitir continuar.
 //
@@ -20,34 +20,34 @@ export interface RoleSessionPolicy {
   description: string;
 }
 
-// Inactividad uniforme: 30 minutos de cierre, advertencia a los 28 (2 min antes).
-const TIMEOUT_MINUTES = 30;
-const WARNING_MINUTES = 28;
+// Inactividad uniforme: 40 minutos de cierre, advertencia a los 38 (2 min antes).
+const TIMEOUT_MINUTES = 40;
+const WARNING_MINUTES = 38;
 
 export const SESSION_POLICIES: Record<string, RoleSessionPolicy> = {
   ADMIN: {
     warningMinutes: WARNING_MINUTES,
     timeoutMinutes: TIMEOUT_MINUTES,
     label: "Administrador",
-    description: "Acceso total · cierre tras 30 min de inactividad real",
+    description: "Acceso total · cierre tras 40 min de inactividad real",
   },
   SUPERVISOR: {
     warningMinutes: WARNING_MINUTES,
     timeoutMinutes: TIMEOUT_MINUTES,
     label: "Supervisor",
-    description: "Acceso operativo y aprobaciones · cierre tras 30 min de inactividad real",
+    description: "Acceso operativo y aprobaciones · cierre tras 40 min de inactividad real",
   },
   AUDITOR: {
     warningMinutes: WARNING_MINUTES,
     timeoutMinutes: TIMEOUT_MINUTES,
     label: "Auditor",
-    description: "Registro y evidencias · cierre tras 30 min de inactividad real",
+    description: "Registro y evidencias · cierre tras 40 min de inactividad real",
   },
   VIEWER: {
     warningMinutes: WARNING_MINUTES,
     timeoutMinutes: TIMEOUT_MINUTES,
     label: "Visualizador",
-    description: "Solo lectura · cierre tras 30 min de inactividad real",
+    description: "Solo lectura · cierre tras 40 min de inactividad real",
   },
 };
 
@@ -60,7 +60,7 @@ export function getPolicy(role?: string): RoleSessionPolicy {
 }
 
 /**
- * ¿Esta política tiene auto-logout? (siempre true: todos cierran a los 30 min)
+ * ¿Esta política tiene auto-logout? (siempre true: todos cierran a los 40 min)
  */
 export function hasIdleTimeout(policy: RoleSessionPolicy): boolean {
   return policy.timeoutMinutes > 0;
