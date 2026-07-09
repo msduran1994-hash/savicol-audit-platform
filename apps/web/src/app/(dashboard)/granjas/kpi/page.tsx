@@ -698,10 +698,11 @@ function seccionTrazabilidadKPI(
   });
 
   const parseSeguimiento = (s: string) => {
-    const [a, b] = (s ?? "").split("||");
+    const parts = (s ?? "").split("||");
     return {
-      resp: a?.replace(/^RESP:/, "")?.trim() ?? "",
-      aud:  b?.replace(/^AUD:/, "")?.trim() ?? "",
+      resp:      (parts.find(p => p.startsWith("RESP:"))?.slice(5) ?? "").trim(),
+      aud:       (parts.find(p => p.startsWith("AUD:"))?.slice(4) ?? "").trim(),
+      audNombre: (parts.find(p => p.startsWith("AUDNOM:"))?.slice(7) ?? "").trim(),
     };
   };
 
@@ -755,6 +756,7 @@ function seccionTrazabilidadKPI(
         <tr><td style="color:#64748b">Calificación Auditor</td><td>${displayEstado(k.estado)}</td></tr>
       </table>
       ${seg.resp ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Seguimiento Responsable:</strong> ${seg.resp}</div>` : ""}
+      ${seg.audNombre ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Auditor de seguimiento:</strong> ${seg.audNombre}</div>` : ""}
       ${seg.aud  ? `<div style="font-size:10px;color:#475569;margin-bottom:6px"><strong>Seguimiento Auditor:</strong> ${seg.aud}</div>` : ""}
       <div style="margin:8px 0">
         <div style="display:flex;justify-content:space-between;font-size:9px;color:#64748b;margin-bottom:3px">
@@ -810,9 +812,10 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[]): string {
       const h = k.hallazgoId ? hallazgos.find(hh=>hh.id===k.hallazgoId) : null;
       const pct = k.porcentajeAvance ?? 0;
       const fillColor = pct>=80?"#22C55E":pct>=40?"#F97316":"#EF4444";
-      const [seguRespPart, seguAudPart] = (k.seguimiento || "").split("||");
-      const seguResp = seguRespPart?.replace(/^RESP:/,"") || "";
-      const seguAud  = seguAudPart?.replace(/^AUD:/,"") || "";
+      const seguPartsK = (k.seguimiento || "").split("||");
+      const seguResp = seguPartsK.find((p:string)=>p.startsWith("RESP:"))?.slice(5) || "";
+      const seguAud  = seguPartsK.find((p:string)=>p.startsWith("AUD:"))?.slice(4) || "";
+      const seguAudNombre = seguPartsK.find((p:string)=>p.startsWith("AUDNOM:"))?.slice(7) || "";
       return `<div class="kpi-item">
         <div class="kpi-item-header">
           <div class="kpi-item-title">${k.accion}</div>
@@ -831,6 +834,7 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[]): string {
           <span style="font-size:10px;font-weight:700">${pct}%</span>
         </div>
         ${seguResp ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Seguimiento:</strong> ${seguResp}</div>` : ""}
+        ${seguAudNombre ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Auditor de seguimiento:</strong> ${seguAudNombre}</div>` : ""}
         ${seguAud  ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Auditor:</strong> ${seguAud}</div>` : ""}
         ${k.planAccionVeterinario && k.planAccionVeterinario !== "—" ? `
         <div class="plan-box">
@@ -2477,10 +2481,11 @@ export default function KPIPage() {
               const hallazgo = k.hallazgoId ? hallazgos.find(h => h.id === k.hallazgoId) : null;
               const ec = estadoColor(k.estado);
 
-              // Parsear seguimiento compuesto
-              const [seguRespPart, seguAudPart] = (k.seguimiento ?? "").split("||");
-              const seguResp = seguRespPart?.replace(/^RESP:/,"") ?? "";
-              const seguAud  = seguAudPart?.replace(/^AUD:/,"")  ?? "";
+              // Parsear seguimiento compuesto (RESP:...||AUD:...||AUDNOM:...)
+              const seguParts = (k.seguimiento ?? "").split("||");
+              const seguResp = seguParts.find(p => p.startsWith("RESP:"))?.slice(5) ?? "";
+              const seguAud  = seguParts.find(p => p.startsWith("AUD:"))?.slice(4) ?? "";
+              const seguAudNombre = seguParts.find(p => p.startsWith("AUDNOM:"))?.slice(7) ?? "";
 
               return (
                 <div key={k.id} className="card-base card-hover">
@@ -2541,9 +2546,14 @@ export default function KPIPage() {
                       <span className="text-[#64748B] font-medium">Seguimiento: </span>{seguResp}
                     </p>
                   )}
+                  {seguAudNombre && (
+                    <p className="text-xs text-[#94A3B8] mb-1.5 leading-relaxed">
+                      <span className="text-[#64748B] font-medium">Auditor de seguimiento: </span>{seguAudNombre}
+                    </p>
+                  )}
                   {seguAud && (
                     <p className="text-xs text-[#94A3B8] mb-1.5 leading-relaxed">
-                      <span className="text-[#64748B] font-medium">Auditor: </span>{seguAud}
+                      <span className="text-[#64748B] font-medium">Seguimiento auditor: </span>{seguAud}
                     </p>
                   )}
 
@@ -2856,11 +2866,11 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
     ({COMPLETADO:"Completado",EN_CURSO:"En Curso",EN_ESPERA:"En Espera",
       NO_INICIADO:"No Iniciado",ATRASADO:"Atrasado",PENDIENTE:"Pendiente"})[e] ?? e;
 
-  // Parsear seguimiento guardado
-  const [initSeguResp, initSeguAud] = (() => {
+  // Parsear seguimiento guardado (RESP:...||AUD:...||AUDNOM:...)
+  const [initSeguResp, initSeguAud, initSeguAudNombre] = (() => {
     const s = editing?.seguimiento ?? "";
-    const [a, b] = s.split("||");
-    return [a?.replace(/^RESP:/,"") ?? "", b?.replace(/^AUD:/,"") ?? ""];
+    const [a, b, c] = s.split("||");
+    return [a?.replace(/^RESP:/,"") ?? "", b?.replace(/^AUD:/,"") ?? "", c?.replace(/^AUDNOM:/,"") ?? ""];
   })();
 
   const [form, setForm] = useState<Partial<KPI>>(editing ? {
@@ -2886,6 +2896,7 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
 
   const [seguResp,  setSeguResp]   = useState(initSeguResp);
   const [seguAud,   setSeguAud]    = useState(initSeguAud);
+  const [seguAudNombre, setSeguAudNombre] = useState(initSeguAudNombre);
   const [calAuditor, setCalAuditor] = useState(editing ? normalState(editing.estado) : "En Curso");
   const [generando,  setGenerando]  = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -2973,11 +2984,13 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
     if (!form.responsable?.trim()) { setLocalError("Asigna un responsable"); return; }
     if (!form.fechaCompromiso)     { setLocalError("Fecha compromiso es obligatoria"); return; }
 
-    // Componer seguimiento compuesto: "RESP:...|AUD:..."
-    const seguimientoCompuesto = [
-      seguResp.trim() ? `RESP:${seguResp.trim()}` : "",
-      seguAud.trim()  ? `AUD:${seguAud.trim()}`   : "",
-    ].filter(Boolean).join("||");
+    // Componer seguimiento compuesto: "RESP:...||AUD:...||AUDNOM:...".
+    // RESP y AUD se emiten siempre (posiciones estables para los parsers de informe);
+    // AUDNOM (nombre del auditor que hace el seguimiento) solo si tiene contenido.
+    const seguAnyContent = !!(seguResp.trim() || seguAud.trim() || seguAudNombre.trim());
+    const seguParts = [`RESP:${seguResp.trim()}`, `AUD:${seguAud.trim()}`];
+    if (seguAudNombre.trim()) seguParts.push(`AUDNOM:${seguAudNombre.trim()}`);
+    const seguimientoCompuesto = seguAnyContent ? seguParts.join("||") : "";
 
     const payload: Partial<KPI> = {
       ...form,
@@ -3102,6 +3115,14 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
             <textarea value={seguResp} onChange={e=>setSeguResp(e.target.value)}
               rows={2} className={INP+" resize-none"}
               placeholder="Observaciones del responsable sobre el avance…"/>
+          </FF>
+          <FF label="Auditor que realiza el seguimiento">
+            <input value={seguAudNombre} onChange={e=>setSeguAudNombre(e.target.value)}
+              list="auditores-seguimiento" className={INP}
+              placeholder="Nombre del auditor que realiza el seguimiento del hallazgo…"/>
+            <datalist id="auditores-seguimiento">
+              {AUDITORS.map(a => <option key={a.id} value={a.name} />)}
+            </datalist>
           </FF>
           <FF label="Seguimiento Auditor">
             <textarea value={seguAud} onChange={e=>setSeguAud(e.target.value)}
