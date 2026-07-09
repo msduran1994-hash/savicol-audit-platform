@@ -13,6 +13,8 @@ import {
   pesoTotalIngreso, subtotalBloque, cantidadBloque, totalGeneralBultos, num as anexNum,
   difFaltanteMortalidad, recepcionResumenTieneDatos, pctMortalidad, avesRecibidasTotal,
   calcMortalidadDiaria, calcBultosConsumidos, registroMortalidadTieneDatos,
+  resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos,
+  type ResumenEjecutivo,
 } from "@/lib/anexos-tecnicos";
 import { EnvioCorreoModal } from "@/components/informes/envio-correo";
 import {
@@ -1318,6 +1320,76 @@ function seccionBultosConsumidos(hallazgos: any[], granjas: any[], modo: "resume
   return `<div class="section"><div class="section-title">Bultos Consumidos por Día</div>${bloques}</div>`;
 }
 
+// ─── RESÚMENES EJECUTIVOS AUTOMÁTICOS (síntesis / completo) ───────────────────
+// Renderiza un ResumenEjecutivo (generado en lib) como HTML para el PDF. En modo
+// "sintesis" solo muestra métricas + la conclusión; en "completo", todas las secciones.
+function resumenEjecutivoHTML(r: ResumenEjecutivo, modo: "sintesis" | "completo"): string {
+  const metricas = `<div style="display:grid;grid-template-columns:repeat(${r.metricas.length},1fr);gap:8px;margin:6px 0">
+    ${r.metricas.map(m => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px;text-align:center">
+      <div style="font-size:15px;font-weight:800;color:${m.color || "#0D1526"}">${m.valor}</div>
+      <div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.3px">${m.label}</div></div>`).join("")}
+  </div>`;
+  const secs = modo === "completo" ? r.secciones : r.secciones.filter(s => /Conclusi/i.test(s.titulo));
+  const secHtml = secs.map(s => `<div style="margin-top:6px"><div style="font-size:11px;font-weight:700;color:#4A7AFF">${s.titulo}</div>
+    ${s.lineas.map(l => `<div style="font-size:11px;color:#334155;margin-top:2px">• ${l}</div>`).join("")}</div>`).join("");
+  return `${metricas}${secHtml}`;
+}
+
+// Reúne los 4 resúmenes por hallazgo (los que tengan datos) y los integra al informe.
+function seccionResumenesEjecutivos(hallazgos: any[], granjas: any[], modo: "sintesis" | "completo"): string {
+  const items = hallazgos.map(h => {
+    const a = parseAnexos(h.anexosTecnicos);
+    const resumenes = [
+      resumenMortalidadDiaria(a.registroMortalidadDiaria),
+      resumenBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a)),
+      resumenRecepcionAves(a),
+      resumenIngresoBultos(a),
+    ].filter(Boolean) as ResumenEjecutivo[];
+    return { h, resumenes };
+  }).filter(x => x.resumenes.length > 0);
+  if (!items.length) return "";
+  const bloques = items.map(({ h, resumenes }) => {
+    const g = granjas.find(gr => gr.id === h.granjaId);
+    const cuerpo = resumenes.map(r => `<div style="margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;color:#0D1526;border-left:3px solid #4A7AFF;padding-left:8px;margin-bottom:4px">${r.titulo}</div>
+      ${resumenEjecutivoHTML(r, modo)}</div>`).join("");
+    return `<div style="page-break-inside:avoid;margin-bottom:14px;${modo === "completo" ? "border:1px solid #e2e8f0;border-radius:8px;padding:12px" : ""}">
+      <div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:6px">${h.titulo?.slice(0, 70) || "Hallazgo"} <span style="font-weight:400;color:#64748b">· ${g?.nombre || "—"}</span></div>
+      ${cuerpo}</div>`;
+  }).join("");
+  return `<div class="section"><div class="section-title">Análisis Técnico · Resúmenes Ejecutivos${modo === "sintesis" ? " (síntesis)" : ""}</div>${bloques}</div>`;
+}
+
+// Indicadores derivados de los resúmenes (Dashboard: sin texto completo).
+function indicadoresResumenes(hallazgos: any[]): string {
+  let critica = 0, elevada = 0, conFaltante = 0, sumConsAve = 0, nConsAve = 0;
+  hallazgos.forEach(h => {
+    const a = parseAnexos(h.anexosTecnicos);
+    if (registroMortalidadTieneDatos(a.registroMortalidadDiaria)) {
+      const c = calcMortalidadDiaria(a.registroMortalidadDiaria);
+      if (c.pctAcumuladoFinal !== null) { if (c.pctAcumuladoFinal >= 8) critica++; else if (c.pctAcumuladoFinal >= 4) elevada++; }
+    }
+    if (anexNum(a.recepcionAvesResumen.faltanteAvesCorte) > 0) conFaltante++;
+    if (a.registroBultosConsumidos.semanas.some((w: any[]) => w.length)) {
+      const cb = calcBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a));
+      if (cb.consumoAcumuladoAveFinal !== null) { sumConsAve += cb.consumoAcumuladoAveFinal; nConsAve++; }
+    }
+  });
+  if (!critica && !elevada && !conFaltante && !nConsAve) return "";
+  const cards = [
+    { l: "Mort. crítica (≥8%)", v: String(critica), c: "#EF4444" },
+    { l: "Mort. elevada (4-8%)", v: String(elevada), c: "#F97316" },
+    { l: "Con faltante de aves", v: String(conFaltante), c: conFaltante ? "#EF4444" : "#22C55E" },
+    { l: "Consumo/ave prom. (kg)", v: nConsAve ? _fmtAnx(sumConsAve / nConsAve) : "—", c: "#8B5CF6" },
+  ];
+  return `<div class="section"><div class="section-title">Indicadores de Análisis (Resúmenes)</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">
+      ${cards.map(k => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:3px solid ${k.c};border-radius:8px;padding:12px 8px;text-align:center">
+        <div style="font-size:20px;font-weight:800;color:${k.c}">${k.v}</div>
+        <div style="font-size:10px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.3px">${k.l}</div></div>`).join("")}
+    </div></div>`;
+}
+
 // ─── SECCIÓN DETALLE DE HALLAZGOS (ficha completa por hallazgo + evidencias) ──
 function seccionHallazgosDetalle(hallazgos: any[], granjas: any[], evidenciasPorHallazgo?: Record<string, any[]>): string {
   if (!hallazgos.length) {
@@ -1538,6 +1610,8 @@ ${seccionMortalidadDiaria(hallazgos, granjas, "resumen")}
 
 ${seccionBultosConsumidos(hallazgos, granjas, "resumen")}
 
+${seccionResumenesEjecutivos(hallazgos, granjas, "sintesis")}
+
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
 </div></body></html>`;
@@ -1713,6 +1787,8 @@ ${graficosMortalidad(hallazgos, granjas)}
 
 ${graficosProduccionDiaria(hallazgos, granjas)}
 
+${indicadoresResumenes(hallazgos)}
+
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
 </div></body></html>`;
@@ -1853,6 +1929,8 @@ ${seccionMortalidadDiaria(hallazgos, granjas, "detalle")}
 
 ${seccionBultosConsumidos(hallazgos, granjas, "detalle")}
 
+${seccionResumenesEjecutivos(hallazgos, granjas, "completo")}
+
 <!-- IX. EVIDENCIAS Y FIRMA -->
 <div class="divider">IX — Evidencias Fotográficas y Firma</div>
 ${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
@@ -1953,6 +2031,8 @@ ${seccionColaboradores(hallazgos, granjas, "detalle")}
 ${seccionMortalidadDiaria(hallazgos, granjas, "detalle")}
 
 ${seccionBultosConsumidos(hallazgos, granjas, "detalle")}
+
+${seccionResumenesEjecutivos(hallazgos, granjas, "completo")}
 
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}

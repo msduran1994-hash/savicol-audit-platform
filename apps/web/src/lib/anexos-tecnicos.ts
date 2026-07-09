@@ -201,3 +201,223 @@ export function calcBultosConsumidos(r: RegistroBultosConsumidos, mort: Registro
   const saldoFinal = saldos.length ? saldos[saldos.length - 1] : avesIni;
   return { kgPorBulto, totalBultos: acumBultos, totalKg: acumBultos * kgPorBulto, consumoAcumuladoAveFinal: saldoFinal > 0 ? (acumBultos * kgPorBulto) / saldoFinal : null, semanas };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RESÚMENES EJECUTIVOS AUTOMÁTICOS — análisis DETERMINISTA (por reglas) sobre los
+// datos registrados. No usa IA ni inventa datos: cada frase se deriva de las cifras.
+// Devuelve null cuando no hay datos suficientes. Compartido por el editor y los
+// informes de Cumplimiento KPI. Las "hipótesis" son interpretaciones CONDICIONALES
+// del patrón observado (posibilidades a verificar), nunca afirmaciones sin respaldo.
+// ═══════════════════════════════════════════════════════════════════════════════
+export interface ResumenEjecutivo {
+  titulo: string;
+  metricas: { label: string; valor: string; color?: string }[];
+  secciones: { titulo: string; lineas: string[] }[];
+}
+
+const f2 = (n: number) => n.toLocaleString("es-CO", { maximumFractionDigits: 2 });
+const nivelMort = (p: number) => p >= 8 ? "crítica" : p >= 4 ? "elevada" : "dentro de parámetros aceptables";
+const colorMort = (p: number) => p >= 8 ? "#EF4444" : p >= 4 ? "#F97316" : "#22C55E";
+
+// Tendencia de una serie (primer vs último valor, umbral relativo 10%).
+function tendenciaSerie(serie: number[]): { dir: "ascendente" | "descendente" | "estable"; first: number; last: number; suficiente: boolean } {
+  const vals = serie.filter(v => typeof v === "number" && !isNaN(v));
+  if (vals.length < 2) return { dir: "estable", first: vals[0] ?? 0, last: vals[vals.length - 1] ?? 0, suficiente: false };
+  const first = vals[0], last = vals[vals.length - 1], diff = last - first;
+  const rel = first !== 0 ? Math.abs(diff) / Math.abs(first) : (last !== 0 ? 1 : 0);
+  return { dir: rel < 0.1 ? "estable" : diff > 0 ? "ascendente" : "descendente", first, last, suficiente: true };
+}
+
+export function resumenMortalidadDiaria(r: RegistroMortalidadDiaria): ResumenEjecutivo | null {
+  if (!registroMortalidadTieneDatos(r)) return null;
+  const c = calcMortalidadDiaria(r);
+  if (c.semanas.length === 0) return null;
+  const semanales = c.semanas.map(s => s.totalSemanal);
+  const t = tendenciaSerie(semanales);
+  const pico = c.semanas.reduce((mx, s) => s.totalSemanal > mx.totalSemanal ? s : mx, c.semanas[0]);
+  const prom = semanales.reduce((a, b) => a + b, 0) / semanales.length;
+  const pct = c.pctAcumuladoFinal;
+
+  const hipotesis: string[] = [];
+  if (pico.semana <= 2) hipotesis.push("La concentración de bajas en las primeras semanas podría asociarse a calidad del pollito, condiciones de arranque (temperatura, acceso a agua/alimento) o manejo inicial.");
+  if (t.dir === "ascendente") hipotesis.push("El incremento sostenido de la mortalidad semanal podría relacionarse con un factor persistente (sanitario, ambiental o de densidad); se sugiere revisar registros clínicos y de manejo del período.");
+  if (t.dir === "descendente") hipotesis.push("La reducción progresiva de la mortalidad sugiere estabilización del lote tras el arranque.");
+  if (c.semanas.length >= 3 && pico.totalSemanal > prom * 1.75) hipotesis.push(`El pico de la semana ${pico.semana} se desvía marcadamente del promedio (${f2(prom)} aves/semana), lo que podría indicar un evento puntual (estrés térmico, brote sanitario o incidente de manejo) a verificar.`);
+  if (hipotesis.length === 0) hipotesis.push("El comportamiento no evidencia desviaciones marcadas frente al promedio del período.");
+
+  const riesgos: string[] = [];
+  if (pct !== null && pct >= 8) riesgos.push("Mortalidad acumulada crítica: riesgo alto sobre la rentabilidad del lote y posible incumplimiento de parámetros productivos.");
+  else if (pct !== null && pct >= 4) riesgos.push("Mortalidad acumulada elevada: riesgo moderado; requiere seguimiento y plan de acción.");
+  if (t.dir === "ascendente") riesgos.push("Tendencia al alza: riesgo de continuidad de las bajas si no se interviene.");
+  if (pct === null) riesgos.push("Sin aves iniciales registradas no es posible dimensionar el riesgo en términos porcentuales.");
+  if (riesgos.length === 0) riesgos.push("No se identifican riesgos operativos relevantes a partir de los datos registrados.");
+
+  return {
+    titulo: "Resumen Ejecutivo · Mortalidad Diaria",
+    metricas: [
+      { label: "Mortalidad total", valor: f2(c.totalGeneral), color: "#EF4444" },
+      { label: "% acumulado", valor: pct === null ? "—" : f2(pct) + "%", color: pct === null ? "#94A3B8" : colorMort(pct) },
+      { label: "Saldo final", valor: c.aves > 0 ? f2(c.saldoFinal) : "—", color: "#22C55E" },
+      { label: "Semanas", valor: String(c.semanas.length) },
+    ],
+    secciones: [
+      { titulo: "Tendencia y variaciones", lineas: [
+        t.suficiente ? `En ${c.semanas.length} semana(s), la mortalidad semanal es ${t.dir} (de ${f2(t.first)} a ${f2(t.last)} aves).` : `Registro de ${c.semanas.length} semana(s); serie insuficiente para una tendencia concluyente.`,
+        `La semana con mayor mortalidad es la ${pico.semana} con ${f2(pico.totalSemanal)} aves${pct !== null ? ` (${f2(pico.pctSemanal ?? 0)}% del lote)` : ""}.`,
+      ] },
+      { titulo: "Hipótesis técnicas", lineas: hipotesis },
+      { titulo: "Riesgos operativos", lineas: riesgos },
+      { titulo: "Observaciones de auditoría", lineas: [
+        `Análisis basado en ${c.semanas.length} semana(s) de registro; promedio de ${f2(prom)} aves/semana.`,
+        c.aves > 0 ? `Aves iniciales declaradas: ${f2(c.aves)}.` : "No se registraron aves iniciales; el % y el saldo no pudieron calcularse.",
+      ] },
+      { titulo: "Conclusión técnica", lineas: [
+        pct === null
+          ? `Se registró una mortalidad total de ${f2(c.totalGeneral)} aves; complete las aves iniciales para valorar el porcentaje y el saldo.`
+          : `La mortalidad acumulada del lote es de ${f2(pct)}% (${nivelMort(pct)}), con un saldo estimado de ${f2(c.saldoFinal)} aves. ${pct >= 4 ? "Se recomienda plan de seguimiento y verificación de causas." : "El comportamiento es aceptable; se recomienda mantener el monitoreo."}`,
+      ] },
+    ],
+  };
+}
+
+export function resumenBultosConsumidos(r: RegistroBultosConsumidos, mort: RegistroMortalidadDiaria, avesFallback: number): ResumenEjecutivo | null {
+  if (!(r?.semanas || []).some(w => w.length > 0)) return null;
+  const c = calcBultosConsumidos(r, mort, avesFallback);
+  if (c.semanas.length === 0) return null;
+  const avesBase = num(mort?.avesIniciales) > 0 ? num(mort.avesIniciales) : num(avesFallback);
+  const consAve = c.consumoAcumuladoAveFinal;
+  const t = tendenciaSerie(c.semanas.map(s => s.consumoSemanalAve ?? 0));
+  const caidas = c.semanas.filter((s, i) => i > 0 && (s.consumoSemanalAve ?? 0) < (c.semanas[i - 1].consumoSemanalAve ?? 0));
+
+  const viabilidad: string[] = [];
+  if (avesBase <= 0) viabilidad.push("Sin aves registradas no es posible evaluar la viabilidad del consumo por ave.");
+  else {
+    viabilidad.push(t.suficiente
+      ? `El consumo semanal por ave es ${t.dir}${t.dir === "ascendente" ? ", coherente con el crecimiento del lote" : t.dir === "descendente" ? "; una caída sostenida podría indicar sub-consumo o error de registro" : ""} (de ${f2(t.first)} a ${f2(t.last)} kg/ave).`
+      : "Serie insuficiente para evaluar la evolución del consumo por ave.");
+    if (caidas.length) viabilidad.push(`Se detectan ${caidas.length} semana(s) con descenso del consumo por ave respecto a la previa (semana(s) ${caidas.map(s => s.semana).join(", ")}); conviene verificar disponibilidad de alimento y estado del lote.`);
+  }
+
+  return {
+    titulo: "Resumen Ejecutivo · Bultos Consumidos por Día",
+    metricas: [
+      { label: "Total bultos", valor: f2(c.totalBultos), color: "#4A7AFF" },
+      { label: "Total kg", valor: f2(c.totalKg), color: "#0EA5E9" },
+      { label: "Consumo/ave (kg)", valor: consAve === null ? "—" : f2(consAve), color: "#8B5CF6" },
+      { label: "Kg/bulto", valor: f2(c.kgPorBulto) },
+    ],
+    secciones: [
+      { titulo: "Consumo", lineas: [
+        `Consumo acumulado de ${f2(c.totalKg)} kg (${f2(c.totalBultos)} bultos × ${f2(c.kgPorBulto)} kg) en ${c.semanas.length} semana(s).`,
+        consAve === null ? "No fue posible calcular el consumo por ave (sin saldo de aves vivas disponible)." : `Consumo promedio de ${f2(consAve)} kg por ave sobre una base de ${f2(avesBase)} aves.`,
+      ] },
+      { titulo: "Viabilidad y desviaciones", lineas: viabilidad },
+      { titulo: "Observaciones técnicas", lineas: [
+        `Análisis basado en ${c.semanas.length} semana(s) de registro de bultos.`,
+        `Base de aves utilizada: ${avesBase > 0 ? f2(avesBase) + " (saldo de aves vivas)" : "no disponible"}.`,
+      ] },
+      { titulo: "Conclusión ejecutiva", lineas: [
+        consAve === null
+          ? `Se consumieron ${f2(c.totalKg)} kg de alimento; registre las aves para estimar el consumo por ave.`
+          : `El lote consumió ${f2(c.totalKg)} kg (${f2(consAve)} kg/ave). ${t.dir === "descendente" ? "El patrón descendente amerita revisión." : "El patrón es consistente con el desarrollo esperado del lote."}`,
+      ] },
+    ],
+  };
+}
+
+export function resumenRecepcionAves(a: AnexosTecnicos): ResumenEjecutivo | null {
+  const filas = a.recepcionAves || [];
+  const res = a.recepcionAvesResumen;
+  if (filas.length === 0 && !recepcionResumenTieneDatos(res)) return null;
+  const recibidas = avesRecibidasTotal(a);
+  const machos = filas.reduce((s, r) => s + num(r.machos), 0);
+  const hembras = filas.reduce((s, r) => s + num(r.hembras), 0);
+  const faltante = num(res.faltanteAvesCorte);
+  const saldoRep = num(res.reporteSaldoAves);
+  const mortReport = num(res.reporteActaConteoPicos);
+  const difFalt = difFaltanteMortalidad(res);
+  const pct = pctMortalidad(a);
+  const pctDif = recibidas > 0 ? (faltante / recibidas) * 100 : null;
+
+  const consistencia: string[] = [];
+  if (recibidas > 0 && recepcionResumenTieneDatos(res)) {
+    const saldoEsperado = recibidas - mortReport;
+    const dif = saldoRep - saldoEsperado;
+    consistencia.push(Math.abs(dif) < 1
+      ? "El reporte de saldo de aves es consistente con (recibidas − mortalidad reportada)."
+      : `El reporte de saldo (${f2(saldoRep)}) difiere en ${f2(dif)} respecto al saldo esperado de ${f2(saldoEsperado)} (recibidas − mortalidad reportada); revisar el conteo.`);
+  } else consistencia.push("Datos insuficientes para validar la consistencia del saldo.");
+
+  const causas = difFalt > 0
+    ? "El faltante supera la mortalidad reportada: posibles causas incluyen mortalidad no registrada, errores de conteo o extravío de aves."
+    : difFalt < 0
+    ? "La mortalidad reportada supera el faltante al corte: posible doble conteo o inconsistencia en los registros."
+    : "Faltante y mortalidad reportada coinciden; registro consistente.";
+
+  return {
+    titulo: "Resumen Ejecutivo · Recepción de Aves",
+    metricas: [
+      { label: "Total recibido", valor: f2(recibidas), color: "#4A7AFF" },
+      { label: "Machos / Hembras", valor: `${f2(machos)} / ${f2(hembras)}` },
+      { label: "Faltante al corte", valor: f2(faltante), color: faltante > 0 ? "#EF4444" : "#22C55E" },
+      { label: "% Mortalidad", valor: pct === null ? "—" : f2(pct) + "%", color: pct === null ? "#94A3B8" : colorMort(pct) },
+    ],
+    secciones: [
+      { titulo: "Total y conciliación", lineas: [
+        `Se recibieron ${f2(recibidas)} aves${machos + hembras > 0 ? ` (${f2(machos)} machos y ${f2(hembras)} hembras)` : ""} en ${filas.length} registro(s).`,
+        recepcionResumenTieneDatos(res) ? `Reporte de saldo de aves: ${f2(saldoRep)}; saldo identificado: ${f2(num(res.saldoIdentificadoAves))}; faltante al corte: ${f2(faltante)}.` : "Sin bloque de conciliación diligenciado.",
+      ] },
+      { titulo: "Diferencias y % de diferencia", lineas: [
+        pctDif === null ? "No es posible calcular el % de diferencia sin aves recibidas." : `El faltante representa un ${f2(pctDif)}% de las aves recibidas.`,
+        `Diferencia entre el faltante al corte y la mortalidad reportada: ${f2(difFalt)} aves${difFalt !== 0 ? " — no concilian exactamente." : " — concilian."}`,
+      ] },
+      { titulo: "Validación de consistencia", lineas: consistencia },
+      { titulo: "Posibles causas", lineas: [causas] },
+      { titulo: "Impacto operativo", lineas: [
+        faltante > 0 ? `Un faltante de ${f2(faltante)} aves${pctDif !== null ? ` (${f2(pctDif)}%)` : ""} tiene impacto directo sobre el inventario y la proyección productiva del lote.` : "No se registró faltante de aves con impacto sobre el inventario.",
+      ] },
+      { titulo: "Conclusión técnica", lineas: [
+        `Recepción de ${f2(recibidas)} aves con un faltante al corte de ${f2(faltante)}${pct !== null ? ` y una mortalidad estimada del ${f2(pct)}%` : ""}. ${difFalt !== 0 ? "Se recomienda conciliar el conteo de picos con el saldo reportado." : "Los registros concilian adecuadamente."}`,
+      ] },
+    ],
+  };
+}
+
+export function resumenIngresoBultos(a: AnexosTecnicos): ResumenEjecutivo | null {
+  const filas = a.ingresoBultos || [];
+  if (filas.length === 0) return null;
+  const unidades = filas.reduce((s, r) => s + num(r.unidades), 0);
+  const peso = filas.reduce((s, r) => s + pesoTotalIngreso(r), 0);
+  const kgUnidadProm = unidades > 0 ? peso / unidades : 0;
+  const outliers = kgUnidadProm > 0
+    ? filas.map(r => ({ r, ku: num(r.unidades) > 0 ? pesoTotalIngreso(r) / num(r.unidades) : 0 })).filter(x => x.ku > 0 && Math.abs(x.ku - kgUnidadProm) / kgUnidadProm > 0.25)
+    : [];
+
+  return {
+    titulo: "Resumen Ejecutivo · Ingreso de Bultos",
+    metricas: [
+      { label: "Total unidades", valor: f2(unidades), color: "#4A7AFF" },
+      { label: "Peso total (kg)", valor: f2(peso), color: "#0EA5E9" },
+      { label: "Kg/unidad prom.", valor: f2(kgUnidadProm), color: "#8B5CF6" },
+      { label: "Registros", valor: String(filas.length) },
+    ],
+    secciones: [
+      { titulo: "Totales", lineas: [
+        `Ingreso de ${f2(unidades)} unidades con un peso total de ${f2(peso)} kg en ${filas.length} registro(s).`,
+        `Peso promedio por unidad: ${f2(kgUnidadProm)} kg.`,
+      ] },
+      { titulo: "Consistencia entre registros", lineas: [
+        outliers.length === 0
+          ? "Los registros presentan un peso por unidad homogéneo (sin desviaciones mayores al 25% respecto al promedio)."
+          : `Se detectan ${outliers.length} registro(s) con peso por unidad atípico (>25% de desviación): ${outliers.map(o => o.r.concepto || o.r.fecha || "s/d").slice(0, 4).join(", ")}. Conviene verificar cantidades o pesos.`,
+      ] },
+      { titulo: "Observaciones relevantes", lineas: [
+        `Análisis de ${filas.length} ingreso(s) de bultos.`,
+        outliers.length ? "Las desviaciones podrían deberse a diferencias reales de presentación o a errores de digitación." : "No se observan diferencias relevantes entre registros.",
+      ] },
+      { titulo: "Conclusión ejecutiva", lineas: [
+        `Ingreso total de ${f2(peso)} kg (${f2(unidades)} unidades). ${outliers.length ? "Se recomienda revisar los registros atípicos señalados." : "Los registros son consistentes."}`,
+      ] },
+    ],
+  };
+}

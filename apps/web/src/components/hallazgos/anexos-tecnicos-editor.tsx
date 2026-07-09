@@ -11,7 +11,9 @@ import {
   subtotalBloque, cantidadBloque, totalGeneralBultos, difFaltanteMortalidad,
   pctMortalidad, avesRecibidasTotal, num,
   calcMortalidadDiaria, calcBultosConsumidos,
+  resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos,
 } from "@/lib/anexos-tecnicos";
+import { ResumenEjecutivoPanel } from "./resumen-ejecutivo-panel";
 
 const TABS = [
   { key: "actaConteoPicos",  label: "Acta Conteo de Picos" },
@@ -164,6 +166,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             <div><div className="text-[10px] text-[#94A3B8]">Saldo final</div><div className="text-sm font-bold text-[#22C55E]">{calc.aves > 0 ? fmt(calc.saldoFinal) : "—"}</div></div>
           </div>
         )}
+        <ResumenEjecutivoPanel resumen={resumenMortalidadDiaria(md)} />
       </div>
     );
   }
@@ -218,6 +221,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             <div><div className="text-[10px] text-[#94A3B8]">Consumo/ave (kg)</div><div className="text-sm font-bold text-[#8B5CF6]">{calc.consumoAcumuladoAveFinal === null ? "—" : fmt(calc.consumoAcumuladoAveFinal)}</div></div>
           </div>
         )}
+        <ResumenEjecutivoPanel resumen={resumenBultosConsumidos(bc, md, avesRecibidasTotal(value))} />
       </div>
     );
   }
@@ -296,6 +300,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
                 : <span className="text-2xl font-bold" style={{ color: pctMortalidad(value)! >= 8 ? "#EF4444" : pctMortalidad(value)! >= 4 ? "#F97316" : "#22C55E" }}>{pctMortalidad(value)!.toFixed(2)}%</span>}
             </div>
           </div>
+          <ResumenEjecutivoPanel resumen={resumenRecepcionAves(value)} />
         </div>
       )}
 
@@ -311,18 +316,23 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
         totalCol: { label: "Total (bultos + lonas)", calc: totalInvBultos },
       })}
 
-      {tab === "ingresoBultos" && SimpleTable({
-        k: "ingresoBultos",
-        cols: [
-          { key: "fecha", label: "Fecha", type: "date" },
-          { key: "concepto", label: "Concepto", type: "text" },
-          { key: "unidades", label: "Unidades", type: "number" },
-          { key: "cantidadKg", label: "Cantidad (Kg)", type: "number" },
-          { key: "_peso", label: "Peso Total Kg", calc: pesoTotalIngreso },
-        ],
-        emptyRow: { fecha: "", concepto: "", unidades: "", cantidadKg: "" },
-        totalCol: { label: "Peso total (Kg)", calc: pesoTotalIngreso },
-      })}
+      {tab === "ingresoBultos" && (
+        <div className="space-y-3">
+          {SimpleTable({
+            k: "ingresoBultos",
+            cols: [
+              { key: "fecha", label: "Fecha", type: "date" },
+              { key: "concepto", label: "Concepto", type: "text" },
+              { key: "unidades", label: "Unidades", type: "number" },
+              { key: "cantidadKg", label: "Cantidad (Kg)", type: "number" },
+              { key: "_peso", label: "Peso Total Kg", calc: pesoTotalIngreso },
+            ],
+            emptyRow: { fecha: "", concepto: "", unidades: "", cantidadKg: "" },
+            totalCol: { label: "Peso total (Kg)", calc: pesoTotalIngreso },
+          })}
+          <ResumenEjecutivoPanel resumen={resumenIngresoBultos(value)} />
+        </div>
+      )}
 
       {tab === "totalBultos" && (
         <div className="space-y-3">
