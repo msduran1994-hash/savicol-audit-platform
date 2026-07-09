@@ -1070,7 +1070,7 @@ function seccionAnexosTecnicos(hallazgos: any[], granjas: any[], modo: "resumen"
 function indicadoresAnexos(hallazgos: any[]): string {
   const anexos = hallazgos.map(h => parseAnexos(h.anexosTecnicos)).filter(anexosTienenDatos);
   if (!anexos.length) return "";
-  let aves = 0, bultosLonas = 0, pesoIngreso = 0, totGralBultos = 0, difPicos = 0, bitacora = 0;
+  let aves = 0, bultosLonas = 0, pesoIngreso = 0, totGralBultos = 0, difPicos = 0, bitacora = 0, colaboradores = 0;
   anexos.forEach(a => {
     a.recepcionAves.forEach(r => aves += totalRecepcion(r));
     a.inventarioBultos.forEach(r => bultosLonas += totalInvBultos(r));
@@ -1078,6 +1078,7 @@ function indicadoresAnexos(hallazgos: any[]): string {
     totGralBultos += totalGeneralBultos(a.totalBultos);
     a.actaConteoPicos.forEach(r => difPicos += difConteoPicos(r));
     bitacora += a.bitacoraIngreso.length;
+    colaboradores += a.registroColaboradores.length;
   });
   const cards = [
     { l: "Hallazgos c/ anexos", v: _fmtAnx(anexos.length), c: "#4A7AFF" },
@@ -1087,6 +1088,7 @@ function indicadoresAnexos(hallazgos: any[]): string {
     { l: "Total bultos (Kg)",   v: _fmtAnx(totGralBultos), c: "#F97316" },
     { l: "Dif. conteo picos",   v: _fmtAnx(difPicos),      c: difPicos !== 0 ? "#EF4444" : "#22C55E" },
     { l: "Ingresos a granja",   v: _fmtAnx(bitacora),      c: "#4A7AFF" },
+    { l: "Colaboradores",       v: _fmtAnx(colaboradores), c: "#8B5CF6" },
   ];
   return `<div class="section"><div class="section-title">Indicadores de Anexos Técnicos</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">
@@ -1164,6 +1166,30 @@ function seccionBitacora(hallazgos: any[], granjas: any[], modo: "resumen" | "de
   }).join("");
   return `<div class="section"><div class="section-title">Bitácora de Ingreso a la Granja</div>
     <p style="font-size:11px;color:#64748b;margin-bottom:8px">${total} ingreso(s) registrado(s) en ${conBit.length} hallazgo(s), asociados a su hallazgo correspondiente.</p>${bloques}</div>`;
+}
+
+// ─── SECCIÓN REGISTRO DE COLABORADORES (resumen / detalle) ────────────────────
+function seccionColaboradores(hallazgos: any[], granjas: any[], modo: "resumen" | "detalle"): string {
+  const conCol = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) })).filter(x => x.a.registroColaboradores.length > 0);
+  if (!conCol.length) return "";
+  const total = conCol.reduce((s, x) => s + x.a.registroColaboradores.length, 0);
+  if (modo === "resumen") {
+    const lineas = conCol.map(({ h, a }) => {
+      const g = granjas.find(gr => gr.id === h.granjaId);
+      return `<div style="font-size:11px;color:#475569">• ${h.titulo?.slice(0, 55) || "Hallazgo"} <span style="color:#94a3b8">· ${g?.nombre || "—"}</span>: <strong>${a.registroColaboradores.length}</strong> colaborador(es)</div>`;
+    }).join("");
+    return `<div class="section"><div class="section-title">Registro de Colaboradores (resumen)</div>
+      <p style="font-size:12px;margin-bottom:6px"><strong>${total}</strong> colaborador(es) registrado(s) en ${conCol.length} hallazgo(s).</p>${lineas}</div>`;
+  }
+  const bloques = conCol.map(({ h, a }) => {
+    const g = granjas.find(gr => gr.id === h.granjaId);
+    return `<div style="page-break-inside:avoid;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:4px">${h.titulo?.slice(0, 70) || "Hallazgo"} <span style="font-weight:400;color:#64748b">· ${g?.nombre || "—"}</span></div>
+      <table><thead><tr><th>Nombre colaborador</th><th>Cargo</th></tr></thead>
+      <tbody>${a.registroColaboradores.map(r => `<tr><td>${r.nombre || "—"}</td><td>${r.cargo || "—"}</td></tr>`).join("")}</tbody></table></div>`;
+  }).join("");
+  return `<div class="section"><div class="section-title">Registro de Colaboradores</div>
+    <p style="font-size:11px;color:#64748b;margin-bottom:8px">${total} colaborador(es) registrado(s) en ${conCol.length} hallazgo(s), asociados a su hallazgo correspondiente.</p>${bloques}</div>`;
 }
 
 // ─── SECCIÓN DETALLE DE HALLAZGOS (ficha completa por hallazgo + evidencias) ──
@@ -1379,6 +1405,8 @@ ${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
 ${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
 
 ${seccionBitacora(hallazgos, granjas, "resumen")}
+
+${seccionColaboradores(hallazgos, granjas, "resumen")}
 
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
@@ -1687,6 +1715,8 @@ ${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
 
 ${seccionBitacora(hallazgos, granjas, "detalle")}
 
+${seccionColaboradores(hallazgos, granjas, "detalle")}
+
 <!-- IX. EVIDENCIAS Y FIRMA -->
 <div class="divider">IX — Evidencias Fotográficas y Firma</div>
 ${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
@@ -1781,6 +1811,8 @@ ${seccionMortalidad(mortalidad, granjas, hallazgos)}
 ${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
 
 ${seccionBitacora(hallazgos, granjas, "detalle")}
+
+${seccionColaboradores(hallazgos, granjas, "detalle")}
 
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}

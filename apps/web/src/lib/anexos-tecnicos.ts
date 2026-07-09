@@ -21,6 +21,8 @@ export interface TotalBultosBloque  { titulo: string; filas: TotalBultosRow[]; }
 export interface TotalBultos        { bloques: TotalBultosBloque[]; diferencias: number; observaciones: string; }
 // Bitácora de Ingreso a la Granja (sección aparte del hallazgo).
 export interface BitacoraIngresoRow { fecha: string; responsable: string; }
+// Registro de Colaboradores (sección aparte del hallazgo).
+export interface RegistroColaboradorRow { nombre: string; cargo: string; }
 
 export interface AnexosTecnicos {
   actaConteoPicos:  ActaConteoPicosRow[];
@@ -30,6 +32,7 @@ export interface AnexosTecnicos {
   ingresoBultos:    IngresoBultosRow[];
   totalBultos:      TotalBultos;
   bitacoraIngreso:  BitacoraIngresoRow[];
+  registroColaboradores: RegistroColaboradorRow[];
 }
 
 export function emptyRecepcionResumen(): RecepcionAvesResumen {
@@ -42,6 +45,7 @@ export function emptyAnexos(): AnexosTecnicos {
     inventarioBultos: [], ingresoBultos: [],
     totalBultos: { bloques: [], diferencias: 0, observaciones: "" },
     bitacoraIngreso: [],
+    registroColaboradores: [],
   };
 }
 
@@ -69,6 +73,7 @@ export function parseAnexos(json?: string | null): AnexosTecnicos {
         observaciones: typeof p.totalBultos?.observaciones === "string" ? p.totalBultos.observaciones : "",
       },
       bitacoraIngreso: Array.isArray(p.bitacoraIngreso) ? p.bitacoraIngreso : [],
+      registroColaboradores: Array.isArray(p.registroColaboradores) ? p.registroColaboradores : [],
     };
   } catch { return base; }
 }
@@ -86,7 +91,8 @@ export function anexosTienenDatos(a: AnexosTecnicos): boolean {
     a.totalBultos.bloques.some(b => b.filas.length > 0) ||
     !!a.totalBultos.observaciones?.trim() ||
     recepcionResumenTieneDatos(a.recepcionAvesResumen) ||
-    a.bitacoraIngreso.length > 0;
+    a.bitacoraIngreso.length > 0 ||
+    a.registroColaboradores.length > 0;
 }
 
 // ─── Cálculos automáticos ──────────────────────────────────────────────────────

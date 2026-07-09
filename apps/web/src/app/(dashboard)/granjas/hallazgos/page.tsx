@@ -8,8 +8,9 @@ import { AUDITORS } from "@/lib/constants";
 import type { Hallazgo } from "@/lib/granjas.types";
 import { AnexosTecnicosEditor } from "@/components/hallazgos/anexos-tecnicos-editor";
 import { BitacoraIngresoEditor } from "@/components/hallazgos/bitacora-ingreso-editor";
+import { RegistroColaboradoresEditor } from "@/components/hallazgos/registro-colaboradores-editor";
 import { parseAnexos, anexosTienenDatos, type AnexosTecnicos } from "@/lib/anexos-tecnicos";
-import { AlertTriangle, Filter, Plus, Sparkles, Image, Paperclip, X, Edit2, Trash2, ChevronDown, ClipboardList, BookOpen } from "lucide-react";
+import { AlertTriangle, Filter, Plus, Sparkles, Image, Paperclip, X, Edit2, Trash2, ChevronDown, ClipboardList, BookOpen, Users } from "lucide-react";
 import { Can } from "@/components/system/can";
 
 export default function HallazgosPage() {
@@ -247,6 +248,7 @@ function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
   const [anexos, setAnexos] = useState<AnexosTecnicos>(() => parseAnexos(hallazgo?.anexosTecnicos));
   const [anexosOpen, setAnexosOpen] = useState(false);
   const [bitacoraOpen, setBitacoraOpen] = useState(false);
+  const [colaboradoresOpen, setColaboradoresOpen] = useState(false);
 
   function toggleRiesgo(r: typeof TIPO_RIESGO[number]) {
     setForm((f) => {
@@ -403,6 +405,25 @@ function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
               <div className="px-4 pb-4 border-t border-[#1E2D4A] pt-3">
                 <p className="text-[10px] text-[#475569] mb-3">Registra las visitas de ingreso a la granja asociadas a este hallazgo (fecha y responsable). Opcional.</p>
                 <BitacoraIngresoEditor value={anexos.bitacoraIngreso} onChange={filas => setAnexos({ ...anexos, bitacoraIngreso: filas })} />
+              </div>
+            )}
+          </div>
+
+          {/* Registro de Colaboradores (sección aparte, opcional) */}
+          <div className="border border-[#1E2D4A] rounded-xl overflow-hidden">
+            <button type="button" onClick={()=>setColaboradoresOpen(o=>!o)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#0A111F] transition-colors">
+              <span className="text-xs font-semibold text-white flex items-center gap-2">
+                <Users className="w-3.5 h-3.5 text-[#4A7AFF]"/>
+                Registro Colaboradores <span className="text-[#475569] font-normal">(opcional)</span>
+                {anexos.registroColaboradores.length > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#22C55E]/15 text-[#22C55E]">{anexos.registroColaboradores.length} colaborador(es)</span>}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-[#64748B] transition-transform ${colaboradoresOpen?"rotate-180":""}`}/>
+            </button>
+            {colaboradoresOpen && (
+              <div className="px-4 pb-4 border-t border-[#1E2D4A] pt-3">
+                <p className="text-[10px] text-[#475569] mb-3">Registra los colaboradores relacionados con el hallazgo (nombre y cargo). Opcional.</p>
+                <RegistroColaboradoresEditor value={anexos.registroColaboradores} onChange={filas => setAnexos({ ...anexos, registroColaboradores: filas })} />
               </div>
             )}
           </div>
