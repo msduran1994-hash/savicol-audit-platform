@@ -175,9 +175,12 @@ export class AuthService {
   private async signTokens(userId: string, email: string, role: string) {
     const payload = { sub: userId, email, role };
 
+    // Access token de larga duración (jornada completa) para que NO expire mientras el
+    // usuario trabaja. La seguridad la aporta el cierre por inactividad (40 min, con
+    // aviso) del frontend, no la expiración del token. Configurable con JWT_ACCESS_EXPIRES.
     const accessToken = this.jwt.sign(payload, {
       secret: this.config.get<string>("JWT_ACCESS_SECRET"),
-      expiresIn: "15m",
+      expiresIn: this.config.get<string>("JWT_ACCESS_EXPIRES", "12h"),
     });
 
     const refreshToken = this.jwt.sign(payload, {

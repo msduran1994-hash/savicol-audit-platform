@@ -61,14 +61,15 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
       try {
-        // Todas las peticiones 401 concurrentes comparten el mismo refresco (single-flight)
-        // y luego reintentan su propia petición con el token nuevo.
+        // Intento único y silencioso de renovar el token (por si la sesión superó el TTL
+        // largo). Single-flight: peticiones concurrentes comparten el mismo refresco.
         const newToken = await refreshAccessToken();
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       } catch {
-        useAuthStore.getState().logout();
-        if (typeof window !== "undefined") window.location.href = "/login";
+        // NO forzamos el cierre de sesión ni redirigimos: el ÚNICO cierre automático es
+        // el de inactividad (40 min, con aviso). Rechazamos para que el llamador maneje
+        // el error sin expulsar al usuario que está trabajando.
         return Promise.reject(error);
       }
     }
