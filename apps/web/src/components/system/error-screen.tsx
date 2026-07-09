@@ -10,33 +10,42 @@
 import { useEffect, useState } from "react";
 
 const CHUNK_RE = /ChunkLoadError|Loading chunk [\w-]+ failed|dynamically imported module|Importing a module script failed|error loading dynamically imported module/i;
+const QUOTA_RE = /exceeded the quota|QuotaExceededError|quota/i;
 const GUARD = "__sv_chunk_recovered__";
 
 export function ErrorScreen({ error, reset }: { error: (Error & { digest?: string }) | undefined; reset?: () => void }) {
   const msg = error?.message || String(error ?? "Error desconocido");
   const isChunk = CHUNK_RE.test(msg) || (error as any)?.name === "ChunkLoadError";
-  const [recovering, setRecovering] = useState(isChunk);
+  const isQuota = QUOTA_RE.test(msg) || (error as any)?.name === "QuotaExceededError";
+  const isRecoverable = isChunk || isQuota;
+  const [recovering, setRecovering] = useState(isRecoverable);
 
   useEffect(() => {
-    if (!isChunk) { try { sessionStorage.removeItem(GUARD); } catch { /* noop */ } return; }
+    if (!isRecoverable) { try { sessionStorage.removeItem(GUARD); } catch { /* noop */ } return; }
     let cancelled = false;
     (async () => {
       try {
         if (sessionStorage.getItem(GUARD)) { setRecovering(false); return; } // ya intentamos: mostrar UI
         sessionStorage.setItem(GUARD, "1");
-        if ("serviceWorker" in navigator) {
-          const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map((r) => r.unregister()));
+        if (isQuota) {
+          // Cuota de localStorage superada: libera el store pesado (sin cerrar sesión).
+          try { window.localStorage.removeItem("savicol-granjas-store"); } catch { /* noop */ }
         }
-        if ("caches" in window) {
-          const keys = await caches.keys();
-          await Promise.all(keys.map((k) => caches.delete(k)));
+        if (isChunk) {
+          if ("serviceWorker" in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map((r) => r.unregister()));
+          }
+          if ("caches" in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+          }
         }
       } catch { /* seguimos al reload igual */ }
       if (!cancelled) window.location.reload();
     })();
     return () => { cancelled = true; };
-  }, [isChunk]);
+  }, [isRecoverable]);
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0A1628", color: "#E2E8F0", fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif", padding: 24 }}>

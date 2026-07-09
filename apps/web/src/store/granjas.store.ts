@@ -2,7 +2,7 @@
 // MÓDULO GRANJAS — Zustand Store con datos DEMO
 // ═══════════════════════════════════════════════════════════════════════════════
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { DEMO_MODE, VETERINARIOS_DEMO } from "../lib/granjas.constants";
 import type {
   Granja, Auditoria, Hallazgo, KPI, InventarioItem,
@@ -435,6 +435,31 @@ const defaultFilters: GranjasFilters = {
   nivelRiesgo: "", estadoSanitario: "", tecnicoVeterinarioId: "",
 };
 
+// localStorage TOLERANTE a cuota: si la escritura supera el límite (~5 MB), NO lanza
+// (evita el QuotaExceededError que tumbaba la app al cargar). Libera el espacio de este
+// store y reintenta una vez; si aún no cabe, omite la persistencia — el estado sigue en
+// memoria y se rehidrata del API en cada sesión. SSR-safe (no toca localStorage server-side).
+const safeStorage = createJSONStorage(() => {
+  const noop = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+  if (typeof window === "undefined") return noop as any;
+  return {
+    getItem: (name: string): string | null => {
+      try { return window.localStorage.getItem(name); } catch { return null; }
+    },
+    setItem: (name: string, value: string): void => {
+      try {
+        window.localStorage.setItem(name, value);
+      } catch {
+        try { window.localStorage.removeItem(name); window.localStorage.setItem(name, value); }
+        catch { /* cuota superada: se omite la persistencia sin romper la app */ }
+      }
+    },
+    removeItem: (name: string): void => {
+      try { window.localStorage.removeItem(name); } catch { /* noop */ }
+    },
+  };
+});
+
 export const useGranjasStore = create<GranjasState>()(
   persist(
     (set, get) => ({
@@ -632,9 +657,18 @@ export const useGranjasStore = create<GranjasState>()(
     }),
     {
       name: "savicol-granjas-store",
+      storage: safeStorage,
+      // Persistimos solo metadatos ligeros para pintado inicial rápido. Se EXCLUYE:
+      //  · anexosTecnicos de cada hallazgo (JSON pesado: mortalidad diaria, bultos, etc.)
+      //  · documentos (pueden traer contenido base64)
+      // Todo eso se rehidrata del API en cada sesión, así que no se pierde nada y se evita
+      // que el store supere la cuota de localStorage (QuotaExceededError).
       partialize: (s) => ({
-        granjas: s.granjas, auditorias: s.auditorias, hallazgos: s.hallazgos,
-        kpis: s.kpis, inventario: s.inventario, documentos: s.documentos,
+        granjas: s.granjas,
+        auditorias: s.auditorias,
+        hallazgos: s.hallazgos.map(({ anexosTecnicos, ...h }: any) => h),
+        kpis: s.kpis,
+        inventario: s.inventario,
         actividad: s.actividad,
       }),
     }
