@@ -122,24 +122,32 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
     const audMap = new Map<string, { v: Set<string>; hallazgos: number; criticos: number }>();
     hF.forEach(h => { const a = h.auditorNombre || "—"; if (!audMap.has(a)) audMap.set(a, { v: new Set(), hallazgos: 0, criticos: 0 }); const o = audMap.get(a)!; o.v.add(`${h.granjaId}|${h.fechaVisita}`); o.hallazgos++; if (norm(h.criticidad).startsWith("CRIT")) o.criticos++; });
     const auditores = Array.from(audMap, ([auditorNombre, o]) => ({ auditorNombre, visitas: o.v.size, hallazgos: o.hallazgos, criticos: o.criticos })).sort((a, b) => b.visitas - a.visitas);
-    // Hallazgos por auditor Ene–Jun (meses 0..5)
+    // Rango de meses DINÁMICO: de Enero hasta el mes ACTUAL (si el año del filtro es el año
+    // en curso); 12 meses si es un año pasado; solo Enero si es futuro. Se auto-extiende al
+    // avanzar el mes o ingresar nuevos hallazgos (p. ej. hoy = Ene–Jul).
+    const _now = new Date();
+    const _fy = Number(filters.year) || _now.getFullYear();
+    const lastMonth = _fy < _now.getFullYear() ? 11 : _fy > _now.getFullYear() ? 0 : _now.getMonth();
+    const MESES_ALL = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    const MESES_EJ = MESES_ALL.slice(0, lastMonth + 1);
+    const rango = `Ene–${MESES_EJ[MESES_EJ.length - 1] ?? "Ene"}`;
+    // Hallazgos por auditor (rango del año)
     const audHall = new Map<string, number>();
-    hF.forEach(h => { const m = Number((h.fechaVisita || "").slice(5, 7)) - 1; if (m >= 0 && m <= 5) audHall.set(h.auditorNombre || "—", (audHall.get(h.auditorNombre || "—") ?? 0) + 1); });
+    hF.forEach(h => { const m = Number((h.fechaVisita || "").slice(5, 7)) - 1; if (m >= 0 && m <= lastMonth) audHall.set(h.auditorNombre || "—", (audHall.get(h.auditorNombre || "—") ?? 0) + 1); });
     const hallPorAuditorEneJun = Array.from(audHall, ([auditorNombre, count]) => ({ auditorNombre, count })).sort((a, b) => b.count - a.count);
-    // Visitas por mes (Ene–Jun): una VISITA = un DÍA visitado (fecha distinta), NO por hallazgo.
-    const MESES_EJ = ["Ene", "Feb", "Mar", "Abr", "May", "Jun"];
-    const visSet: Set<string>[] = [0, 1, 2, 3, 4, 5].map(() => new Set<string>());
+    // Visitas por mes: una VISITA = un DÍA visitado (fecha distinta), NO por hallazgo.
+    const visSet: Set<string>[] = MESES_EJ.map(() => new Set<string>());
     const diaMap = new Map<string, { granjas: Set<string>; hallazgos: number }>();
     hF.forEach(h => {
       const f = h.fechaVisita || ""; const m = Number(f.slice(5, 7)) - 1;
-      if (m >= 0 && m <= 5) {
+      if (m >= 0 && m <= lastMonth) {
         visSet[m].add(f);
         if (!diaMap.has(f)) diaMap.set(f, { granjas: new Set(), hallazgos: 0 });
         const o = diaMap.get(f)!; o.granjas.add(h.granjaId); o.hallazgos++;
       }
     });
     const visitasPorMes = MESES_EJ.map((mes, i) => ({ mes, visitas: visSet[i].size }));
-    const visitasPorDia = Array.from(diaMap, ([fecha, o]) => ({ fecha, mes: MESES_EJ[Number(fecha.slice(5, 7)) - 1], granjas: o.granjas.size, hallazgos: o.hallazgos })).sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const visitasPorDia = Array.from(diaMap, ([fecha, o]) => ({ fecha, mes: MESES_ALL[Number(fecha.slice(5, 7)) - 1], granjas: o.granjas.size, hallazgos: o.hallazgos })).sort((a, b) => a.fecha.localeCompare(b.fecha));
     // Heatmap categoría × tipo de riesgo
     const cats = Array.from(new Set(hF.map(h => h.categoria).filter(Boolean)));
     const riesgos = Array.from(new Set(hF.flatMap(h => h.tiposRiesgo || []).filter(Boolean)));
@@ -151,7 +159,7 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
     const topRiesgo = Array.from(grR, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
     const topHall = Array.from(grH, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
     const categoriasAll = Array.from(new Set((hallazgosRaw as any[]).map(h => h.categoria).filter(Boolean))).sort();
-    return { total: hF.length, auditores, hallPorAuditorEneJun, visitasPorMes, visitasPorDia, heat, riesgos, heatMax, topRiesgo, topHall, categoriasAll };
+    return { total: hF.length, auditores, hallPorAuditorEneJun, visitasPorMes, visitasPorDia, heat, riesgos, heatMax, topRiesgo, topHall, categoriasAll, rango };
   }, [hallazgosRaw, filters]);
 
   const exec = execQ.data;
@@ -341,7 +349,7 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
                 <CategoriaChart data={exec.charts?.hallazgosPorCategoria}/>
               </ChartCard>
               {full && (<>
-              <ChartCard title="Visitas a Granjas por mes (Ene–Jun)" subtitle="Días visitados por mes (cada fecha distinta = 1 visita), desde Hallazgos · según año del filtro">
+              <ChartCard title={`Visitas a Granjas por mes (${hStats.rango})`} subtitle="Días visitados por mes (cada fecha distinta = 1 visita), desde Hallazgos · según año del filtro">
                 <VisitasMesChart data={hStats.visitasPorMes}/>
               </ChartCard>
               <ChartCard title="Distribución de Granjas por Tipo" subtitle="Propia · Arrendada · Integrada">
@@ -458,10 +466,10 @@ export default function DashboardGranjas({ mode = "completo" }: { mode?: "resume
 
         {full && hStats.total > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ChartCard title="Detalle de visitas por día (Ene–Jun)" subtitle="Cada fila = un día visitado; nº de granjas y hallazgos de ese día" full>
+            <ChartCard title={`Detalle de visitas por día (${hStats.rango})`} subtitle="Cada fila = un día visitado; nº de granjas y hallazgos de ese día" full>
               <VisitasDiaTable rows={hStats.visitasPorDia}/>
             </ChartCard>
-            <ChartCard title="Hallazgos por Auditor (Ene–Jun)" subtitle="Reportes registrados de enero a junio">
+            <ChartCard title={`Hallazgos por Auditor (${hStats.rango})`} subtitle={`Reportes registrados · ${hStats.rango}`}>
               <HallazgosAuditorChart data={hStats.hallPorAuditorEneJun}/>
             </ChartCard>
             <ChartCard title="Heatmap · Hallazgos vs Tipos de Riesgo" subtitle="Concentración por categoría y tipo de riesgo">
