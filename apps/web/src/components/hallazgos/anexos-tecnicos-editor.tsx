@@ -10,7 +10,7 @@ import {
   difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
   subtotalBloque, cantidadBloque, totalGeneralBultos,
   totalReporteConteo, totalReporteFisico, faltanteConciliacion, totalMortalidadAves,
-  totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalBultosConsumidos,
+  totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalBultosConsumidos, totalKgConsumidos,
   pctMortalidad, avesRecibidasTotal, num,
   calcMortalidadDiaria, calcBultosConsumidos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
@@ -242,9 +242,8 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
     const fisUnd = totalInventarioBultos(value);                                 // Bloque 3 (auto)
     const salUnd = salidaFilas.reduce((s, f) => s + num(f.cantidad), 0);         // Bloque 2 (manual)
     const salKg  = salidaFilas.reduce((s, f) => s + num(f.pesoTotalKg), 0);
-    const totalGeneral = ingUnd - salUnd - fisUnd;   // Ingreso − Salida − Conteo físico
-    const consumidos = totalBultosConsumidos(value); // validación
-    const difValidacion = totalGeneral - consumidos;
+    const consumidos = totalBultosConsumidos(value), consKg = totalKgConsumidos(value); // Bloque 4 (auto)
+    const totalGeneral = ingUnd - salUnd - fisUnd - consumidos; // Ingreso − Salida − Conteo físico − Consumidos
     const BloqueAuto = (n: number, titulo: string, fuente: string, und: number, kg: number | null, color: string) => (
       <div key={n} className="rounded-lg border border-[#1E2D4A] bg-[#0A111F] p-3">
         <div className="flex items-center justify-between mb-1">
@@ -288,24 +287,14 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
           <button type="button" onClick={addSalida} className="px-3 py-1 rounded text-[11px] bg-[#1A2540] text-white flex items-center gap-1 hover:bg-[#22304d]"><Plus className="w-3 h-3" />Agregar fila</button>
         </div>
         {BloqueAuto(3, "Conteo físico Bultos", "Inventario Bultos", fisUnd, null, "#8B5CF6")}
-        {/* Total general = Ingreso − Salida − Conteo físico */}
+        {BloqueAuto(4, "Bultos Consumidos", "Bultos Consumidos", consumidos, consKg, "#14B8A6")}
+        {/* Total general = Ingreso − Salida − Conteo físico − Bultos Consumidos */}
         <div className="rounded-lg border border-[#2A3F6A] bg-[#0D1526] p-3 flex items-center justify-between">
           <div>
             <div className="text-[11px] font-semibold text-white">Total general (faltante de bultos)</div>
-            <div className="text-[9px] text-[#475569]">Ingreso − Salida − Conteo físico = {fmt(ingUnd)} − {fmt(salUnd)} − {fmt(fisUnd)}</div>
+            <div className="text-[9px] text-[#475569]">Ingreso − Salida − Conteo físico − Bultos consumidos = {fmt(ingUnd)} − {fmt(salUnd)} − {fmt(fisUnd)} − {fmt(consumidos)}</div>
           </div>
           <span className="text-xl font-bold" style={{ color: totalGeneral !== 0 ? "#EF4444" : "#22C55E" }}>{fmt(totalGeneral)} <span className="text-[11px] text-[#94A3B8]">bultos</span></span>
-        </div>
-        {/* Recuadro de validación contra Bultos Consumidos */}
-        <div className="rounded-lg border border-[#4A7AFF]/30 bg-[#0A111F] p-3 space-y-1.5">
-          <div className="text-[11px] font-semibold text-[#4A7AFF] uppercase tracking-wide">Validación vs Bultos Consumidos</div>
-          <div className="flex items-center justify-between text-xs"><span className="text-[#94A3B8]">Bultos consumidos (pestaña)</span><span className="font-semibold text-white">{fmt(consumidos)} bultos</span></div>
-          <div className="flex items-center justify-between text-xs"><span className="text-[#94A3B8]">Total general (faltante)</span><span className="font-semibold text-white">{fmt(totalGeneral)} bultos</span></div>
-          <div className="flex items-center justify-between px-1 pt-1.5 border-t border-[#1E2D4A]">
-            <span className="text-[11px] text-[#94A3B8]">Diferencia entre ambos</span>
-            <span className="text-sm font-bold" style={{ color: difValidacion === 0 ? "#22C55E" : "#F97316" }}>{fmt(difValidacion)}</span>
-          </div>
-          <p className="text-[10px] text-[#475569]">{difValidacion === 0 ? "El faltante coincide con los bultos consumidos." : "Revisar: el faltante no coincide con los bultos consumidos."}</p>
         </div>
         {/* Observaciones (manual) */}
         <div>
