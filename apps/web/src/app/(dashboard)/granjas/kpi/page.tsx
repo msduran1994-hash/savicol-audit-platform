@@ -782,11 +782,12 @@ function seccionTrazabilidadKPI(
 }
 
 // ─── SECCIÓN HALLAZGOS TABLA ──────────────────────────────────────────────────
-function seccionHallazgos(hallazgos: any[], granjas: any[], limite=15): string {
+function seccionHallazgos(hallazgos: any[], granjas: any[], limite=15, introHTML=""): string {
   const lista = hallazgos.slice(0, limite);
   return `
   <div class="section">
     <div class="section-title">Hallazgos Identificados${hallazgos.length > limite ? ` (mostrando ${limite} de ${hallazgos.length})` : ""}</div>
+    ${introHTML}
     <table>
       <thead><tr>
         <th>Hallazgo</th><th>Granja</th><th>Auditor</th><th>Fecha</th><th>Riesgo</th><th>Estado</th>
@@ -1586,9 +1587,40 @@ function seccionRecomendaciones(kpis: any[], hallazgos: any[]): string {
     <ol style="font-size:13px;line-height:1.8;color:#334155;padding-left:18px;margin:0">${recs.map(r => `<li>${r}</li>`).join("")}</ol></div>`;
 }
 
+// Párrafo ejecutivo (prosa) que resume la auditoría — va al inicio de Hallazgos Identificados.
+function resumenCorporativoParrafo(kpis: any[], hallazgos: any[]): string {
+  const total = hallazgos.length;
+  const cLow = (h: any) => (h.criticidad || "").toString().toLowerCase();
+  const criticos = hallazgos.filter(h => cLow(h).startsWith("crít") || cLow(h).startsWith("crit")).length;
+  const altos = hallazgos.filter(h => cLow(h).startsWith("alt")).length;
+  const eLow = (h: any) => (h.estado || "").toString().toLowerCase();
+  const abiertos = hallazgos.filter(h => eLow(h).includes("abierto")).length;
+  const cerrados = hallazgos.filter(h => eLow(h).includes("cerrad")).length;
+  const enPlan = hallazgos.filter(h => eLow(h).includes("plan")).length;
+  const granjasN = new Set(hallazgos.map(h => h.granjaId).filter(Boolean)).size;
+  const avance = kpis.length ? Math.round(kpis.reduce((s, k) => s + (Number(k.porcentajeAvance) || 0), 0) / kpis.length) : 0;
+  const compl = kpis.filter(k => /complet/i.test(k.estado || "")).length;
+  return `<div style="font-size:12px;line-height:1.6;color:#334155;text-align:justify;margin-bottom:10px;page-break-inside:avoid">
+    <strong>Resumen corporativo.</strong> La presente auditoría identificó <strong>${total}</strong> hallazgo(s) en <strong>${granjasN}</strong> granja(s)${criticos || altos ? ` (${criticos} crítico(s), ${altos} alto(s))` : ""}. Al corte, ${abiertos} permanece(n) abierto(s), ${enPlan} en plan de acción y ${cerrados} cerrado(s). Los ${kpis.length} plan(es) de acción KPI registran un avance global del <strong>${avance}%</strong> (${compl} completado(s)). ${criticos > 0 ? "Se requiere atención prioritaria sobre los hallazgos críticos identificados." : "No se registran hallazgos de criticidad máxima pendientes."}</div>`;
+}
+
+// Sección de PANELES de Resumen Ejecutivo (completo) por hallazgo, para un generador dado.
+// Reutiliza resumenEjecutivoHTML. Va inmediatamente después de la tabla correspondiente.
+function seccionPaneles(hallazgos: any[], granjas: any[], titulo: string, gen: (a: any) => ResumenEjecutivo | null): string {
+  const items = hallazgos.map(h => ({ h, r: safeResumen(() => gen(parseAnexos(h.anexosTecnicos))) })).filter(x => x.r) as { h: any; r: ResumenEjecutivo }[];
+  if (!items.length) return "";
+  const bloques = items.map(({ h, r }) => {
+    const g = granjas.find(gr => gr.id === h.granjaId);
+    return `<div style="page-break-inside:avoid;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:#0D1526;margin-bottom:4px">${h.titulo?.slice(0, 70) || "Hallazgo"} <span style="font-weight:400;color:#64748b">· ${g?.nombre || "—"}</span></div>
+      ${resumenEjecutivoHTML(r, "completo")}</div>`;
+  }).join("");
+  return `<div class="section"><div class="section-title">${titulo}</div>${bloques}</div>`;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// MODELO 1 — EJECUTIVO CORPORATIVO (lean: hallazgos, planes, mortalidad, evidencias)
-// Sin dashboards ni gráficos. Las secciones profesionales van solo en el General.
+// MODELO 1 — EJECUTIVO CORPORATIVO (reestructurado: tablas completas + paneles ejecutivos)
+// Sin la tarjeta "Resumen Ejecutivo"; el resumen corporativo va como párrafo en Hallazgos.
 // ═══════════════════════════════════════════════════════════════════════════════
 function generarModelo1(
   kpis: any[], hallazgos: any[], granjas: any[], auditor: string,
@@ -1600,27 +1632,26 @@ function generarModelo1(
 <style>${CSS_BASE}</style></head><body><div class="page">
 ${portada("Informe Ejecutivo de Auditoría", "Control Interno y Cumplimiento KPI", kpis, hallazgos, auditor, undefined, datos)}
 
-${seccionResumen(kpis, hallazgos)}
-
 ${seccionMortalidad(mortalidad, granjas, hallazgos)}
+${seccionPaneles(hallazgos, granjas, "Resumen Ejecutivo · Indicadores de Mortalidad", (a) => resumenRecepcionAves(a))}
 
-${seccionHallazgos(hallazgos, granjas, 20)}
+${seccionHallazgos(hallazgos, granjas, 20, resumenCorporativoParrafo(kpis, hallazgos))}
 
 ${seccionKPIs(kpis, granjas, hallazgos)}
 
-${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
+${seccionMortalidadDiaria(hallazgos, granjas, "detalle")}
+${seccionPaneles(hallazgos, granjas, "Resumen Ejecutivo · Registro Mortalidad Diaria", (a) => resumenMortalidadDiaria(a.registroMortalidadDiaria))}
+
+${seccionBultosConsumidos(hallazgos, granjas, "detalle")}
+${seccionPaneles(hallazgos, granjas, "Resumen Ejecutivo · Bultos Consumidos por Día", (a) => resumenBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a)))}
 
 ${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
 
-${seccionBitacora(hallazgos, granjas, "resumen")}
+${seccionBitacora(hallazgos, granjas, "detalle")}
 
-${seccionColaboradores(hallazgos, granjas, "resumen")}
+${seccionColaboradores(hallazgos, granjas, "detalle")}
 
-${seccionMortalidadDiaria(hallazgos, granjas, "resumen")}
-
-${seccionBultosConsumidos(hallazgos, granjas, "resumen")}
-
-${seccionResumenesEjecutivos(hallazgos, granjas, "sintesis")}
+${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
 
 ${seccionFirma(auditor, "Auditor Interno", datos)}
 ${footer()}
@@ -2211,9 +2242,10 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
     const colocarElemento = async (el: HTMLElement, prof: number): Promise<void> => {
       const hmmAprox = el.offsetHeight * mmPerPx;
       const hijos = Array.from(el.children).filter((c): c is HTMLElement => c instanceof HTMLElement && c.offsetHeight > 0);
-      // Recursión de UN solo nivel: los hijos directos de las secciones se colocan
-      // enteros, centrados según su ancho real (grillas de 2 columnas se mantienen).
-      if (hmmAprox > usableH && prof < 1 && hijos.length > 1) {
+      // Recursión de hasta DOS niveles: sección → bloques por hallazgo → tabla/panel. Así
+      // los bloques altos (tabla + panel) se colocan por partes ENTERAS en vez de cortarse,
+      // reduciendo también los espacios en blanco. Cada bloque se centra por su ancho real.
+      if (hmmAprox > usableH && prof < 2 && hijos.length > 1) {
         for (const hijo of hijos) await colocarElemento(hijo, prof + 1);
         return;
       }
