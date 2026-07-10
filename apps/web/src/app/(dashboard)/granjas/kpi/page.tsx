@@ -13,7 +13,7 @@ import {
   pesoTotalIngreso, subtotalBloque, cantidadBloque, totalGeneralBultos, num as anexNum,
   faltanteConciliacion, recepcionResumenTieneDatos, pctMortalidad, avesRecibidasTotal,
   calcMortalidadDiaria, calcBultosConsumidos, registroMortalidadTieneDatos,
-  totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalBultosConsumidos, totalKgConsumidos,
+  totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalInventarioBultosSolo, totalInventarioLonas, totalBultosConsumidos, totalKgConsumidos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
   type ResumenEjecutivo,
 } from "@/lib/anexos-tecnicos";
@@ -1058,6 +1058,7 @@ function seccionAnexosTecnicos(hallazgos: any[], granjas: any[], modo: "resumen"
     const _salF = a.totalBultos.bloques[0]?.filas ?? [];
     const _sal = _salF.reduce((s: number, f: any) => s + anexNum(f.cantidad), 0), _salKg = _salF.reduce((s: number, f: any) => s + anexNum(f.pesoTotalKg), 0);
     const _fis = totalInventarioBultos(a), _cons = totalBultosConsumidos(a), _consKg = totalKgConsumidos(a);
+    const _bultosSolo = totalInventarioBultosSolo(a), _lonas = totalInventarioLonas(a), _difSolo = _ing - _sal - _bultosSolo;
     if (_ing > 0 || _sal > 0 || _fis > 0 || _cons > 0 || a.totalBultos.observaciones?.trim()) {
       const totGral = _ing - _sal - _fis - _cons;
       if (modo === "detalle") {
@@ -1068,8 +1069,10 @@ function seccionAnexosTecnicos(hallazgos: any[], granjas: any[], modo: "resumen"
             <tr><td>Conteo físico Bultos</td>${R(_fis)}<td style="text-align:right">—</td></tr>
             <tr><td>Bultos Consumidos</td>${R(_cons)}<td style="text-align:right">${_fmtAnx(_consKg)}</td></tr>
             <tr><td style="text-align:right;font-weight:700">Total general (Ingreso − Salida − Conteo físico − Bultos consumidos)</td><td style="text-align:right;font-weight:800;color:${totGral !== 0 ? "#EF4444" : "#22C55E"}">${_fmtAnx(totGral)}</td><td></td></tr>
+            <tr><td style="text-align:right;font-weight:700">Diferencia solo Bultos (Ingreso − Salida − Conteo físico, solo bultos)</td><td style="text-align:right;font-weight:800;color:${_difSolo !== 0 ? "#EF4444" : "#22C55E"}">${_fmtAnx(_difSolo)}</td><td></td></tr>
+            <tr><td>Total lonas (Inventario Bultos)</td>${R(_lonas)}<td style="text-align:right">—</td></tr>
           </tbody></table>${a.totalBultos.observaciones?.trim() ? `<div style="font-size:11px;margin-top:4px"><strong>Observaciones:</strong> ${a.totalBultos.observaciones}</div>` : ""}`);
-      } else t.push(`<div style="font-size:11px;color:#475569">• Total de Bultos: ingreso ${_fmtAnx(_ing)} − salida ${_fmtAnx(_sal)} − físico ${_fmtAnx(_fis)} − consumidos ${_fmtAnx(_cons)} = faltante <strong>${_fmtAnx(totGral)}</strong> bultos</div>`);
+      } else t.push(`<div style="font-size:11px;color:#475569">• Total de Bultos: ingreso ${_fmtAnx(_ing)} − salida ${_fmtAnx(_sal)} − físico ${_fmtAnx(_fis)} − consumidos ${_fmtAnx(_cons)} = faltante <strong>${_fmtAnx(totGral)}</strong> bultos · dif. solo bultos <strong>${_fmtAnx(_difSolo)}</strong> · lonas ${_fmtAnx(_lonas)}</div>`);
     }
 
     return `<div style="page-break-inside:avoid;margin-bottom:${modo === "detalle" ? "16" : "8"}px;${modo === "detalle" ? "border:1px solid #e2e8f0;border-radius:8px;padding:12px" : ""}">

@@ -10,7 +10,7 @@ import {
   difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
   subtotalBloque, cantidadBloque, totalGeneralBultos,
   totalReporteConteo, totalReporteFisico, faltanteConciliacion, totalMortalidadAves, difConteoMortalidad,
-  totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalBultosConsumidos, totalKgConsumidos,
+  totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalInventarioBultosSolo, totalInventarioLonas, totalBultosConsumidos, totalKgConsumidos,
   pctMortalidad, avesRecibidasTotal, num,
   calcMortalidadDiaria, calcBultosConsumidos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
@@ -244,6 +244,8 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
     const salKg  = salidaFilas.reduce((s, f) => s + num(f.pesoTotalKg), 0);
     const consumidos = totalBultosConsumidos(value), consKg = totalKgConsumidos(value); // Bloque 4 (auto)
     const totalGeneral = ingUnd - salUnd - fisUnd - consumidos; // Ingreso − Salida − Conteo físico − Consumidos
+    const bultosSolo = totalInventarioBultosSolo(value), lonas = totalInventarioLonas(value); // Inventario: bultos / lonas
+    const difSoloBultos = ingUnd - salUnd - bultosSolo; // Ingreso − Salida − Conteo físico (SOLO bultos, sin lonas)
     const BloqueAuto = (n: number, titulo: string, fuente: string, und: number, kg: number | null, color: string) => (
       <div key={n} className="rounded-lg border border-[#1E2D4A] bg-[#0A111F] p-3">
         <div className="flex items-center justify-between mb-1">
@@ -295,6 +297,20 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             <div className="text-[9px] text-[#475569]">Ingreso − Salida − Conteo físico − Bultos consumidos = {fmt(ingUnd)} − {fmt(salUnd)} − {fmt(fisUnd)} − {fmt(consumidos)}</div>
           </div>
           <span className="text-xl font-bold" style={{ color: totalGeneral !== 0 ? "#EF4444" : "#22C55E" }}>{fmt(totalGeneral)} <span className="text-[11px] text-[#94A3B8]">bultos</span></span>
+        </div>
+        {/* Diferencia SOLO bultos (sin lonas) + total de lonas del Inventario */}
+        <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[11px] font-semibold text-white">Diferencia solo Bultos (sin lonas)</div>
+              <div className="text-[9px] text-[#475569]">Ingreso − Salida − Conteo físico (solo bultos) = {fmt(ingUnd)} − {fmt(salUnd)} − {fmt(bultosSolo)}</div>
+            </div>
+            <span className="text-xl font-bold" style={{ color: difSoloBultos !== 0 ? "#EF4444" : "#22C55E" }}>{fmt(difSoloBultos)} <span className="text-[11px] text-[#94A3B8]">bultos</span></span>
+          </div>
+          <div className="flex items-center justify-between px-1 pt-1.5 border-t border-[#1E2D4A]">
+            <span className="text-[11px] text-[#94A3B8]">Total lonas (Inventario Bultos)</span>
+            <span className="text-sm font-bold text-[#8B5CF6]">{fmt(lonas)} lonas</span>
+          </div>
         </div>
         {/* Observaciones (manual) */}
         <div>

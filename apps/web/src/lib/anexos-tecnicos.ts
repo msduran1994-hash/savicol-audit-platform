@@ -167,6 +167,9 @@ export const difConteoMortalidad = (a: AnexosTecnicos) => totalReporteConteo(a) 
 export const totalIngresoUnidades  = (a: AnexosTecnicos) => a.ingresoBultos.reduce((s, r) => s + num(r.unidades), 0);
 export const totalIngresoKg        = (a: AnexosTecnicos) => a.ingresoBultos.reduce((s, r) => s + pesoTotalIngreso(r), 0);
 export const totalInventarioBultos = (a: AnexosTecnicos) => a.inventarioBultos.reduce((s, r) => s + totalInvBultos(r), 0);
+// Solo la columna "bultos" (sin lonas) y solo la columna "lonas" del Inventario Bultos.
+export const totalInventarioBultosSolo = (a: AnexosTecnicos) => a.inventarioBultos.reduce((s, r) => s + num(r.bultos), 0);
+export const totalInventarioLonas      = (a: AnexosTecnicos) => a.inventarioBultos.reduce((s, r) => s + num(r.lonas), 0);
 export const totalBultosConsumidos = (a: AnexosTecnicos) => calcBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a)).totalBultos;
 export const totalKgConsumidos     = (a: AnexosTecnicos) => calcBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a)).totalKg;
 export const conciliacionBultos    = (a: AnexosTecnicos) => totalIngresoUnidades(a) - totalBultosConsumidos(a) - totalInventarioBultos(a);
