@@ -9,10 +9,22 @@ import type {
   DocumentoGranja, ActividadLog,
 } from "../lib/granjas.types";
 import { apiPost, apiPatch, apiDelete } from "../lib/api";
+import { getQueryClient } from "../lib/query-client";
 import {
   TIPO_GRANJA_TO_DB, TIPO_OPERATIVO_TO_DB, NIVEL_RIESGO_TO_DB,
   ESTADO_SANITARIO_TO_DB, ESTADO_GRANJA_TO_DB, toDB,
 } from "../lib/enum-labels";
+
+// Tras guardar en el API, invalida las cachés de react-query del módulo Granjas para que
+// DataHydration recargue y el Dashboard Dinámico e informes KPI reflejen el cambio AL
+// INSTANTE (sin esperar el staleTime ni recargar la página).
+function invalidateGranjas() {
+  try {
+    const qc = getQueryClient();
+    ["hallazgos", "kpis", "granjas", "granjas-dashboard", "actividad-granjas", "auditorias-granjas"]
+      .forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  } catch { /* sin cliente (SSR): se ignora */ }
+}
 
 // Normaliza Display → DB para enviar al API
 function granjaToDB(g: Partial<Granja>): any {
@@ -535,6 +547,7 @@ export const useGranjasStore = create<GranjasState>()(
         try {
           const real = await apiPost<Hallazgo>("/granjas/hallazgos", hallazgoToDB(h));
           set((s) => ({ hallazgos: s.hallazgos.map((x) => x.id === tempId ? { ...optimistic, id: real.id } : x) }));
+          invalidateGranjas();
         } catch (e) {
           // Rollback optimista + re-throw para que la UI muestre el error
           set((s) => ({ hallazgos: s.hallazgos.filter((x) => x.id !== tempId) }));
@@ -546,7 +559,7 @@ export const useGranjasStore = create<GranjasState>()(
         const before = get().hallazgos;
         set((s) => ({ hallazgos: s.hallazgos.map((h) => h.id === id ? { ...h, ...patch, updatedAt: new Date().toISOString() } : h) }));
         if (id.startsWith("tmp_") || id.startsWith("DEMO_HAL_")) return;
-        try { await apiPatch(`/granjas/hallazgos/${id}`, hallazgoToDB(patch)); }
+        try { await apiPatch(`/granjas/hallazgos/${id}`, hallazgoToDB(patch)); invalidateGranjas(); }
         catch (e) {
           set({ hallazgos: before });
           console.error("[granjas-store] updateHallazgo failed:", e);
@@ -573,6 +586,7 @@ export const useGranjasStore = create<GranjasState>()(
         try {
           const real = await apiPost<KPI>("/granjas/kpis", kpiToDB(k));
           set((s) => ({ kpis: s.kpis.map((x) => x.id === tempId ? { ...optimistic, id: real.id } : x) }));
+          invalidateGranjas();
         } catch (e) {
           set((s) => ({ kpis: s.kpis.filter((x) => x.id !== tempId) }));
           console.error("[granjas-store] addKPI failed:", e);
@@ -583,7 +597,7 @@ export const useGranjasStore = create<GranjasState>()(
         const before = get().kpis;
         set((s) => ({ kpis: s.kpis.map((k) => k.id === id ? { ...k, ...patch, updatedAt: new Date().toISOString() } : k) }));
         if (id.startsWith("tmp_") || id.startsWith("DEMO_KPI_")) return;
-        try { await apiPatch(`/granjas/kpis/${id}`, kpiToDB(patch)); }
+        try { await apiPatch(`/granjas/kpis/${id}`, kpiToDB(patch)); invalidateGranjas(); }
         catch (e) {
           set({ kpis: before });
           console.error("[granjas-store] updateKPI failed:", e);
@@ -594,7 +608,7 @@ export const useGranjasStore = create<GranjasState>()(
         const before = get().hallazgos;
         set((s) => ({ hallazgos: s.hallazgos.filter(h => h.id !== id) }));
         if (id.startsWith("tmp_") || id.startsWith("DEMO_HAL_")) return;
-        try { await apiDelete(`/granjas/hallazgos/${id}`); }
+        try { await apiDelete(`/granjas/hallazgos/${id}`); invalidateGranjas(); }
         catch (e) {
           set({ hallazgos: before });
           console.error("removeHallazgo failed:", e);
@@ -627,7 +641,7 @@ export const useGranjasStore = create<GranjasState>()(
         const before = get().kpis;
         set((s) => ({ kpis: s.kpis.filter(k => k.id !== id) }));
         if (id.startsWith("tmp_") || id.startsWith("DEMO_KPI_")) return;
-        try { await apiDelete(`/granjas/kpis/${id}`); }
+        try { await apiDelete(`/granjas/kpis/${id}`); invalidateGranjas(); }
         catch (e) {
           set({ kpis: before });
           console.error("removeKPI failed:", e);
