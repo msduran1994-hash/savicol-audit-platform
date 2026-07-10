@@ -13,6 +13,7 @@ import {
   pesoTotalIngreso, subtotalBloque, cantidadBloque, totalGeneralBultos, num as anexNum,
   faltanteConciliacion, recepcionResumenTieneDatos, pctMortalidad, avesRecibidasTotal,
   calcMortalidadDiaria, calcBultosConsumidos, registroMortalidadTieneDatos,
+  totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalBultosConsumidos, totalKgConsumidos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
   type ResumenEjecutivo,
 } from "@/lib/anexos-tecnicos";
@@ -1027,7 +1028,7 @@ const _fmtAnx = (n: number): string => n.toLocaleString("es-CO", { maximumFracti
 // Solo "Inventario de Alimento" (bultos). La mortalidad (conteo de picos + recepción
 // de aves) se muestra en la sección Indicadores de Mortalidad.
 function seccionAnexosTecnicos(hallazgos: any[], granjas: any[], modo: "resumen" | "detalle"): string {
-  const tieneAlimento = (a: any) => a.inventarioBultos.length > 0 || a.ingresoBultos.length > 0 || a.totalBultos.bloques.some((b: any) => b.filas.length);
+  const tieneAlimento = (a: any) => a.inventarioBultos.length > 0 || a.ingresoBultos.length > 0 || a.registroBultosConsumidos.semanas.some((w: any[]) => w.length);
   const conAnexos = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) })).filter(x => tieneAlimento(x.a));
   if (!conAnexos.length) return "";
   const th = (cols: string[]) => `<thead><tr>${cols.map(c => `<th>${c}</th>`).join("")}</tr></thead>`;
@@ -1049,14 +1050,20 @@ function seccionAnexosTecnicos(hallazgos: any[], granjas: any[], modo: "resumen"
         <table>${th(["Fecha", "Concepto", "Unidades", "Cantidad (Kg)", "Peso Total Kg"])}<tbody>${a.ingresoBultos.map(r => `<tr><td>${r.fecha || "—"}</td><td>${r.concepto || "—"}</td>${R(r.unidades)}${R(r.cantidadKg)}<td style="text-align:right;font-weight:700">${_fmtAnx(pesoTotalIngreso(r))}</td></tr>`).join("")}<tr><td colspan="4" style="text-align:right;font-weight:700">Peso total (Kg)</td><td style="text-align:right;font-weight:800;color:#22C55E">${_fmtAnx(tot)}</td></tr></tbody></table>`);
       else t.push(`<div style="font-size:11px;color:#475569">• Ingreso de Bultos: ${a.ingresoBultos.length} registro(s) · <strong>${_fmtAnx(tot)}</strong> Kg</div>`);
     }
-    if (a.totalBultos.bloques.some(b => b.filas.length) || a.totalBultos.observaciones?.trim()) {
-      const totGral = totalGeneralBultos(a.totalBultos);
+    // Total de Bultos · Conciliación (Ingreso − Salida − Conteo físico, en unidades).
+    const _ing = totalIngresoUnidades(a), _sal = totalBultosConsumidos(a), _fis = totalInventarioBultos(a);
+    if (_ing > 0 || _sal > 0 || _fis > 0 || a.totalBultos.observaciones?.trim()) {
+      const totGral = _ing - _sal - _fis;
       if (modo === "detalle") {
-        const bl = a.totalBultos.bloques.map(b => `<div style="font-size:10px;font-weight:700;color:#0D1526;margin:6px 0 2px">${b.titulo || "Bloque"}</div>
-          <table>${th(["Concepto", "Cantidad", "Peso Total Kg"])}<tbody>${b.filas.map(f => `<tr><td>${f.concepto || "—"}</td>${R(f.cantidad)}${R(f.pesoTotalKg)}</tr>`).join("")}<tr><td style="text-align:right;font-weight:700">Subtotal · ${_fmtAnx(cantidadBloque(b))} und</td><td colspan="2" style="text-align:right;font-weight:700;color:#22C55E">${_fmtAnx(subtotalBloque(b))} Kg</td></tr></tbody></table>`).join("");
-        t.push(`<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 4px">Total de Bultos</div>${bl}
-          <div style="font-size:11px;margin-top:4px"><strong>Total General:</strong> <strong style="color:#22C55E">${_fmtAnx(totGral)} Kg</strong> · Diferencias: ${_fmtAnx(anexNum(a.totalBultos.diferencias))}${a.totalBultos.observaciones?.trim() ? `<br><strong>Observaciones:</strong> ${a.totalBultos.observaciones}` : ""}</div>`);
-      } else t.push(`<div style="font-size:11px;color:#475569">• Total de Bultos: ${a.totalBultos.bloques.length} bloque(s) · total general <strong>${_fmtAnx(totGral)}</strong> Kg · dif. ${_fmtAnx(anexNum(a.totalBultos.diferencias))}</div>`);
+        t.push(`<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 4px">Total de Bultos · Conciliación</div>
+          <table>${th(["Bloque", "Fuente", "Bultos", "Kg"])}<tbody>
+            <tr><td>Ingreso Bultos Alimento</td><td>Ingreso de Bultos</td>${R(_ing)}<td style="text-align:right">${_fmtAnx(totalIngresoKg(a))}</td></tr>
+            <tr><td>Salida de Bultos</td><td>Bultos Consumidos</td>${R(_sal)}<td style="text-align:right">${_fmtAnx(totalKgConsumidos(a))}</td></tr>
+            <tr><td>Conteo físico Bultos</td><td>Inventario Bultos</td>${R(_fis)}<td style="text-align:right">—</td></tr>
+            <tr><td colspan="2" style="text-align:right;font-weight:700">Total general (Ingreso − Salida − Conteo físico)</td><td style="text-align:right;font-weight:800;color:${totGral !== 0 ? "#EF4444" : "#22C55E"}">${_fmtAnx(totGral)}</td><td></td></tr>
+          </tbody></table>
+          <div style="font-size:11px;margin-top:4px"><strong>Validación vs Bultos Consumidos:</strong> consumidos <strong>${_fmtAnx(_sal)}</strong> · faltante <strong>${_fmtAnx(totGral)}</strong> · diferencia <strong>${_fmtAnx(totGral - _sal)}</strong>${a.totalBultos.observaciones?.trim() ? `<br><strong>Observaciones:</strong> ${a.totalBultos.observaciones}` : ""}</div>`);
+      } else t.push(`<div style="font-size:11px;color:#475569">• Total de Bultos: ingreso ${_fmtAnx(_ing)} − salida ${_fmtAnx(_sal)} − físico ${_fmtAnx(_fis)} = faltante <strong>${_fmtAnx(totGral)}</strong> bultos</div>`);
     }
 
     return `<div style="page-break-inside:avoid;margin-bottom:${modo === "detalle" ? "16" : "8"}px;${modo === "detalle" ? "border:1px solid #e2e8f0;border-radius:8px;padding:12px" : ""}">

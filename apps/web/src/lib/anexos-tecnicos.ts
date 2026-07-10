@@ -155,6 +155,17 @@ export const avesRecibidasTotal = (a: AnexosTecnicos) => a.recepcionAves.reduce(
 // del acta, que en la UI se muestra como "Diferencia").
 export const totalMortalidadAves = (a: AnexosTecnicos) => avesRecibidasTotal(a) - num(a.recepcionAvesResumen.reporteSaldoAves);
 
+// ─── Conciliación de inventario de bultos (pestaña "Total de Bultos", en unidades) ──
+// Los 3 bloques son automáticos: Ingreso (pestaña Ingreso de Bultos), Salida (pestaña
+// Bultos Consumidos) y Conteo físico (pestaña Inventario Bultos). Total general = Ingreso
+// − Salida − Conteo físico = faltante de bultos, que se valida contra Bultos Consumidos.
+export const totalIngresoUnidades  = (a: AnexosTecnicos) => a.ingresoBultos.reduce((s, r) => s + num(r.unidades), 0);
+export const totalIngresoKg        = (a: AnexosTecnicos) => a.ingresoBultos.reduce((s, r) => s + pesoTotalIngreso(r), 0);
+export const totalInventarioBultos = (a: AnexosTecnicos) => a.inventarioBultos.reduce((s, r) => s + totalInvBultos(r), 0);
+export const totalBultosConsumidos = (a: AnexosTecnicos) => calcBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a)).totalBultos;
+export const totalKgConsumidos     = (a: AnexosTecnicos) => calcBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a)).totalKg;
+export const conciliacionBultos    = (a: AnexosTecnicos) => totalIngresoUnidades(a) - totalBultosConsumidos(a) - totalInventarioBultos(a);
+
 // % Mortalidad = (Aves Recibidas − Reporte Saldo de Aves) / Aves Recibidas × 100.
 // Devuelve null si el total de aves recibidas no es > 0 (regla de validación).
 export function pctMortalidad(a: AnexosTecnicos): number | null {

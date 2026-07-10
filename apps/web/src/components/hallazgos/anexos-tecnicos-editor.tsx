@@ -10,6 +10,7 @@ import {
   difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
   subtotalBloque, cantidadBloque, totalGeneralBultos,
   totalReporteConteo, totalReporteFisico, faltanteConciliacion, totalMortalidadAves,
+  totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalBultosConsumidos, totalKgConsumidos,
   pctMortalidad, avesRecibidasTotal, num,
   calcMortalidadDiaria, calcBultosConsumidos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
@@ -235,7 +236,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
       <div className="flex flex-wrap gap-1.5">
         {TABS.map(t => {
           const activo = tab === t.key;
-          const n = t.key === "totalBultos" ? tb.bloques.length
+          const n = t.key === "totalBultos" ? 0
             : t.key === "mortalidadDiaria" ? value.registroMortalidadDiaria.semanas.length
             : t.key === "bultosConsumidos" ? value.registroBultosConsumidos.semanas.length
             : (value[t.key] as any[]).length;
@@ -350,56 +351,57 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
         </div>
       )}
 
-      {tab === "totalBultos" && (
-        <div className="space-y-3">
-          {tb.bloques.length === 0 && <p className="text-[11px] text-[#475569]">Sin bloques. Usa "Agregar bloque".</p>}
-          {tb.bloques.map((b, bi) => (
-            <div key={bi} className="rounded-lg border border-[#1E2D4A] p-3 space-y-2">
-              <div className="flex items-center gap-2">
-                <input value={b.titulo ?? ""} onChange={e => editBloque(bi, { titulo: e.target.value })} placeholder={`Bloque ${bi + 1} — concepto/título`} className={INP + " flex-1"} />
-                <button type="button" onClick={() => setTB({ bloques: tb.bloques.filter((_, i) => i !== bi) })} className="text-[#94A3B8] hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+      {tab === "totalBultos" && (() => {
+        // Conciliación automática de inventario de bultos (todo en unidades/bultos).
+        const ingUnd = totalIngresoUnidades(value), ingKg = totalIngresoKg(value);
+        const salUnd = totalBultosConsumidos(value), salKg = totalKgConsumidos(value);
+        const fisUnd = totalInventarioBultos(value);
+        const totalGeneral = ingUnd - salUnd - fisUnd;  // Ingreso − Salida − Conteo físico
+        const difValidacion = totalGeneral - salUnd;    // vs total de Bultos Consumidos
+        const Bloque = (n: number, titulo: string, fuente: string, und: number, kg: number | null, color: string) => (
+          <div key={n} className="rounded-lg border border-[#1E2D4A] bg-[#0A111F] p-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-semibold text-white">Bloque {n} · {titulo}</span>
+              <span className="text-[9px] text-[#475569]">auto · {fuente}</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <div><span className="text-lg font-bold" style={{ color }}>{fmt(und)}</span> <span className="text-[10px] text-[#94A3B8]">bultos</span></div>
+              {kg !== null && <div><span className="text-sm font-semibold text-[#0EA5E9]">{fmt(kg)}</span> <span className="text-[10px] text-[#94A3B8]">Kg</span></div>}
+            </div>
+          </div>
+        );
+        return (
+          <div className="space-y-3">
+            {Bloque(1, "Ingreso Bultos Alimento", "Ingreso de Bultos", ingUnd, ingKg, "#22C55E")}
+            {Bloque(2, "Salida de Bultos", "Bultos Consumidos", salUnd, salKg, "#F97316")}
+            {Bloque(3, "Conteo físico Bultos", "Inventario Bultos", fisUnd, null, "#8B5CF6")}
+            {/* Total general = Ingreso − Salida − Conteo físico */}
+            <div className="rounded-lg border border-[#2A3F6A] bg-[#0D1526] p-3 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-semibold text-white">Total general (faltante de bultos)</div>
+                <div className="text-[9px] text-[#475569]">Ingreso − Salida − Conteo físico = {fmt(ingUnd)} − {fmt(salUnd)} − {fmt(fisUnd)}</div>
               </div>
-              <div className="overflow-x-auto rounded border border-[#1E2D4A]">
-                <table className="w-full text-xs">
-                  <thead><tr className="bg-[#0A111F] text-[#94A3B8]"><th className="px-2 py-1 text-left">Concepto</th><th className="px-2 py-1 text-left">Cantidad</th><th className="px-2 py-1 text-left">Peso Total Kg</th><th className="w-8"></th></tr></thead>
-                  <tbody>
-                    {b.filas.map((f, fi) => (
-                      <tr key={fi} className="border-t border-[#1E2D4A]">
-                        <td className="px-2 py-1"><input value={f.concepto ?? ""} onChange={e => editFila(bi, fi, { concepto: e.target.value })} className={INP} /></td>
-                        <td className="px-2 py-1"><input type="number" step="any" value={f.cantidad ?? ""} onChange={e => editFila(bi, fi, { cantidad: e.target.value })} className={INP} /></td>
-                        <td className="px-2 py-1"><input type="number" step="any" value={f.pesoTotalKg ?? ""} onChange={e => editFila(bi, fi, { pesoTotalKg: e.target.value })} className={INP} /></td>
-                        <td className="px-1 text-center"><button type="button" onClick={() => editBloque(bi, { filas: b.filas.filter((_, i) => i !== fi) })} className="text-[#94A3B8] hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot><tr className="border-t border-[#2A3F6A] bg-[#0A111F]">
-                    <td className="px-2 py-1 text-right font-semibold text-[#94A3B8]">Subtotal · {fmt(cantidadBloque(b))} und</td>
-                    <td colSpan={2} className="px-2 py-1 font-bold text-[#22C55E]">{fmt(subtotalBloque(b))} Kg</td><td></td>
-                  </tr></tfoot>
-                </table>
+              <span className="text-xl font-bold" style={{ color: totalGeneral !== 0 ? "#EF4444" : "#22C55E" }}>{fmt(totalGeneral)} <span className="text-[11px] text-[#94A3B8]">bultos</span></span>
+            </div>
+            {/* Recuadro de validación contra Bultos Consumidos */}
+            <div className="rounded-lg border border-[#4A7AFF]/30 bg-[#0A111F] p-3 space-y-1.5">
+              <div className="text-[11px] font-semibold text-[#4A7AFF] uppercase tracking-wide">Validación vs Bultos Consumidos</div>
+              <div className="flex items-center justify-between text-xs"><span className="text-[#94A3B8]">Bultos consumidos (pestaña)</span><span className="font-semibold text-white">{fmt(salUnd)} bultos</span></div>
+              <div className="flex items-center justify-between text-xs"><span className="text-[#94A3B8]">Total general (faltante)</span><span className="font-semibold text-white">{fmt(totalGeneral)} bultos</span></div>
+              <div className="flex items-center justify-between px-1 pt-1.5 border-t border-[#1E2D4A]">
+                <span className="text-[11px] text-[#94A3B8]">Diferencia entre ambos</span>
+                <span className="text-sm font-bold" style={{ color: difValidacion === 0 ? "#22C55E" : "#F97316" }}>{fmt(difValidacion)}</span>
               </div>
-              <button type="button" onClick={() => editBloque(bi, { filas: [...b.filas, { concepto: "", cantidad: "", pesoTotalKg: "" } as any] })} className="px-3 py-1 rounded text-[11px] bg-[#1A2540] text-white flex items-center gap-1 hover:bg-[#22304d]"><Plus className="w-3 h-3" />Agregar fila</button>
+              <p className="text-[10px] text-[#475569]">{difValidacion === 0 ? "Los datos concilian exactamente." : "Revisar: el faltante no coincide con los bultos consumidos."}</p>
             </div>
-          ))}
-          <button type="button" onClick={() => setTB({ bloques: [...tb.bloques, { titulo: "", filas: [] }] })} className="px-3 py-1.5 rounded-lg text-xs bg-[#1A2540] text-white flex items-center gap-1.5 hover:bg-[#22304d]"><Plus className="w-3.5 h-3.5" />Agregar bloque</button>
-
-          {/* Totales de toda la tabla */}
-          <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-[#94A3B8] font-semibold">Total General</span>
-              <span className="text-[#22C55E] font-bold text-sm">{fmt(totalGeneralBultos(tb))} Kg</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-[#94A3B8] w-24 shrink-0">Diferencias</span>
-              <input type="number" step="any" value={(tb.diferencias as any) || ""} onChange={e => setTB({ diferencias: e.target.value as any })} className={INP} />
-            </div>
+            {/* Observaciones (manual) */}
             <div>
               <span className="text-[11px] text-[#94A3B8] mb-1 block">Observaciones</span>
               <textarea value={tb.observaciones ?? ""} onChange={e => setTB({ observaciones: e.target.value })} rows={2} className={INP + " resize-none"} />
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {tab === "mortalidadDiaria" && MortalidadDiariaTab()}
       {tab === "bultosConsumidos" && BultosConsumidosTab()}
