@@ -11,7 +11,7 @@ import { evidenciasGridHTML } from "@/lib/pdf-evidencias";
 import {
   parseAnexos, anexosTienenDatos, difConteoPicos, totalRecepcion, totalInvBultos,
   pesoTotalIngreso, subtotalBloque, cantidadBloque, totalGeneralBultos, num as anexNum,
-  difFaltanteMortalidad, recepcionResumenTieneDatos, pctMortalidad, avesRecibidasTotal,
+  faltanteConciliacion, recepcionResumenTieneDatos, pctMortalidad, avesRecibidasTotal,
   calcMortalidadDiaria, calcBultosConsumidos, registroMortalidadTieneDatos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
   type ResumenEjecutivo,
@@ -926,17 +926,16 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
     .filter(x => x.a.actaConteoPicos.length > 0 || x.a.recepcionAves.length > 0 || recepcionResumenTieneDatos(x.a.recepcionAvesResumen));
   let anexosHTML = "";
   if (conAnexos.length) {
-    let conteo = 0, fisico = 0, aves = 0;
-    let repActa = 0, repSaldo = 0, saldoIdent = 0, faltante = 0;
+    let conteo = 0, fisico = 0, aves = 0, repSaldo = 0;
     conAnexos.forEach(({ a }) => {
       a.actaConteoPicos.forEach(r => { conteo += anexNum(r.reporteConteo); fisico += anexNum(r.reporteFisico); });
       a.recepcionAves.forEach(r => aves += totalRecepcion(r));
-      const rr = a.recepcionAvesResumen;
-      repActa += anexNum(rr.reporteActaConteoPicos); repSaldo += anexNum(rr.reporteSaldoAves);
-      saldoIdent += anexNum(rr.saldoIdentificadoAves); faltante += anexNum(rr.faltanteAvesCorte);
+      repSaldo += anexNum(a.recepcionAvesResumen.reporteSaldoAves);
     });
-    const difFalt = faltante - repActa;
-    const hayConcil = repActa !== 0 || repSaldo !== 0 || saldoIdent !== 0 || faltante !== 0;
+    // Conciliación reestructurada: acta conteo = Σ conteo, saldo identificado = Σ físico,
+    // faltante = conteo − físico (= Diferencia). "Reporte saldo de aves" es el único manual.
+    const faltanteConcil = conteo - fisico;
+    const hayConcil = conteo !== 0 || fisico !== 0 || repSaldo !== 0;
     // Indicador PRINCIPAL: % Mortalidad = (aves recibidas − reporte saldo) / aves recibidas
     const mortNueva = aves - repSaldo;
     const pctNueva = aves > 0 ? (mortNueva / aves) * 100 : null;
@@ -990,11 +989,11 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
       ${hayConcil ? `
       <div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:12px 0 2px">Conciliación de saldo de aves</div>
       <table><tbody>
-        <tr><td>Reporte acta conteo de picos (mortalidad reportada)</td><td style="text-align:right;font-weight:700">${fmt(repActa)}</td></tr>
+        <tr><td>Reporte acta conteo de picos (Σ Reporte conteo)</td><td style="text-align:right;font-weight:700">${fmt(conteo)}</td></tr>
         <tr><td>Reporte saldo de aves</td><td style="text-align:right">${fmt(repSaldo)}</td></tr>
-        <tr><td>Saldo identificado de aves</td><td style="text-align:right">${fmt(saldoIdent)}</td></tr>
-        <tr><td>Faltante aves al corte</td><td style="text-align:right;font-weight:700">${fmt(faltante)}</td></tr>
-        <tr><td style="font-weight:700;color:#0D1526">Diferencia (faltante − mortalidad reportada)</td><td style="text-align:right;font-weight:800;font-size:15px;color:${difFalt !== 0 ? "#EF4444" : "#22C55E"}">${fmt(difFalt)}</td></tr>
+        <tr><td>Saldo identificado de aves (Σ Reporte físico)</td><td style="text-align:right">${fmt(fisico)}</td></tr>
+        <tr><td>Faltante aves al corte (conteo − identificado)</td><td style="text-align:right;font-weight:700">${fmt(faltanteConcil)}</td></tr>
+        <tr><td style="font-weight:700;color:#0D1526">Diferencia (Reporte conteo − Saldo identificado)</td><td style="text-align:right;font-weight:800;font-size:15px;color:${faltanteConcil !== 0 ? "#EF4444" : "#22C55E"}">${fmt(faltanteConcil)}</td></tr>
       </tbody></table>` : ""}
     </div>`;
   }
@@ -1369,7 +1368,7 @@ function indicadoresResumenes(hallazgos: any[]): string {
       const c = calcMortalidadDiaria(a.registroMortalidadDiaria);
       if (c.pctAcumuladoFinal !== null) { if (c.pctAcumuladoFinal >= 8) critica++; else if (c.pctAcumuladoFinal >= 4) elevada++; }
     }
-    if (anexNum(a.recepcionAvesResumen.faltanteAvesCorte) > 0) conFaltante++;
+    if (faltanteConciliacion(a) > 0) conFaltante++;
     if (a.registroBultosConsumidos.semanas.some((w: any[]) => w.length)) {
       const cb = calcBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a));
       if (cb.consumoAcumuladoAveFinal !== null) { sumConsAve += cb.consumoAcumuladoAveFinal; nConsAve++; }

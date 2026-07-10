@@ -8,7 +8,8 @@ import { Plus, Trash2 } from "lucide-react";
 import {
   AnexosTecnicos, TotalBultosBloque,
   difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
-  subtotalBloque, cantidadBloque, totalGeneralBultos, difFaltanteMortalidad,
+  subtotalBloque, cantidadBloque, totalGeneralBultos,
+  totalReporteConteo, totalReporteFisico, faltanteConciliacion,
   pctMortalidad, avesRecibidasTotal, num,
   calcMortalidadDiaria, calcBultosConsumidos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
@@ -28,6 +29,8 @@ type TabKey = typeof TABS[number]["key"];
 type SimpleKey = "actaConteoPicos" | "recepcionAves" | "inventarioBultos" | "ingresoBultos";
 
 const INP = "w-full px-2 py-1 bg-[#0A111F] border border-[#1E2D4A] rounded text-xs text-white focus:outline-none focus:border-[#4A7AFF]";
+// Campo de solo lectura (valor calculado automáticamente).
+const RO = "w-full px-2 py-1 bg-[#0D1526] border border-[#1E2D4A] rounded text-xs flex items-center justify-between gap-2";
 const fmt = (n: number) => n.toLocaleString("es-CO", { maximumFractionDigits: 2 });
 
 type Col = { key: string; label: string; type?: "text" | "number" | "date"; calc?: (r: any) => number };
@@ -269,25 +272,34 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             emptyRow: { fecha: "", machos: "", hembras: "" },
             totalCol: { label: "Total aves recibidas", calc: totalRecepcion },
           })}
-          {/* Conciliación de saldo vs mortalidad reportada */}
+          {/* Conciliación de saldo de aves — 3 totales automáticos (del Acta Conteo de Picos) + 1 manual */}
           <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 space-y-2">
             <div className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide">Conciliación de saldo de aves</div>
             <div className="grid grid-cols-2 gap-2">
-              {([
-                ["reporteActaConteoPicos", "Reporte acta conteo de picos"],
-                ["reporteSaldoAves", "Reporte saldo de aves"],
-                ["saldoIdentificadoAves", "Saldo identificado de aves"],
-                ["faltanteAvesCorte", "Faltante aves al corte"],
-              ] as const).map(([k, label]) => (
-                <div key={k}>
-                  <span className="text-[10px] text-[#94A3B8] mb-1 block">{label}</span>
-                  <input type="number" step="any" value={(res[k] as any) || ""} onChange={e => setRes({ [k]: e.target.value } as any)} className={INP} />
-                </div>
-              ))}
+              {/* Reporte acta conteo de picos = Σ "Reporte conteo" (automático) */}
+              <div>
+                <span className="text-[10px] text-[#94A3B8] mb-1 block">Reporte acta conteo de picos</span>
+                <div className={RO}><span className="text-[#22C55E] font-semibold">{fmt(totalReporteConteo(value))}</span><span className="text-[9px] text-[#475569]">Σ Reporte conteo</span></div>
+              </div>
+              {/* Reporte saldo de aves = manual */}
+              <div>
+                <span className="text-[10px] text-[#94A3B8] mb-1 block">Reporte saldo de aves</span>
+                <input type="number" step="any" value={(res.reporteSaldoAves as any) || ""} onChange={e => setRes({ reporteSaldoAves: e.target.value } as any)} className={INP} />
+              </div>
+              {/* Saldo identificado de aves = Σ "Reporte físico" (automático) */}
+              <div>
+                <span className="text-[10px] text-[#94A3B8] mb-1 block">Saldo identificado de aves</span>
+                <div className={RO}><span className="text-[#22C55E] font-semibold">{fmt(totalReporteFisico(value))}</span><span className="text-[9px] text-[#475569]">Σ Reporte físico</span></div>
+              </div>
+              {/* Faltante aves al corte = Reporte conteo − Saldo identificado (automático) */}
+              <div>
+                <span className="text-[10px] text-[#94A3B8] mb-1 block">Faltante aves al corte</span>
+                <div className={RO}><span className="font-semibold" style={{ color: faltanteConciliacion(value) !== 0 ? "#F97316" : "#22C55E" }}>{fmt(faltanteConciliacion(value))}</span><span className="text-[9px] text-[#475569]">conteo − identificado</span></div>
+              </div>
             </div>
             <div className="flex items-center justify-between px-1 pt-2 border-t border-[#1E2D4A]">
-              <span className="text-[11px] text-[#94A3B8]">Diferencia (faltante − mortalidad reportada)</span>
-              <span className="text-sm font-bold" style={{ color: difFaltanteMortalidad(res) !== 0 ? "#EF4444" : "#22C55E" }}>{fmt(difFaltanteMortalidad(res))}</span>
+              <span className="text-[11px] text-[#94A3B8]">Diferencia (Reporte conteo − Saldo identificado)</span>
+              <span className="text-sm font-bold" style={{ color: faltanteConciliacion(value) !== 0 ? "#EF4444" : "#22C55E" }}>{fmt(faltanteConciliacion(value))}</span>
             </div>
             {/* % Mortalidad (indicador principal) = (aves recibidas − saldo) / aves recibidas */}
             <div className="flex items-center justify-between rounded-lg bg-[#0D1526] border border-[#4A7AFF]/30 px-3 py-2">

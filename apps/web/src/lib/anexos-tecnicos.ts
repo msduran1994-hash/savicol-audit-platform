@@ -137,6 +137,16 @@ export const totalGeneralBultos  = (t: TotalBultos)         => t.bloques.reduce(
 // Diferencia entre el faltante de aves al corte y la mortalidad reportada (acta conteo de picos).
 export const difFaltanteMortalidad = (r: RecepcionAvesResumen) => num(r.faltanteAvesCorte) - num(r.reporteActaConteoPicos);
 
+// ─── Conciliación de saldo de aves (derivada de la pestaña Acta Conteo de Picos) ──
+// Reestructura: 3 de los 4 campos se calculan del acta; solo "Reporte saldo de aves"
+// (recepcionAvesResumen.reporteSaldoAves) sigue siendo manual.
+//  · Reporte acta conteo de picos = Σ "Reporte conteo"
+//  · Saldo identificado de aves    = Σ "Reporte físico"
+//  · Faltante aves al corte        = Σ Reporte conteo − Σ Reporte físico
+export const totalReporteConteo   = (a: AnexosTecnicos) => a.actaConteoPicos.reduce((s, r) => s + num(r.reporteConteo), 0);
+export const totalReporteFisico   = (a: AnexosTecnicos) => a.actaConteoPicos.reduce((s, r) => s + num(r.reporteFisico), 0);
+export const faltanteConciliacion = (a: AnexosTecnicos) => totalReporteConteo(a) - totalReporteFisico(a);
+
 // Total de aves recibidas (suma de machos + hembras de la pestaña Recepción de Aves).
 export const avesRecibidasTotal = (a: AnexosTecnicos) => a.recepcionAves.reduce((s, r) => s + totalRecepcion(r), 0);
 
@@ -334,56 +344,53 @@ export function resumenBultosConsumidos(r: RegistroBultosConsumidos, mort: Regis
 export function resumenRecepcionAves(a: AnexosTecnicos): ResumenEjecutivo | null {
   const filas = a.recepcionAves || [];
   const res = a.recepcionAvesResumen;
-  if (filas.length === 0 && !recepcionResumenTieneDatos(res)) return null;
+  const conteoTotal = totalReporteConteo(a);    // Reporte acta conteo de picos = Σ Reporte conteo
+  const identificado = totalReporteFisico(a);   // Saldo identificado de aves    = Σ Reporte físico
+  const faltante = conteoTotal - identificado;  // Faltante aves al corte        = conteo − identificado
+  const saldoRep = num(res.reporteSaldoAves);   // manual
+  if (filas.length === 0 && a.actaConteoPicos.length === 0 && saldoRep === 0) return null;
   const recibidas = avesRecibidasTotal(a);
   const machos = filas.reduce((s, r) => s + num(r.machos), 0);
   const hembras = filas.reduce((s, r) => s + num(r.hembras), 0);
-  const faltante = num(res.faltanteAvesCorte);
-  const saldoRep = num(res.reporteSaldoAves);
-  const mortReport = num(res.reporteActaConteoPicos);
-  const difFalt = difFaltanteMortalidad(res);
   const pct = pctMortalidad(a);
   const pctDif = recibidas > 0 ? (faltante / recibidas) * 100 : null;
 
-  const consistencia: string[] = [];
-  if (recibidas > 0 && recepcionResumenTieneDatos(res)) {
-    const saldoEsperado = recibidas - mortReport;
-    const dif = saldoRep - saldoEsperado;
-    consistencia.push(Math.abs(dif) < 1
-      ? "El reporte de saldo de aves es consistente con (recibidas − mortalidad reportada)."
-      : `El reporte de saldo (${f2(saldoRep)}) difiere en ${f2(dif)} respecto al saldo esperado de ${f2(saldoEsperado)} (recibidas − mortalidad reportada); revisar el conteo.`);
-  } else consistencia.push("Datos insuficientes para validar la consistencia del saldo.");
+  const consistencia = a.actaConteoPicos.length === 0
+    ? "Sin registros en el acta de conteo de picos para validar la conciliación."
+    : faltante === 0
+    ? "El conteo de picos coincide con el saldo físicamente identificado: sin faltante."
+    : `El conteo de picos (${f2(conteoTotal)}) supera al saldo identificado (${f2(identificado)}) en ${f2(faltante)} aves.`;
 
-  const causas = difFalt > 0
-    ? "El faltante supera la mortalidad reportada: posibles causas incluyen mortalidad no registrada, errores de conteo o extravío de aves."
-    : difFalt < 0
-    ? "La mortalidad reportada supera el faltante al corte: posible doble conteo o inconsistencia en los registros."
-    : "Faltante y mortalidad reportada coinciden; registro consistente.";
+  const causas = faltante > 0
+    ? "El faltante (conteo − identificado) puede deberse a mortalidad no reflejada en el conteo físico, errores de conteo o extravío de aves; se recomienda verificar."
+    : faltante < 0
+    ? "El saldo identificado supera al conteo de picos: posible doble conteo o error de digitación en el acta."
+    : "Conteo e identificación físicos concilian; registro consistente.";
 
   return {
     titulo: "Resumen Ejecutivo · Recepción de Aves",
     metricas: [
       { label: "Total recibido", valor: f2(recibidas), color: "#4A7AFF" },
       { label: "Machos / Hembras", valor: `${f2(machos)} / ${f2(hembras)}` },
-      { label: "Faltante al corte", valor: f2(faltante), color: faltante > 0 ? "#EF4444" : "#22C55E" },
+      { label: "Faltante al corte", valor: f2(faltante), color: faltante !== 0 ? "#F97316" : "#22C55E" },
       { label: "% Mortalidad", valor: pct === null ? "—" : f2(pct) + "%", color: pct === null ? "#94A3B8" : colorMort(pct) },
     ],
     secciones: [
       { titulo: "Total y conciliación", lineas: [
         `Se recibieron ${f2(recibidas)} aves${machos + hembras > 0 ? ` (${f2(machos)} machos y ${f2(hembras)} hembras)` : ""} en ${filas.length} registro(s).`,
-        recepcionResumenTieneDatos(res) ? `Reporte de saldo de aves: ${f2(saldoRep)}; saldo identificado: ${f2(num(res.saldoIdentificadoAves))}; faltante al corte: ${f2(faltante)}.` : "Sin bloque de conciliación diligenciado.",
+        a.actaConteoPicos.length ? `Reporte acta conteo de picos: ${f2(conteoTotal)}; saldo identificado (físico): ${f2(identificado)}; faltante al corte: ${f2(faltante)}. Reporte saldo de aves: ${f2(saldoRep)}.` : "Sin acta de conteo de picos diligenciada.",
       ] },
       { titulo: "Diferencias y % de diferencia", lineas: [
-        pctDif === null ? "No es posible calcular el % de diferencia sin aves recibidas." : `El faltante representa un ${f2(pctDif)}% de las aves recibidas.`,
-        `Diferencia entre el faltante al corte y la mortalidad reportada: ${f2(difFalt)} aves${difFalt !== 0 ? " — no concilian exactamente." : " — concilian."}`,
+        pctDif === null ? "No es posible calcular el % del faltante sin aves recibidas." : `El faltante representa un ${f2(pctDif)}% de las aves recibidas.`,
+        `Faltante = Reporte conteo − Saldo identificado = ${f2(conteoTotal)} − ${f2(identificado)} = ${f2(faltante)} aves.`,
       ] },
-      { titulo: "Validación de consistencia", lineas: consistencia },
+      { titulo: "Validación de consistencia", lineas: [consistencia] },
       { titulo: "Posibles causas", lineas: [causas] },
       { titulo: "Impacto operativo", lineas: [
-        faltante > 0 ? `Un faltante de ${f2(faltante)} aves${pctDif !== null ? ` (${f2(pctDif)}%)` : ""} tiene impacto directo sobre el inventario y la proyección productiva del lote.` : "No se registró faltante de aves con impacto sobre el inventario.",
+        faltante !== 0 ? `Un faltante de ${f2(faltante)} aves${pctDif !== null ? ` (${f2(pctDif)}%)` : ""} tiene impacto directo sobre el inventario y la proyección productiva del lote.` : "No se registró faltante de aves con impacto sobre el inventario.",
       ] },
       { titulo: "Conclusión técnica", lineas: [
-        `Recepción de ${f2(recibidas)} aves con un faltante al corte de ${f2(faltante)}${pct !== null ? ` y una mortalidad estimada del ${f2(pct)}%` : ""}. ${difFalt !== 0 ? "Se recomienda conciliar el conteo de picos con el saldo reportado." : "Los registros concilian adecuadamente."}`,
+        `Recepción de ${f2(recibidas)} aves con un faltante al corte de ${f2(faltante)}${pct !== null ? ` y una mortalidad estimada del ${f2(pct)}%` : ""}. ${faltante !== 0 ? "Se recomienda conciliar el acta de conteo de picos con el saldo físico." : "Los registros concilian adecuadamente."}`,
       ] },
     ],
   };
