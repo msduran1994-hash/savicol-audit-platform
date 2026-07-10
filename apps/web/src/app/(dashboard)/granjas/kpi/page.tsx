@@ -992,7 +992,7 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
         <tr><td>Reporte acta conteo de picos (Σ Reporte conteo)</td><td style="text-align:right;font-weight:700">${fmt(conteo)}</td></tr>
         <tr><td>Reporte saldo de aves</td><td style="text-align:right">${fmt(repSaldo)}</td></tr>
         <tr><td>Saldo identificado de aves (Σ Reporte físico)</td><td style="text-align:right">${fmt(fisico)}</td></tr>
-        <tr><td>Faltante aves al corte (conteo − identificado)</td><td style="text-align:right;font-weight:700">${fmt(faltanteConcil)}</td></tr>
+        <tr><td>Total mortalidad de aves (recibidas − reporte saldo)</td><td style="text-align:right;font-weight:700;color:#EF4444">${fmt(mortNueva)}</td></tr>
         <tr><td style="font-weight:700;color:#0D1526">Diferencia (Reporte conteo − Saldo identificado)</td><td style="text-align:right;font-weight:800;font-size:15px;color:${faltanteConcil !== 0 ? "#EF4444" : "#22C55E"}">${fmt(faltanteConcil)}</td></tr>
       </tbody></table>` : ""}
     </div>`;

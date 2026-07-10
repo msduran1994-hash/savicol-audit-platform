@@ -9,7 +9,7 @@ import {
   AnexosTecnicos, TotalBultosBloque,
   difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
   subtotalBloque, cantidadBloque, totalGeneralBultos,
-  totalReporteConteo, totalReporteFisico, faltanteConciliacion,
+  totalReporteConteo, totalReporteFisico, faltanteConciliacion, totalMortalidadAves,
   pctMortalidad, avesRecibidasTotal, num,
   calcMortalidadDiaria, calcBultosConsumidos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
@@ -291,15 +291,19 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
                 <span className="text-[10px] text-[#94A3B8] mb-1 block">Saldo identificado de aves</span>
                 <div className={RO}><span className="text-[#22C55E] font-semibold">{fmt(totalReporteFisico(value))}</span><span className="text-[9px] text-[#475569]">Σ Reporte físico</span></div>
               </div>
-              {/* Faltante aves al corte = Reporte conteo − Saldo identificado (automático) */}
+              {/* Total mortalidad de aves = Aves recibidas − Reporte saldo de aves (automático; numerador del % real) */}
               <div>
-                <span className="text-[10px] text-[#94A3B8] mb-1 block">Faltante aves al corte</span>
-                <div className={RO}><span className="font-semibold" style={{ color: faltanteConciliacion(value) !== 0 ? "#F97316" : "#22C55E" }}>{fmt(faltanteConciliacion(value))}</span><span className="text-[9px] text-[#475569]">conteo − identificado</span></div>
+                <span className="text-[10px] text-[#94A3B8] mb-1 block">Total mortalidad de aves</span>
+                <div className={RO}><span className="font-semibold" style={{ color: "#EF4444" }}>{avesRecibidasTotal(value) > 0 ? fmt(totalMortalidadAves(value)) : "—"}</span><span className="text-[9px] text-[#475569]">recibidas − reporte saldo</span></div>
               </div>
             </div>
-            <div className="flex items-center justify-between px-1 pt-2 border-t border-[#1E2D4A]">
-              <span className="text-[11px] text-[#94A3B8]">Diferencia (Reporte conteo − Saldo identificado)</span>
-              <span className="text-sm font-bold" style={{ color: faltanteConciliacion(value) !== 0 ? "#EF4444" : "#22C55E" }}>{fmt(faltanteConciliacion(value))}</span>
+            {/* Cuadro aparte: Diferencia del acta = Reporte acta conteo de picos − Saldo identificado de aves */}
+            <div className="rounded-lg bg-[#0D1526] border border-[#1E2D4A] px-3 py-2 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-semibold text-[#E2E8F0]">Diferencia</div>
+                <div className="text-[9px] text-[#475569]">Reporte acta conteo de picos − Saldo identificado de aves</div>
+              </div>
+              <span className="text-lg font-bold" style={{ color: faltanteConciliacion(value) !== 0 ? "#F97316" : "#22C55E" }}>{fmt(faltanteConciliacion(value))}</span>
             </div>
             {/* % Mortalidad (indicador principal) = (aves recibidas − saldo) / aves recibidas */}
             <div className="flex items-center justify-between rounded-lg bg-[#0D1526] border border-[#4A7AFF]/30 px-3 py-2">
