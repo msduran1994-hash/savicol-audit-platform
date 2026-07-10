@@ -16,7 +16,7 @@ export interface RecepcionAvesResumen {
 }
 export interface InventarioBultosRow{ galpon: string; bultos: number; lonas: number; }
 export interface IngresoBultosRow   { fecha: string; concepto: string; unidades: number; cantidadKg: number; }
-export interface TotalBultosRow     { concepto: string; cantidad: number; pesoTotalKg: number; }
+export interface TotalBultosRow     { concepto: string; cantidad: number; pesoTotalKg: number; fecha?: string; }
 export interface TotalBultosBloque  { titulo: string; filas: TotalBultosRow[]; }
 export interface TotalBultos        { bloques: TotalBultosBloque[]; diferencias: number; observaciones: string; }
 // Bitácora de Ingreso a la Granja (sección aparte del hallazgo).

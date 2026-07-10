@@ -97,7 +97,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
   // Bultos e Inventario Bultos respectivamente.
   const salidaFilas = tb.bloques[0]?.filas ?? [];
   const setSalida  = (filas: any[]) => setTB({ bloques: [{ titulo: "Salida de Bultos", filas }] });
-  const addSalida  = () => setSalida([...salidaFilas, { concepto: "", cantidad: "", pesoTotalKg: "" } as any]);
+  const addSalida  = () => setSalida([...salidaFilas, { fecha: "", concepto: "", cantidad: "", pesoTotalKg: "" } as any]);
   const editSalida = (fi: number, patch: any) => setSalida(salidaFilas.map((f, i) => i === fi ? { ...f, ...patch } : f));
   const delSalida  = (fi: number) => setSalida(salidaFilas.filter((_, i) => i !== fi));
 
@@ -265,11 +265,12 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
           <div className="text-[11px] font-semibold text-[#4A7AFF]">Bloque 2 · Salida de Bultos <span className="text-[9px] text-[#475569] font-normal">manual</span></div>
           <div className="overflow-x-auto rounded border border-[#1E2D4A]">
             <table className="w-full text-xs">
-              <thead><tr className="bg-[#0A111F] text-[#94A3B8]"><th className="px-2 py-1 text-left">Concepto</th><th className="px-2 py-1 text-left">Cantidad (bultos)</th><th className="px-2 py-1 text-left">Peso Total Kg</th><th className="w-8"></th></tr></thead>
+              <thead><tr className="bg-[#0A111F] text-[#94A3B8]"><th className="px-2 py-1 text-left">Fecha salida</th><th className="px-2 py-1 text-left">Concepto</th><th className="px-2 py-1 text-left">Cantidad (bultos)</th><th className="px-2 py-1 text-left">Peso Total Kg</th><th className="w-8"></th></tr></thead>
               <tbody>
-                {salidaFilas.length === 0 && <tr><td colSpan={4} className="px-2 py-2 text-center text-[#475569]">Sin filas. Usa "Agregar fila".</td></tr>}
+                {salidaFilas.length === 0 && <tr><td colSpan={5} className="px-2 py-2 text-center text-[#475569]">Sin filas. Usa "Agregar fila".</td></tr>}
                 {salidaFilas.map((f, fi) => (
                   <tr key={fi} className="border-t border-[#1E2D4A]">
+                    <td className="px-2 py-1"><input type="date" value={f.fecha ?? ""} onChange={e => editSalida(fi, { fecha: e.target.value })} className={INP} /></td>
                     <td className="px-2 py-1"><input value={f.concepto ?? ""} onChange={e => editSalida(fi, { concepto: e.target.value })} className={INP} /></td>
                     <td className="px-2 py-1"><input type="number" step="any" value={(f.cantidad as any) ?? ""} onChange={e => editSalida(fi, { cantidad: e.target.value })} className={INP} /></td>
                     <td className="px-2 py-1"><input type="number" step="any" value={(f.pesoTotalKg as any) ?? ""} onChange={e => editSalida(fi, { pesoTotalKg: e.target.value })} className={INP} /></td>
@@ -278,7 +279,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
                 ))}
               </tbody>
               <tfoot><tr className="border-t border-[#2A3F6A] bg-[#0A111F]">
-                <td className="px-2 py-1 text-right font-semibold text-[#94A3B8]">Subtotal</td>
+                <td colSpan={2} className="px-2 py-1 text-right font-semibold text-[#94A3B8]">Subtotal</td>
                 <td className="px-2 py-1 font-bold text-[#F97316]">{fmt(salUnd)} bultos</td>
                 <td className="px-2 py-1 font-bold text-[#0EA5E9]">{fmt(salKg)} Kg</td><td></td>
               </tr></tfoot>
