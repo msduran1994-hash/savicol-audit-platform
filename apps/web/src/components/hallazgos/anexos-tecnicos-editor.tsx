@@ -10,7 +10,7 @@ import {
   difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
   subtotalBloque, cantidadBloque, totalGeneralBultos,
   totalReporteConteo, totalReporteFisico, faltanteConciliacion, totalMortalidadAves,
-  totalBultosConsumidos,
+  totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalBultosConsumidos,
   pctMortalidad, avesRecibidasTotal, num,
   calcMortalidadDiaria, calcBultosConsumidos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
@@ -92,12 +92,14 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
   // Total general = Ingreso − Salida − Conteo físico (en bultos), validado vs Bultos Consumidos.
   const tb = value.totalBultos;
   const setTB = (patch: Partial<typeof tb>) => set({ totalBultos: { ...tb, ...patch } });
-  const BLOQUE_TITULOS = ["Ingreso Bultos Alimento", "Salida de Bultos", "Conteo físico Bultos"];
-  const getBloque = (i: number) => (tb.bloques[i] ?? { titulo: BLOQUE_TITULOS[i], filas: [] }) as TotalBultosBloque;
-  const setBloqueFilas = (i: number, filas: any[]) => setTB({ bloques: [0, 1, 2].map(k => ({ titulo: BLOQUE_TITULOS[k], filas: k === i ? filas : (tb.bloques[k]?.filas ?? []) })) });
-  const addFilaB  = (i: number) => setBloqueFilas(i, [...getBloque(i).filas, { concepto: "", cantidad: "", pesoTotalKg: "" } as any]);
-  const editFilaB = (i: number, fi: number, patch: any) => setBloqueFilas(i, getBloque(i).filas.map((f, idx) => idx === fi ? { ...f, ...patch } : f));
-  const delFilaB  = (i: number, fi: number) => setBloqueFilas(i, getBloque(i).filas.filter((_, idx) => idx !== fi));
+  // Solo "Salida de Bultos" (Bloque 2) es manual → se guarda como único bloque. El Ingreso
+  // (Bloque 1) y el Conteo físico (Bloque 3) son AUTOMÁTICOS de las pestañas Ingreso de
+  // Bultos e Inventario Bultos respectivamente.
+  const salidaFilas = tb.bloques[0]?.filas ?? [];
+  const setSalida  = (filas: any[]) => setTB({ bloques: [{ titulo: "Salida de Bultos", filas }] });
+  const addSalida  = () => setSalida([...salidaFilas, { concepto: "", cantidad: "", pesoTotalKg: "" } as any]);
+  const editSalida = (fi: number, patch: any) => setSalida(salidaFilas.map((f, i) => i === fi ? { ...f, ...patch } : f));
+  const delSalida  = (fi: number) => setSalida(salidaFilas.filter((_, i) => i !== fi));
 
   // Resumen de "Recepción de Aves" (conciliación saldo vs mortalidad)
   const res = value.recepcionAvesResumen;
@@ -236,48 +238,60 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
   }
 
   function TotalBultosTab() {
-    const b0 = getBloque(0), b1 = getBloque(1), b2 = getBloque(2);
-    const c0 = cantidadBloque(b0), c1 = cantidadBloque(b1), c2 = cantidadBloque(b2);
-    const totalGeneral = c0 - c1 - c2;               // Ingreso − Salida − Conteo físico
+    const ingUnd = totalIngresoUnidades(value), ingKg = totalIngresoKg(value);  // Bloque 1 (auto)
+    const fisUnd = totalInventarioBultos(value);                                 // Bloque 3 (auto)
+    const salUnd = salidaFilas.reduce((s, f) => s + num(f.cantidad), 0);         // Bloque 2 (manual)
+    const salKg  = salidaFilas.reduce((s, f) => s + num(f.pesoTotalKg), 0);
+    const totalGeneral = ingUnd - salUnd - fisUnd;   // Ingreso − Salida − Conteo físico
     const consumidos = totalBultosConsumidos(value); // validación
     const difValidacion = totalGeneral - consumidos;
-    const BloqueTabla = (i: number, b: TotalBultosBloque) => (
-      <div key={i} className="rounded-lg border border-[#1E2D4A] p-3 space-y-2">
-        <div className="text-[11px] font-semibold text-[#4A7AFF]">Bloque {i + 1} · {BLOQUE_TITULOS[i]}</div>
-        <div className="overflow-x-auto rounded border border-[#1E2D4A]">
-          <table className="w-full text-xs">
-            <thead><tr className="bg-[#0A111F] text-[#94A3B8]"><th className="px-2 py-1 text-left">Concepto</th><th className="px-2 py-1 text-left">Cantidad (bultos)</th><th className="px-2 py-1 text-left">Peso Total Kg</th><th className="w-8"></th></tr></thead>
-            <tbody>
-              {b.filas.length === 0 && <tr><td colSpan={4} className="px-2 py-2 text-center text-[#475569]">Sin filas. Usa "Agregar fila".</td></tr>}
-              {b.filas.map((f, fi) => (
-                <tr key={fi} className="border-t border-[#1E2D4A]">
-                  <td className="px-2 py-1"><input value={f.concepto ?? ""} onChange={e => editFilaB(i, fi, { concepto: e.target.value })} className={INP} /></td>
-                  <td className="px-2 py-1"><input type="number" step="any" value={(f.cantidad as any) ?? ""} onChange={e => editFilaB(i, fi, { cantidad: e.target.value })} className={INP} /></td>
-                  <td className="px-2 py-1"><input type="number" step="any" value={(f.pesoTotalKg as any) ?? ""} onChange={e => editFilaB(i, fi, { pesoTotalKg: e.target.value })} className={INP} /></td>
-                  <td className="px-1 text-center"><button type="button" onClick={() => delFilaB(i, fi)} className="text-[#94A3B8] hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button></td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot><tr className="border-t border-[#2A3F6A] bg-[#0A111F]">
-              <td className="px-2 py-1 text-right font-semibold text-[#94A3B8]">Subtotal</td>
-              <td className="px-2 py-1 font-bold text-[#22C55E]">{fmt(cantidadBloque(b))} bultos</td>
-              <td className="px-2 py-1 font-bold text-[#0EA5E9]">{fmt(subtotalBloque(b))} Kg</td><td></td>
-            </tr></tfoot>
-          </table>
+    const BloqueAuto = (n: number, titulo: string, fuente: string, und: number, kg: number | null, color: string) => (
+      <div key={n} className="rounded-lg border border-[#1E2D4A] bg-[#0A111F] p-3">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[11px] font-semibold text-[#4A7AFF]">Bloque {n} · {titulo}</span>
+          <span className="text-[9px] text-[#475569]">auto · {fuente}</span>
         </div>
-        <button type="button" onClick={() => addFilaB(i)} className="px-3 py-1 rounded text-[11px] bg-[#1A2540] text-white flex items-center gap-1 hover:bg-[#22304d]"><Plus className="w-3 h-3" />Agregar fila</button>
+        <div className="flex items-center gap-4">
+          <div><span className="text-lg font-bold" style={{ color }}>{fmt(und)}</span> <span className="text-[10px] text-[#94A3B8]">bultos</span></div>
+          {kg !== null && <div><span className="text-sm font-semibold text-[#0EA5E9]">{fmt(kg)}</span> <span className="text-[10px] text-[#94A3B8]">Kg</span></div>}
+        </div>
       </div>
     );
     return (
       <div className="space-y-3">
-        {BloqueTabla(0, b0)}
-        {BloqueTabla(1, b1)}
-        {BloqueTabla(2, b2)}
+        {BloqueAuto(1, "Ingreso Bultos Alimento", "Ingreso de Bultos", ingUnd, ingKg, "#22C55E")}
+        {/* Bloque 2 · Salida de Bultos (manual) */}
+        <div className="rounded-lg border border-[#1E2D4A] p-3 space-y-2">
+          <div className="text-[11px] font-semibold text-[#4A7AFF]">Bloque 2 · Salida de Bultos <span className="text-[9px] text-[#475569] font-normal">manual</span></div>
+          <div className="overflow-x-auto rounded border border-[#1E2D4A]">
+            <table className="w-full text-xs">
+              <thead><tr className="bg-[#0A111F] text-[#94A3B8]"><th className="px-2 py-1 text-left">Concepto</th><th className="px-2 py-1 text-left">Cantidad (bultos)</th><th className="px-2 py-1 text-left">Peso Total Kg</th><th className="w-8"></th></tr></thead>
+              <tbody>
+                {salidaFilas.length === 0 && <tr><td colSpan={4} className="px-2 py-2 text-center text-[#475569]">Sin filas. Usa "Agregar fila".</td></tr>}
+                {salidaFilas.map((f, fi) => (
+                  <tr key={fi} className="border-t border-[#1E2D4A]">
+                    <td className="px-2 py-1"><input value={f.concepto ?? ""} onChange={e => editSalida(fi, { concepto: e.target.value })} className={INP} /></td>
+                    <td className="px-2 py-1"><input type="number" step="any" value={(f.cantidad as any) ?? ""} onChange={e => editSalida(fi, { cantidad: e.target.value })} className={INP} /></td>
+                    <td className="px-2 py-1"><input type="number" step="any" value={(f.pesoTotalKg as any) ?? ""} onChange={e => editSalida(fi, { pesoTotalKg: e.target.value })} className={INP} /></td>
+                    <td className="px-1 text-center"><button type="button" onClick={() => delSalida(fi)} className="text-[#94A3B8] hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button></td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr className="border-t border-[#2A3F6A] bg-[#0A111F]">
+                <td className="px-2 py-1 text-right font-semibold text-[#94A3B8]">Subtotal</td>
+                <td className="px-2 py-1 font-bold text-[#F97316]">{fmt(salUnd)} bultos</td>
+                <td className="px-2 py-1 font-bold text-[#0EA5E9]">{fmt(salKg)} Kg</td><td></td>
+              </tr></tfoot>
+            </table>
+          </div>
+          <button type="button" onClick={addSalida} className="px-3 py-1 rounded text-[11px] bg-[#1A2540] text-white flex items-center gap-1 hover:bg-[#22304d]"><Plus className="w-3 h-3" />Agregar fila</button>
+        </div>
+        {BloqueAuto(3, "Conteo físico Bultos", "Inventario Bultos", fisUnd, null, "#8B5CF6")}
         {/* Total general = Ingreso − Salida − Conteo físico */}
         <div className="rounded-lg border border-[#2A3F6A] bg-[#0D1526] p-3 flex items-center justify-between">
           <div>
             <div className="text-[11px] font-semibold text-white">Total general (faltante de bultos)</div>
-            <div className="text-[9px] text-[#475569]">Ingreso − Salida − Conteo físico = {fmt(c0)} − {fmt(c1)} − {fmt(c2)}</div>
+            <div className="text-[9px] text-[#475569]">Ingreso − Salida − Conteo físico = {fmt(ingUnd)} − {fmt(salUnd)} − {fmt(fisUnd)}</div>
           </div>
           <span className="text-xl font-bold" style={{ color: totalGeneral !== 0 ? "#EF4444" : "#22C55E" }}>{fmt(totalGeneral)} <span className="text-[11px] text-[#94A3B8]">bultos</span></span>
         </div>
