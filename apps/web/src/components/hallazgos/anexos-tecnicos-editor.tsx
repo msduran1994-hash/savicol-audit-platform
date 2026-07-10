@@ -9,7 +9,7 @@ import {
   AnexosTecnicos, TotalBultosBloque,
   difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
   subtotalBloque, cantidadBloque, totalGeneralBultos,
-  totalReporteConteo, totalReporteFisico, faltanteConciliacion, totalMortalidadAves,
+  totalReporteConteo, totalReporteFisico, faltanteConciliacion, totalMortalidadAves, difConteoMortalidad,
   totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalBultosConsumidos, totalKgConsumidos,
   pctMortalidad, avesRecibidasTotal, num,
   calcMortalidadDiaria, calcBultosConsumidos,
@@ -380,6 +380,14 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
                 <div className="text-[9px] text-[#475569]">Reporte acta conteo de picos − Saldo identificado de aves</div>
               </div>
               <span className="text-lg font-bold" style={{ color: faltanteConciliacion(value) !== 0 ? "#F97316" : "#22C55E" }}>{fmt(faltanteConciliacion(value))}</span>
+            </div>
+            {/* Cuadro aparte: Diferencia conteo de picos − Total mortalidad de aves */}
+            <div className="rounded-lg bg-[#0D1526] border border-[#1E2D4A] px-3 py-2 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-semibold text-[#E2E8F0]">Diferencia conteo vs mortalidad</div>
+                <div className="text-[9px] text-[#475569]">Reporte acta conteo de picos − Total mortalidad de aves</div>
+              </div>
+              <span className="text-lg font-bold" style={{ color: difConteoMortalidad(value) !== 0 ? "#F97316" : "#22C55E" }}>{fmt(difConteoMortalidad(value))}</span>
             </div>
             {/* % Mortalidad (indicador principal) = (aves recibidas − saldo) / aves recibidas */}
             <div className="flex items-center justify-between rounded-lg bg-[#0D1526] border border-[#4A7AFF]/30 px-3 py-2">

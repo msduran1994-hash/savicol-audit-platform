@@ -155,6 +155,11 @@ export const avesRecibidasTotal = (a: AnexosTecnicos) => a.recepcionAves.reduce(
 // del acta, que en la UI se muestra como "Diferencia").
 export const totalMortalidadAves = (a: AnexosTecnicos) => avesRecibidasTotal(a) - num(a.recepcionAvesResumen.reporteSaldoAves);
 
+// Diferencia entre el conteo de picos del acta y la mortalidad total registrada
+// (Reporte acta conteo de picos − Total mortalidad de aves): descuadre entre el conteo
+// físico de picos y lo registrado como mortalidad.
+export const difConteoMortalidad = (a: AnexosTecnicos) => totalReporteConteo(a) - totalMortalidadAves(a);
+
 // ─── Conciliación de inventario de bultos (pestaña "Total de Bultos", en unidades) ──
 // Los 3 bloques son automáticos: Ingreso (pestaña Ingreso de Bultos), Salida (pestaña
 // Bultos Consumidos) y Conteo físico (pestaña Inventario Bultos). Total general = Ingreso
@@ -399,6 +404,7 @@ export function resumenRecepcionAves(a: AnexosTecnicos): ResumenEjecutivo | null
       { titulo: "Mortalidad y diferencias", lineas: [
         recibidas > 0 ? `Total mortalidad de aves = aves recibidas − reporte saldo = ${f2(recibidas)} − ${f2(saldoRep)} = ${f2(mortalidadTotal)} aves${pct !== null ? ` (${f2(pct)}% de mortalidad)` : ""}.` : "No es posible calcular la mortalidad sin aves recibidas.",
         `Diferencia del acta = Reporte conteo − Saldo identificado = ${f2(conteoTotal)} − ${f2(identificado)} = ${f2(diferencia)} aves.`,
+        `Diferencia conteo vs mortalidad = Reporte conteo − Total mortalidad = ${f2(conteoTotal)} − ${f2(mortalidadTotal)} = ${f2(conteoTotal - mortalidadTotal)} aves.`,
       ] },
       { titulo: "Validación de consistencia", lineas: [consistencia] },
       { titulo: "Posibles causas", lineas: [causas] },
