@@ -386,7 +386,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
               {/* Total mortalidad de aves = Aves recibidas − Reporte saldo de aves (automático; numerador del % real) */}
               <div>
                 <span className="text-[10px] text-[#94A3B8] mb-1 block">Total mortalidad de aves</span>
-                <div className={RO}><span className="font-semibold" style={{ color: "#EF4444" }}>{avesRecibidasTotal(value) > 0 ? fmt(totalMortalidadAves(value)) : "—"}</span><span className="text-[9px] text-[#475569]">recibidas − reporte saldo</span></div>
+                <div className={RO}><span className="font-semibold" style={{ color: "#EF4444" }}>{fmt(totalMortalidadAves(value))}</span><span className="text-[9px] text-[#475569]">Σ mortalidad diaria</span></div>
               </div>
             </div>
             {/* Cuadro aparte: Diferencia del acta = Reporte acta conteo de picos − Saldo identificado de aves */}
@@ -409,7 +409,7 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
             <div className="flex items-center justify-between rounded-lg bg-[#0D1526] border border-[#4A7AFF]/30 px-3 py-2">
               <div>
                 <div className="text-[10px] text-[#94A3B8] uppercase tracking-wide">% Mortalidad</div>
-                <div className="text-[9px] text-[#475569]">(aves recibidas − reporte saldo) ÷ aves recibidas · {fmt(avesRecibidasTotal(value))} recibidas</div>
+                <div className="text-[9px] text-[#475569]">(Σ mortalidad diaria) ÷ aves recibidas · {fmt(avesRecibidasTotal(value))} recibidas</div>
               </div>
               {pctMortalidad(value) === null
                 ? <span className="text-[11px] text-amber-400">Requiere aves recibidas &gt; 0</span>

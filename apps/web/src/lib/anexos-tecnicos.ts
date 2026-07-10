@@ -150,10 +150,11 @@ export const faltanteConciliacion = (a: AnexosTecnicos) => totalReporteConteo(a)
 // Total de aves recibidas (suma de machos + hembras de la pestaña Recepción de Aves).
 export const avesRecibidasTotal = (a: AnexosTecnicos) => a.recepcionAves.reduce((s, r) => s + totalRecepcion(r), 0);
 
-// Total mortalidad de aves = Aves Recibidas − Reporte Saldo de Aves (el numerador del
-// % Mortalidad real). Distinto de faltanteConciliacion (= Reporte conteo − Reporte físico
-// del acta, que en la UI se muestra como "Diferencia").
-export const totalMortalidadAves = (a: AnexosTecnicos) => avesRecibidasTotal(a) - num(a.recepcionAvesResumen.reporteSaldoAves);
+// Total mortalidad de aves = "Mortalidad Total" de la pestaña Mortalidad Diaria (Σ de la
+// mortalidad diaria del lote). Es el numerador del % Mortalidad. Distinto de
+// faltanteConciliacion (= Reporte conteo − Reporte físico del acta, que en la UI se
+// muestra como "Diferencia").
+export const totalMortalidadAves = (a: AnexosTecnicos) => calcMortalidadDiaria(a.registroMortalidadDiaria).totalGeneral;
 
 // Diferencia entre el conteo de picos del acta y la mortalidad total registrada
 // (Reporte acta conteo de picos − Total mortalidad de aves): descuadre entre el conteo
@@ -174,12 +175,12 @@ export const totalBultosConsumidos = (a: AnexosTecnicos) => calcBultosConsumidos
 export const totalKgConsumidos     = (a: AnexosTecnicos) => calcBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a)).totalKg;
 export const conciliacionBultos    = (a: AnexosTecnicos) => totalIngresoUnidades(a) - totalBultosConsumidos(a) - totalInventarioBultos(a);
 
-// % Mortalidad = (Aves Recibidas − Reporte Saldo de Aves) / Aves Recibidas × 100.
+// % Mortalidad = Total mortalidad de aves (Σ mortalidad diaria) / Aves Recibidas × 100.
 // Devuelve null si el total de aves recibidas no es > 0 (regla de validación).
 export function pctMortalidad(a: AnexosTecnicos): number | null {
   const recibidas = avesRecibidasTotal(a);
   if (recibidas <= 0) return null;
-  return ((recibidas - num(a.recepcionAvesResumen.reporteSaldoAves)) / recibidas) * 100;
+  return (totalMortalidadAves(a) / recibidas) * 100;
 }
 
 // ─── Registro Mortalidad Diaria (cálculos por día/semana/acumulado) ─────────────
@@ -396,7 +397,7 @@ export function resumenRecepcionAves(a: AnexosTecnicos): ResumenEjecutivo | null
     metricas: [
       { label: "Total recibido", valor: f2(recibidas), color: "#4A7AFF" },
       { label: "Machos / Hembras", valor: `${f2(machos)} / ${f2(hembras)}` },
-      { label: "Total mortalidad", valor: recibidas > 0 ? f2(mortalidadTotal) : "—", color: "#EF4444" },
+      { label: "Total mortalidad", valor: f2(mortalidadTotal), color: "#EF4444" },
       { label: "% Mortalidad", valor: pct === null ? "—" : f2(pct) + "%", color: pct === null ? "#94A3B8" : colorMort(pct) },
     ],
     secciones: [
@@ -405,7 +406,7 @@ export function resumenRecepcionAves(a: AnexosTecnicos): ResumenEjecutivo | null
         a.actaConteoPicos.length ? `Reporte acta conteo de picos: ${f2(conteoTotal)}; saldo identificado (físico): ${f2(identificado)}; diferencia del acta: ${f2(diferencia)}. Reporte saldo de aves: ${f2(saldoRep)}.` : "Sin acta de conteo de picos diligenciada.",
       ] },
       { titulo: "Mortalidad y diferencias", lineas: [
-        recibidas > 0 ? `Total mortalidad de aves = aves recibidas − reporte saldo = ${f2(recibidas)} − ${f2(saldoRep)} = ${f2(mortalidadTotal)} aves${pct !== null ? ` (${f2(pct)}% de mortalidad)` : ""}.` : "No es posible calcular la mortalidad sin aves recibidas.",
+        `Total mortalidad de aves (Σ mortalidad diaria) = ${f2(mortalidadTotal)} aves${recibidas > 0 && pct !== null ? ` (${f2(pct)}% sobre ${f2(recibidas)} aves recibidas)` : ""}.`,
         `Diferencia del acta = Reporte conteo − Saldo identificado = ${f2(conteoTotal)} − ${f2(identificado)} = ${f2(diferencia)} aves.`,
         `Diferencia conteo vs mortalidad = Reporte conteo − Total mortalidad = ${f2(conteoTotal)} − ${f2(mortalidadTotal)} = ${f2(conteoTotal - mortalidadTotal)} aves.`,
       ] },

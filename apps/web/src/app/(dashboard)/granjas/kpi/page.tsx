@@ -11,7 +11,7 @@ import { evidenciasGridHTML } from "@/lib/pdf-evidencias";
 import {
   parseAnexos, anexosTienenDatos, difConteoPicos, totalRecepcion, totalInvBultos,
   pesoTotalIngreso, subtotalBloque, cantidadBloque, totalGeneralBultos, num as anexNum,
-  faltanteConciliacion, recepcionResumenTieneDatos, pctMortalidad, avesRecibidasTotal,
+  faltanteConciliacion, recepcionResumenTieneDatos, pctMortalidad, avesRecibidasTotal, totalMortalidadAves,
   calcMortalidadDiaria, calcBultosConsumidos, registroMortalidadTieneDatos,
   totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalInventarioBultosSolo, totalInventarioLonas, totalBultosConsumidos, totalKgConsumidos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
@@ -928,25 +928,26 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
     .filter(x => x.a.actaConteoPicos.length > 0 || x.a.recepcionAves.length > 0 || recepcionResumenTieneDatos(x.a.recepcionAvesResumen));
   let anexosHTML = "";
   if (conAnexos.length) {
-    let conteo = 0, fisico = 0, aves = 0, repSaldo = 0;
+    let conteo = 0, fisico = 0, aves = 0, repSaldo = 0, mortDiaria = 0;
     conAnexos.forEach(({ a }) => {
       a.actaConteoPicos.forEach(r => { conteo += anexNum(r.reporteConteo); fisico += anexNum(r.reporteFisico); });
       a.recepcionAves.forEach(r => aves += totalRecepcion(r));
       repSaldo += anexNum(a.recepcionAvesResumen.reporteSaldoAves);
+      mortDiaria += calcMortalidadDiaria(a.registroMortalidadDiaria).totalGeneral;
     });
     // Conciliación reestructurada: acta conteo = Σ conteo, saldo identificado = Σ físico,
     // faltante = conteo − físico (= Diferencia). "Reporte saldo de aves" es el único manual.
     const faltanteConcil = conteo - fisico;
     const hayConcil = conteo !== 0 || fisico !== 0 || repSaldo !== 0;
-    // Indicador PRINCIPAL: % Mortalidad = (aves recibidas − reporte saldo) / aves recibidas
-    const mortNueva = aves - repSaldo;
+    // Indicador PRINCIPAL: % Mortalidad = Total mortalidad de aves (Σ mortalidad diaria) / aves recibidas
+    const mortNueva = mortDiaria;
     const pctNueva = aves > 0 ? (mortNueva / aves) * 100 : null;
     const pctNColor = (pctNueva ?? 0) >= 8 ? "#EF4444" : (pctNueva ?? 0) >= 4 ? "#F97316" : "#22C55E";
     const filasMort = conAnexos.filter(x => avesRecibidasTotal(x.a) > 0).map(({ h, a }) => {
       const g = granjas.find(gr => gr.id === h.granjaId);
-      const rec = avesRecibidasTotal(a); const saldo = anexNum(a.recepcionAvesResumen.reporteSaldoAves); const pm = pctMortalidad(a);
+      const rec = avesRecibidasTotal(a); const saldo = anexNum(a.recepcionAvesResumen.reporteSaldoAves); const mAve = totalMortalidadAves(a); const pm = pctMortalidad(a);
       const c = (pm ?? 0) >= 8 ? "#EF4444" : (pm ?? 0) >= 4 ? "#F97316" : "#22C55E";
-      return `<tr><td><strong>${h.titulo?.slice(0, 42) || "—"}</strong></td><td>${g?.nombre || "—"}</td><td>${h.auditorNombre || "—"}</td><td style="text-align:right">${fmt(rec)}</td><td style="text-align:right">${fmt(saldo)}</td><td style="text-align:right;font-weight:700">${fmt(rec - saldo)}</td><td style="text-align:right"><span class="badge" style="background:${c}1f;color:${c}">${pm != null ? pm.toFixed(2) + "%" : "—"}</span></td></tr>`;
+      return `<tr><td><strong>${h.titulo?.slice(0, 42) || "—"}</strong></td><td>${g?.nombre || "—"}</td><td>${h.auditorNombre || "—"}</td><td style="text-align:right">${fmt(rec)}</td><td style="text-align:right">${fmt(saldo)}</td><td style="text-align:right;font-weight:700">${fmt(mAve)}</td><td style="text-align:right"><span class="badge" style="background:${c}1f;color:${c}">${pm != null ? pm.toFixed(2) + "%" : "—"}</span></td></tr>`;
     }).join("");
     // Detalle secundario: conteo de picos
     const mort = conteo - fisico;
@@ -973,7 +974,7 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
       ${filasMort ? `<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin-bottom:2px">Detalle por hallazgo</div>
       <table><thead><tr><th>Hallazgo</th><th>Granja</th><th>Auditor</th><th style="text-align:right">Recibidas</th><th style="text-align:right">Saldo</th><th style="text-align:right">Mortalidad</th><th style="text-align:right">%</th></tr></thead><tbody>${filasMort}</tbody></table>` : ""}
       <div style="font-size:11px;color:#334155;margin-top:6px"><strong>Interpretación técnica:</strong> mortalidad del ${pctNueva.toFixed(2)}%, ${pctNueva >= 8 ? "crítica — requiere atención inmediata" : pctNueva >= 4 ? "elevada — requiere seguimiento y plan de acción" : "dentro de parámetros aceptables"}.</div>
-      <p style="font-size:9px;color:#94a3b8;margin-top:4px">% Mortalidad = (aves recibidas − reporte saldo de aves) / aves recibidas.</p>` : "";
+      <p style="font-size:9px;color:#94a3b8;margin-top:4px">% Mortalidad = Total mortalidad de aves (Σ mortalidad diaria) ÷ aves recibidas.</p>` : "";
 
     const conteoPicos = conteo > 0 ? `
       <div style="font-size:12px;font-weight:700;color:#0D1526;margin:14px 0 6px">Mortalidad por conteo de picos (detalle)</div>
@@ -994,7 +995,7 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
         <tr><td>Reporte acta conteo de picos (Σ Reporte conteo)</td><td style="text-align:right;font-weight:700">${fmt(conteo)}</td></tr>
         <tr><td>Reporte saldo de aves</td><td style="text-align:right">${fmt(repSaldo)}</td></tr>
         <tr><td>Saldo identificado de aves (Σ Reporte físico)</td><td style="text-align:right">${fmt(fisico)}</td></tr>
-        <tr><td>Total mortalidad de aves (recibidas − reporte saldo)</td><td style="text-align:right;font-weight:700;color:#EF4444">${fmt(mortNueva)}</td></tr>
+        <tr><td>Total mortalidad de aves (Σ mortalidad diaria)</td><td style="text-align:right;font-weight:700;color:#EF4444">${fmt(mortNueva)}</td></tr>
         <tr><td style="font-weight:700;color:#0D1526">Diferencia (Reporte conteo − Saldo identificado)</td><td style="text-align:right;font-weight:800;font-size:15px;color:${faltanteConcil !== 0 ? "#EF4444" : "#22C55E"}">${fmt(faltanteConcil)}</td></tr>
         <tr><td style="font-weight:700;color:#0D1526">Diferencia conteo vs mortalidad (Reporte conteo − Total mortalidad)</td><td style="text-align:right;font-weight:800;font-size:15px;color:${(conteo - mortNueva) !== 0 ? "#EF4444" : "#22C55E"}">${fmt(conteo - mortNueva)}</td></tr>
       </tbody></table>` : ""}
@@ -1122,15 +1123,15 @@ function graficosMortalidad(hallazgos: any[], granjas: any[]): string {
     .filter(x => avesRecibidasTotal(x.a) > 0)
     .map(({ h, a }) => ({
       h, granjaId: h.granjaId, auditor: h.auditorNombre || "—", mes: (h.fechaVisita || "").slice(0, 7),
-      recibidas: avesRecibidasTotal(a), saldo: anexNum(a.recepcionAvesResumen.reporteSaldoAves), pct: pctMortalidad(a) ?? 0,
+      recibidas: avesRecibidasTotal(a), mort: totalMortalidadAves(a), pct: pctMortalidad(a) ?? 0,
     }));
   if (!datos.length) return "";
   const colorPct = (p: number) => p >= 8 ? "#EF4444" : p >= 4 ? "#F97316" : "#22C55E";
-  // Agregación ponderada por grupo: % = (Σrecibidas − Σsaldo) / Σrecibidas
+  // Agregación ponderada por grupo: % = Σ mortalidad diaria / Σ recibidas
   const agrupar = (keyFn: (d: typeof datos[number]) => string, nombreFn?: (k: string) => string) => {
-    const m: Record<string, { rec: number; saldo: number }> = {};
-    datos.forEach(d => { const k = keyFn(d) || "—"; (m[k] ||= { rec: 0, saldo: 0 }); m[k].rec += d.recibidas; m[k].saldo += d.saldo; });
-    return Object.entries(m).map(([k, v]) => ({ label: nombreFn ? nombreFn(k) : k, pct: v.rec > 0 ? ((v.rec - v.saldo) / v.rec) * 100 : 0 }));
+    const m: Record<string, { rec: number; mort: number }> = {};
+    datos.forEach(d => { const k = keyFn(d) || "—"; (m[k] ||= { rec: 0, mort: 0 }); m[k].rec += d.recibidas; m[k].mort += d.mort; });
+    return Object.entries(m).map(([k, v]) => ({ label: nombreFn ? nombreFn(k) : k, pct: v.rec > 0 ? (v.mort / v.rec) * 100 : 0 }));
   };
   const barras = (arr: { label: string; pct: number }[]) => arr.length
     ? arr.map(x => barraHorizontal((x.label || "—").slice(0, 20), Math.round(x.pct * 100) / 100, 100, colorPct(x.pct))).join("")
