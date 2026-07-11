@@ -900,28 +900,9 @@ function footer(): string {
 function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: any[], hallazgos: any[] = []): string {
   const fmt = (n: number) => n.toLocaleString("es-CO", { maximumFractionDigits: 2 });
 
-  // Bloque 1 — Trazabilidad (lotes)
-  let traza: string;
-  if (!mortalidad || mortalidad.lotes === 0) {
-    traza = `<p style="font-size:12px;color:#94a3b8"><em>Sin lotes de trazabilidad registrados para las granjas del alcance.</em></p>`;
-  } else {
-    const tarjetas = [
-      { l: "Aves ingresadas",  v: fmt(mortalidad.totalIngreso),  c: "#0D1526" },
-      { l: "Aves actuales",    v: fmt(mortalidad.totalActuales), c: "#4A7AFF" },
-      { l: "Mortalidad total", v: fmt(mortalidad.totalMuertes),  c: "#EF4444" },
-      { l: "% Acumulado",      v: mortalidad.pctGlobal.toFixed(2) + "%", c: mortalidad.pctGlobal >= 8 ? "#EF4444" : mortalidad.pctGlobal >= 4 ? "#F97316" : "#22C55E" },
-    ];
-    const filas = Object.entries(mortalidad.porGranja).map(([gid, m]) => {
-      const g = granjas.find(gr => gr.id === gid);
-      const color = m.pct >= 8 ? "#EF4444" : m.pct >= 4 ? "#F97316" : "#22C55E";
-      return `<tr><td><strong>${g?.nombre || "—"}</strong></td><td style="text-align:right">${fmt(m.ingreso)}</td><td style="text-align:right">${fmt(m.actuales)}</td><td style="text-align:right;font-weight:700">${fmt(m.muertes)}</td><td style="text-align:right"><span class="badge" style="background:${color}1f;color:${color}">${m.pct.toFixed(2)}%</span></td></tr>`;
-    }).join("");
-    traza = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
-      ${tarjetas.map(k => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-top:3px solid ${k.c};border-radius:8px;padding:12px 8px;text-align:center"><div style="font-size:20px;font-weight:800;color:${k.c}">${k.v}</div><div style="font-size:11px;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:.3px">${k.l}</div></div>`).join("")}
-    </div>
-    <table><thead><tr><th>Granja</th><th style="text-align:right">Ingresadas</th><th style="text-align:right">Actuales</th><th style="text-align:right">Muertes</th><th style="text-align:right">% Mort.</th></tr></thead><tbody>${filas}</tbody></table>
-    <p style="font-size:9px;color:#94a3b8;margin-top:6px">Fuente: Trazabilidad (${mortalidad.lotes} lote(s)). Mortalidad = aves ingresadas − aves actuales.</p>`;
-  }
+  // Bloque 1 — Trazabilidad (aves ingresadas/actuales/muertes): RETIRADO por solicitud
+  // (no relevante en el informe). "Indicadores de Mortalidad" queda solo con el bloque de
+  // anexos (conteo de picos + recepción de aves + % desde la mortalidad diaria).
 
   // Bloque 2 — Mortalidad por Conteo de Picos (Anexos Técnicos del hallazgo)
   const conAnexos = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) }))
@@ -1002,7 +983,8 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
     </div>`;
   }
 
-  return `<div class="section"><div class="section-title">Indicadores de Mortalidad</div>${traza}${anexosHTML}</div>`;
+  if (!anexosHTML) return "";
+  return `<div class="section"><div class="section-title">Indicadores de Mortalidad</div>${anexosHTML}</div>`;
 }
 
 // ─── SECCIÓN EVIDENCIAS FOTOGRÁFICAS (reutiliza evidenciasGridHTML) ────────────
@@ -1555,13 +1537,10 @@ function seccionConsolidado(kpis: any[], granjas: any[], mortalidad?: Mortalidad
   const pct = porcentaje(kpis);
   const comp = kpis.filter(k => k.estado === "COMPLETADO").length;
   const pctColor = pct >= 70 ? "#22C55E" : pct >= 40 ? "#F97316" : "#EF4444";
-  const mortCell = (mortalidad && mortalidad.lotes > 0)
-    ? `<td><strong>${mortalidad.totalMuertes.toLocaleString("es-CO")}</strong> aves · <strong>${mortalidad.pctGlobal.toFixed(2)}%</strong> acumulado<br><span style="color:#64748b;font-size:9.5px">${mortalidad.lotes} lote(s) de trazabilidad · ${mortalidad.totalIngreso.toLocaleString("es-CO")} aves ingresadas · ${mortalidad.totalActuales.toLocaleString("es-CO")} aves actuales</span></td>`
-    : `<td style="color:#94a3b8"><em>Sin lotes de trazabilidad registrados para las granjas del alcance.</em></td>`;
+  // Fila "Mortalidad avícola" (Trazabilidad) RETIRADA por solicitud (no relevante).
   return `<div class="section"><div class="section-title">Consolidado de Resultados</div>
     <table><tbody>
       <tr><td style="width:32%;font-weight:600;color:#0D1526">Inventario de alimento</td><td style="color:#94a3b8"><em>Sin datos disponibles — la plataforma no registra actualmente inventario de alimento.</em></td></tr>
-      <tr><td style="font-weight:600;color:#0D1526">Mortalidad avícola<br><span style="color:#64748b;font-size:9.5px;font-weight:400">Fuente: Trazabilidad</span></td>${mortCell}</tr>
       <tr><td style="font-weight:600;color:#0D1526">Cumplimiento KPI</td><td><strong style="color:${pctColor};font-size:13px">${pct}%</strong> &nbsp;·&nbsp; ${comp} de ${kpis.length} plan(es) completado(s)</td></tr>
     </tbody></table></div>`;
 }
