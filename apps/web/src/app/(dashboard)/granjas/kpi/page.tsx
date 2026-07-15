@@ -2134,170 +2134,69 @@ ${footer()}
 // ═══════════════════════════════════════════════════════════════════════════════
 function generarResumen(
   kpis: any[], hallazgos: any[], granjas: any[], auditor: string,
-  evidenciasPorHallazgo?: Record<string, any[]>, _mortalidad?: MortalidadResumen, datos?: DatosGenerales
+  _evid?: Record<string, any[]>, _mortalidad?: MortalidadResumen, datos?: DatosGenerales
 ): string {
   const year   = new Date().getFullYear();
-  const num     = datos?.numeroInforme || `AU-RES-${year}-${String(Date.now()).slice(-4)}`;
-  const codigo  = `IR-AUD-${year}-${datos?.numeroInforme?.match(/\d+/)?.[0] ?? String(Date.now()).slice(-4)}`;
-  const version = "1.0";
+  const num    = datos?.numeroInforme || `AU-RES-${year}-${String(Date.now()).slice(-4)}`;
+  const codigo = `IR-AUD-${year}-${datos?.numeroInforme?.match(/\d+/)?.[0] ?? String(Date.now()).slice(-4)}`;
 
-  const eLow = (h: any) => (h.estado || "").toString().toLowerCase();
-  const abiertos = hallazgos.filter(h => eLow(h).includes("abierto")).length;
-  const cerrados = hallazgos.filter(h => eLow(h).includes("cerrad")).length;
   const critRank = (h: any) => { const c = (h.criticidad || "").toString().toLowerCase(); return c.startsWith("crít") || c.startsWith("crit") ? 4 : c.startsWith("alt") ? 3 : c.startsWith("med") ? 2 : c.startsWith("baj") ? 1 : 0; };
-  const kpiDe = (h: any) => kpis.find(k => k.hallazgoId === h.id);
-  const difBultosDe = (a: any) => {
-    const ing = totalIngresoUnidades(a), fis = totalInventarioBultos(a);
-    const salF = a.totalBultos?.bloques?.[0]?.filas ?? [];
-    const sal = salF.reduce((s: number, f: any) => s + anexNum(f.cantidad), 0);
-    return { dif: (sal + fis) - ing, has: ing > 0 || fis > 0 || sal > 0 };
+  const kgBulto  = (a: any) => anexNum(a.registroBultosConsumidos?.kgPorBulto) || 40;
+  const planDe = (h: any) => {
+    const t = kpis.filter(k => k.hallazgoId === h.id)
+      .map(k => (k.planAccionVeterinario && k.planAccionVeterinario !== "—") ? k.planAccionVeterinario : k.accion)
+      .filter(Boolean).join("  |  ");
+    return t ? (t.length > 200 ? t.slice(0, 197) + "…" : t) : "—";
   };
 
-  // Promedios sólo sobre hallazgos con datos (sin inventar).
-  let mortSum = 0, mortN = 0, difSum = 0, difN = 0;
-  hallazgos.forEach(h => {
-    const a = parseAnexos(h.anexosTecnicos);
-    const pm = registroMortalidadTieneDatos(a.registroMortalidadDiaria) ? pctMortalidad(a) : null;
-    if (pm !== null) { mortSum += pm; mortN++; }
-    const db = difBultosDe(a); if (db.has) { difSum += db.dif; difN++; }
-  });
-  const mortProm = mortN ? mortSum / mortN : null;
-  const difProm  = difN ? difSum / difN : null;
-  const cumplKPI = porcentaje(kpis);
+  // Una tabla por GRANJA (sólo granjas con hallazgos en el alcance), ordenadas por nombre.
+  const bloquesGranja = granjas
+    .map(g => ({ g, hs: hallazgos.filter(h => h.granjaId === g.id) }))
+    .filter(x => x.hs.length > 0)
+    .sort((a, b) => (a.g.nombre || "").localeCompare(b.g.nombre || ""))
+    .map(({ g, hs }) => {
+      // Agregados de la granja (sin inventar): % mortalidad general y diferencia general de bultos.
+      let muertes = 0, recib = 0, ing = 0, sal = 0, fis = 0, kgAcum = 0;
+      hs.forEach(h => {
+        const a = parseAnexos(h.anexosTecnicos);
+        muertes += totalMortalidadAves(a); recib += avesRecibidasTotal(a);
+        ing += totalIngresoUnidades(a); fis += totalInventarioBultos(a);
+        sal += (a.totalBultos?.bloques?.[0]?.filas ?? []).reduce((s: number, f: any) => s + anexNum(f.cantidad), 0);
+        kgAcum += kgBulto(a);
+      });
+      const pctGen   = recib > 0 ? (muertes / recib) * 100 : null;
+      const difGen   = (sal + fis) - ing;
+      const difGenKg = difGen * (hs.length ? kgAcum / hs.length : 40);
+      const caption  = `${g.nombre || "—"} &nbsp;·&nbsp; % Mortalidad general: <strong style="color:#EF4444">${pctGen === null ? "—" : pctGen.toFixed(2) + "%"}</strong> &nbsp;·&nbsp; Diferencia general de Bultos: <strong style="color:#0EA5E9">${_fmtAnx(difGen)} bultos</strong> (${_fmtAnx(difGenKg)} Kg)`;
 
-  const catCount: Record<string, number> = {};
-  hallazgos.forEach(h => { const c = h.categoria || "Sin categoría"; catCount[c] = (catCount[c] || 0) + 1; });
-  const cats = Object.entries(catCount).sort((a, b) => b[1] - a[1]);
-
-  // Tabla comparativa — orden por criticidad, luego abiertos, luego nº de riesgos.
-  const ordenados = [...hallazgos].sort((a, b) =>
-    (critRank(b) - critRank(a)) ||
-    ((eLow(b).includes("abierto") ? 1 : 0) - (eLow(a).includes("abierto") ? 1 : 0)) ||
-    ((b.tiposRiesgo?.length || 0) - (a.tiposRiesgo?.length || 0))
-  ).slice(0, 60);
-  const filasArr = ordenados.map(h => {
-    const g = granjas.find(gr => gr.id === h.granjaId);
-    const a = parseAnexos(h.anexosTecnicos);
-    const k = kpiDe(h);
-    const pm = registroMortalidadTieneDatos(a.registroMortalidadDiaria) ? pctMortalidad(a) : null;
-    const db = difBultosDe(a);
-    return `<tr>
-      <td>${g?.nombre || "—"}</td>
-      <td>${h.titulo?.slice(0, 40) || "—"}</td>
-      <td>${h.categoria || "—"}</td>
-      <td>${Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo.join(", ") : "—"}</td>
-      <td><span class="badge ${clsBadge(h.estado)}">${displayEstado(h.estado)}</span></td>
-      <td>${k?.responsable || "—"}</td>
-      <td style="text-align:right">${pm === null ? "—" : pm.toFixed(2) + "%"}</td>
-      <td style="text-align:right">${db.has ? _fmtAnx(db.dif) : "—"}</td>
-      <td>${k ? `<span class="badge ${clsBadge(k.estado)}">${displayEstado(k.estado)}</span>` : "—"}</td>
-    </tr>`;
-  });
-  // La tabla se parte en bloques de 24 filas: cada <table> cabe en una página y el
-  // paginador la coloca ENTERA (nunca corta filas entre hojas).
-  const thComp = `<thead><tr><th>Granja</th><th>Hallazgo</th><th>Categoría</th><th>Tipo de Riesgo</th><th>Estado</th><th>Responsable</th><th>% Mort.</th><th>Dif. Bultos</th><th>Estado KPI</th></tr></thead>`;
-  const tablasComp: string[] = [];
-  for (let i = 0; i < filasArr.length; i += 24) tablasComp.push(`<table>${thComp}<tbody>${filasArr.slice(i, i + 24).join("")}</tbody></table>`);
-  const tablaComparativaHTML = tablasComp.join("") || `<p style="font-size:11px;color:#94a3b8">Sin hallazgos en el alcance filtrado.</p>`;
-
-  const auditores = Array.from(new Set(hallazgos.map(h => h.auditorNombre).filter(Boolean)));
-  const riesgos   = Array.from(new Set(hallazgos.flatMap(h => Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo : []).filter(Boolean)));
-  const fechas    = hallazgos.map(h => h.fechaVisita).filter(Boolean).sort();
-  const rango     = fechas.length ? `${fmtFechaCorta(fechas[0])} — ${fmtFechaCorta(fechas[fechas.length - 1])}` : "—";
-  const infoRow = (l: string, v: string) => `<tr><td style="color:#64748b;width:26%;padding:3px 8px">${l}</td><td style="padding:3px 8px;font-weight:600">${v || "—"}</td></tr>`;
-
-  // Gráficas en filas de 2 (cada fila es un grid: el paginador la coloca entera, sin cortes).
-  const { mortSemana, bultosSemana } = consolidarProduccionDiaria(hallazgos);
-  const lbl = (i: number) => `Sem ${i + 1}`;
-  const mortPts = mortSemana.map((v, i) => ({ label: lbl(i), value: v }));
-  const bulPts  = bultosSemana.map((v, i) => ({ label: lbl(i), value: v }));
-  const maxCat  = Math.max(1, ...cats.map(c => c[1]));
-  const catBars = cats.slice(0, 8).map(([label, v]) => barraHorizontal(label, v, maxCat, "#4A7AFF")).join("");
-  const cardTendMort = mortSemana.length ? chartCard(1, "Tendencia Mortalidad", lineTrendSVG(mortPts, "#EF4444"), "aves por semana") : "";
-  const cardTendCons = bultosSemana.length ? chartCard(2, "Tendencia Consumo de Bultos", lineTrendSVG(bulPts, "#4A7AFF"), "bultos por semana") : "";
-  const cardEstados  = chartCard(3, "Estados KPI por Granja", biBarrasApiladas(kpis, granjas), "distribución 100%");
-  const cardCat      = chartCard(4, "Hallazgos por Categoría", catBars || `<p style="font-size:10px;color:#94a3b8;text-align:center;padding:16px">Sin categorías.</p>`, `${cats.length} categoría(s)`);
-  const cardRiesgo   = chartCard(5, "Riesgos por Tipo", biRadarRiesgos(hallazgos), "perfil por tipo de riesgo");
-  const chartRows = [[cardTendMort, cardTendCons], [cardEstados, cardCat], [cardRiesgo, ""]]
-    .filter(par => par[0] || par[1])
-    .map(par => `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">${par[0] || "<div></div>"}${par[1] || "<div></div>"}</div>`)
-    .join("");
-
-  // Evidencias — máx. 2 por hallazgo (grandes, proporción original, sin cortes).
-  const conFotos = evidenciasPorHallazgo ? hallazgos.filter(h => (evidenciasPorHallazgo[h.id]?.length ?? 0) > 0) : [];
-  const evidHTML = conFotos.slice(0, 20).map(h => {
-    const g = granjas.find(gr => gr.id === h.granjaId);
-    const evs = evidenciasPorHallazgo![h.id] || [];
-    return `<div style="margin-bottom:14px;page-break-inside:avoid">
-      <div style="font-size:12px;font-weight:700;color:#0D1526">${h.titulo?.slice(0, 70) || "Hallazgo"} <span style="font-weight:400;color:#64748b">· ${g?.nombre || "—"} · ${fmtFechaCorta(h.fechaVisita)}</span></div>
-      ${evidenciasGridHTML(evs.map((ev: any) => ({ src: ev.url, titulo: ev.categoria || undefined, pie: ev.nombre || undefined })), { max: 2 })}
-    </div>`;
-  }).join("");
-
-  const metric = (n: string, l: string, c: string) => `<div class="metric"><div class="metric-n" style="color:${c}">${n}</div><div class="metric-l">${l}</div></div>`;
+      const filas = [...hs].sort((a, b) => critRank(b) - critRank(a)).map(h => `<tr>
+        <td>${fmtFechaCorta(h.fechaVisita)}</td>
+        <td>${g.nombre || "—"}</td>
+        <td>${h.titulo?.slice(0, 70) || "—"}</td>
+        <td>${h.categoria || "—"}</td>
+        <td>${Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo.join(", ") : "—"}</td>
+        <td>${planDe(h)}</td>
+        <td>${h.criticidad || "—"}</td>
+      </tr>`);
+      const thead = `<thead>
+        <tr><th colspan="7" style="background:#0D1526;color:#fff;text-align:left;font-size:12px;padding:7px 10px;font-weight:700">${caption}</th></tr>
+        <tr><th style="width:8%">Fecha visita</th><th style="width:10%">Granja</th><th style="width:20%">Hallazgo</th><th style="width:11%">Categoría</th><th style="width:13%">Tipo de Riesgo</th><th style="width:30%">Planes de acción</th><th style="width:8%">Criticidad</th></tr>
+      </thead>`;
+      // Bloques de 12 filas: cada <table> cabe en una hoja horizontal y se coloca ENTERA (sin cortar filas);
+      // el paginador con relleno greedy empaca varias tablas por hoja, sin espacios innecesarios.
+      const tablas: string[] = [];
+      for (let i = 0; i < filas.length; i += 12) tablas.push(`<table style="margin-bottom:14px">${thead}<tbody>${filas.slice(i, i + 12).join("")}</tbody></table>`);
+      return tablas.join("");
+    }).join("");
 
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Informe Resumen — Pollos Savicol S.A.S.</title>
 <style>${CSS_BASE}</style></head><body><div class="page">
-${portada(`Informe Resumen Ejecutivo N° ${num}`, "Comparativo de Auditoría · Cumplimiento KPI", kpis, hallazgos, auditor, undefined, datos)}
+${portada(`Informe Resumen Ejecutivo N° ${num}`, `Comparativo por Granja · ${codigo} · Versión 1.0`, kpis, hallazgos, auditor, undefined, datos, true)}
 
 <div class="section">
-  <div class="section-title">Información General del Filtro Aplicado</div>
-  <table><tbody>
-    ${infoRow("Granjas incluidas", granjas.map(g => g.nombre).join(", "))}
-    ${infoRow("Auditor(es)", auditores.join(", "))}
-    ${infoRow("Rango de fechas", rango)}
-    ${infoRow("Tipos de riesgo", riesgos.join(", "))}
-    ${infoRow("Categorías", cats.map(c => `${c[0]} (${c[1]})`).join(" · "))}
-    ${infoRow("Alcance", `${hallazgos.length} hallazgo(s) · ${kpis.length} plan(es) KPI · ${granjas.length} granja(s)`)}
-    ${infoRow("Código documental", `${codigo} · Versión ${version}`)}
-  </tbody></table>
-</div>
-
-<div class="section">
-  <div class="section-title">Resumen Ejecutivo</div>
-  ${resumenCorporativoParrafo(kpis, hallazgos)}
-</div>
-
-<div class="section">
-  <div class="section-title">Indicadores Resumidos</div>
-  <div class="metric-grid">
-    ${metric(_fmtAnx(hallazgos.length), "Total Hallazgos", "#4A7AFF")}
-    ${metric(_fmtAnx(abiertos), "Abiertos", "#EF4444")}
-    ${metric(_fmtAnx(cerrados), "Cerrados", "#22C55E")}
-    ${metric(String(cats.length), "Categorías de Riesgo", "#8B5CF6")}
-    ${metric(mortProm === null ? "—" : mortProm.toFixed(2) + "%", "Mortalidad Promedio", "#F97316")}
-    ${metric(difProm === null ? "—" : _fmtAnx(Math.round(difProm)), "Dif. Promedio Bultos", "#0EA5E9")}
-    ${metric(cumplKPI + "%", "Cumplimiento KPI", cumplKPI >= 70 ? "#22C55E" : cumplKPI >= 40 ? "#F97316" : "#EF4444")}
-  </div>
-</div>
-
-<div class="section">
-  <div class="section-title">Tabla Comparativa de Hallazgos${hallazgos.length > 60 ? ` (60 de ${hallazgos.length})` : ""}</div>
-  ${tablaComparativaHTML}
-</div>
-
-<div class="section">
-  <div class="section-title">Gráficas Ejecutivas</div>
-  <div>${chartRows}</div>
-</div>
-
-${evidHTML ? `<div class="section"><div class="section-title">Evidencias Fotográficas</div>${evidHTML}</div>` : ""}
-
-<div class="section">
-  <div class="section-title">Conclusiones y Recomendaciones</div>
-  <div style="font-size:12px;line-height:1.7;color:#475569">
-    <p>Del total de <strong>${hallazgos.length}</strong> hallazgo(s) en <strong>${granjas.length}</strong> granja(s) evaluada(s), <strong>${abiertos}</strong> permanece(n) abierto(s) y <strong>${cerrados}</strong> cerrado(s). El cumplimiento global de los planes KPI es del <strong>${cumplKPI}%</strong>${mortProm !== null ? `, con una mortalidad promedio del <strong>${mortProm.toFixed(2)}%</strong>` : ""}.</p>
-    <div style="margin-top:10px;padding:10px 14px;background:#fff;border:1px solid #e2e8f0;border-radius:6px">
-      <div style="font-weight:700;margin-bottom:6px">Recomendaciones:</div>
-      <ol style="padding-left:16px">
-        <li>Priorizar el cierre de los <strong>${abiertos}</strong> hallazgo(s) abierto(s), iniciando por los de mayor criticidad.</li>
-        <li>Reforzar el seguimiento de los planes KPI con avance inferior al 40%.</li>
-        <li>Focalizar la verificación en las granjas y categorías con mayor concentración de riesgos.</li>
-        ${mortProm !== null && mortProm >= 8 ? `<li>Atender de forma prioritaria la mortalidad promedio, que supera el umbral crítico del 8%.</li>` : ""}
-      </ol>
-    </div>
-  </div>
+  <div class="section-title">Comparativo de Hallazgos por Granja</div>
+  ${bloquesGranja || `<p style="font-size:11px;color:#94a3b8">Sin hallazgos en el alcance filtrado.</p>`}
 </div>
 
 ${seccionFirma(auditor, "Auditor Interno", datos, true)}
@@ -2362,7 +2261,7 @@ export function generarInforme(
 // ─── Convertir HTML del informe a PDF real usando html2canvas + jsPDF ───────────
 // Renderiza el HTML en el browser → captura con html2canvas → genera PDF con jsPDF
 // El PDF resultante es IDÉNTICO al informe visible en la plataforma
-async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: string }> {
+async function htmlToPDFBase64(html: string, orientation: "portrait" | "landscape" = "portrait"): Promise<{ b64: string; filename: string }> {
   const fecha    = new Date().toISOString().slice(0, 10);
   const filename = `Informe-Auditoria-Savicol-${fecha}.pdf`;
 
@@ -2413,9 +2312,9 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
     // alto que una página, se recurre a sus hijos (p. ej. tarjetas KPI, charts); solo
     // si un elemento atómico sigue sin caber (tabla enorme) se corta como último recurso.
     const pageEl = root.querySelector(".page") as HTMLElement | null;
-    const pdf    = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
-    const pageW  = pdf.internal.pageSize.getWidth();   // 210mm
-    const pageH  = pdf.internal.pageSize.getHeight();  // 297mm
+    const pdf    = new jsPDF({ orientation, unit: "mm", format: "a4", compress: true });
+    const pageW  = pdf.internal.pageSize.getWidth();   // 210mm (portrait) · 297mm (landscape)
+    const pageH  = pdf.internal.pageSize.getHeight();  // 297mm (portrait) · 210mm (landscape)
     const mTop = 8, mBottom = 11;                        // márgenes (footer = nº de página)
     const usableH = pageH - mTop - mBottom;
     const mmPerPx = pageW / 900;                         // el layout mide 900px de ancho
@@ -3171,7 +3070,7 @@ export default function KPIPage() {
             for (const modelo of modelosSel) {
               const esH = modelo === "6-hallazgos";
               const html = htmlDeModelo(modelo, filtered, esH ? hallazgosRep : hallazgosFiltrados, esH ? granjasRep : granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, esH ? mortalidadRep : mortalidadKPI, datos);
-              const { b64 } = await htmlToPDFBase64(html);
+              const { b64 } = await htmlToPDFBase64(html, modelo === "2-resumen" ? "landscape" : "portrait");
               descargarPDFBase64(b64, `Informe-${MODELOS_INFO[modelo].titulo.replace(/\s+/g, "-")}-${fecha}.pdf`);
             }
           }}
@@ -3204,7 +3103,7 @@ export default function KPIPage() {
             for (const modelo of modelosSel) {
               const esH = modelo === "6-hallazgos";
               const html = htmlDeModelo(modelo, filtered, esH ? hallazgosRep : hallazgosFiltrados, esH ? granjasRep : granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, esH ? mortalidadRep : mortalidadKPI, datos);
-              const { b64 } = await htmlToPDFBase64(html);
+              const { b64 } = await htmlToPDFBase64(html, modelo === "2-resumen" ? "landscape" : "portrait");
               pdfs.push({ b64, filename: `Informe-${MODELOS_INFO[modelo].titulo.replace(/\s+/g, "-")}-${fecha}.pdf`, titulo: MODELOS_INFO[modelo].titulo });
             }
             if (!pdfs.length) return;
