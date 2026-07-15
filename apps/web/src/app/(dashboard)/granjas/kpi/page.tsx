@@ -2264,7 +2264,7 @@ function generarResumen(
       const caption  = `${g.nombre || "—"} &nbsp;·&nbsp; % Mortalidad general: <strong style="color:#EF4444">${pctGen === null ? "—" : pctGen.toFixed(2) + "%"}</strong> &nbsp;·&nbsp; Diferencia general de Bultos: <strong style="color:#0EA5E9">${_fmtAnx(difGen)} bultos</strong> (${_fmtAnx(difGenKg)} Kg)`;
 
       const colHeaders = `<tr><th style="width:8%">Fecha visita</th><th style="width:9%">Granja</th><th style="width:22%">Hallazgo</th><th style="width:10%">Categoría</th><th style="width:12%">Tipo de Riesgo</th><th style="width:31%">Planes de acción</th><th style="width:8%">Criticidad</th></tr>`;
-      const filas = [...hs].sort((a, b) => critRank(b) - critRank(a)).map(h => `<tr>
+      const filaDe = (h: any) => `<tr>
         <td>${fmtFechaCorta(h.fechaVisita)}</td>
         <td>${g.nombre || "—"}</td>
         <td><strong>${h.titulo || "—"}</strong>${h.descripcion ? `<div style="font-weight:400;color:#475569;margin-top:3px;line-height:1.35">${h.descripcion}</div>` : ""}</td>
@@ -2272,16 +2272,30 @@ function generarResumen(
         <td>${Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo.join(", ") : "—"}</td>
         <td>${planDe(h)}</td>
         <td>${h.criticidad || "—"}</td>
-      </tr>`);
-      // Tabla agrupada POR GRANJA: la banda de la granja (caption) y los encabezados van UNA vez
-      // por granja; los hallazgos son las filas. Se parten en bloques que caben en la hoja para no
-      // cortar filas, manteniendo el mínimo de hojas.
-      const chunks: string[] = [];
-      for (let i = 0; i < filas.length; i += 4) {
-        const capRow = i === 0 ? `<tr><th colspan="7" style="background:#0D1526;color:#fff;text-align:left;font-size:11px;padding:6px 10px;font-weight:700">${caption}</th></tr>` : "";
-        chunks.push(`<table style="margin-bottom:8px"><thead>${capRow}${colHeaders}</thead><tbody>${filas.slice(i, i + 4).join("")}</tbody></table>`);
+      </tr>`;
+      // Altura estimada de cada fila (nº de líneas × alto) para EMPAQUETAR filas sin que la tabla
+      // exceda la hoja horizontal: así el paginador coloca cada <table> ENTERA y NUNCA corta la
+      // información al cambiar de página. Agrupado por granja: caption sólo en el primer bloque.
+      const rowPx = (h: any) => {
+        const desc = h.descripcion || "", plan = planDe(h), riesgo = Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo.join(", ") : "";
+        const lh = Math.ceil((h.titulo || "").length / 36) + (desc ? Math.ceil(desc.length / 36) : 0);
+        const lp = Math.ceil((plan.length || 1) / 50);
+        const lr = Math.ceil((riesgo.length || 1) / 18);
+        return 16 + Math.max(lh, lp, lr, 1) * 14;
+      };
+      const ordenados = [...hs].sort((a, b) => critRank(b) - critRank(a));
+      const grupos: any[][] = [];
+      let actual: any[] = [], acum = 0;
+      for (const h of ordenados) {
+        const rpx = rowPx(h);
+        if (actual.length && acum + rpx > 500) { grupos.push(actual); actual = []; acum = 0; }
+        actual.push(h); acum += rpx;
       }
-      return chunks.join("");
+      if (actual.length) grupos.push(actual);
+      return grupos.map((grupo, gi) => {
+        const capRow = gi === 0 ? `<tr><th colspan="7" style="background:#0D1526;color:#fff;text-align:left;font-size:11px;padding:6px 10px;font-weight:700">${caption}</th></tr>` : "";
+        return `<table style="margin-bottom:8px"><thead>${capRow}${colHeaders}</thead><tbody>${grupo.map(filaDe).join("")}</tbody></table>`;
+      }).join("");
     }).join("");
 
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
