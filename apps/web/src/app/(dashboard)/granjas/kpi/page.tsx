@@ -2172,7 +2172,7 @@ function generarResumen(
       const filas = [...hs].sort((a, b) => critRank(b) - critRank(a)).map(h => `<tr>
         <td>${fmtFechaCorta(h.fechaVisita)}</td>
         <td>${g.nombre || "—"}</td>
-        <td>${h.titulo?.slice(0, 70) || "—"}</td>
+        <td><strong>${(h.titulo || "—").slice(0, 90)}</strong>${h.descripcion ? `<div style="font-weight:400;color:#64748b;font-size:9px;margin-top:2px;line-height:1.35">${h.descripcion.length > 220 ? h.descripcion.slice(0, 217) + "…" : h.descripcion}</div>` : ""}</td>
         <td>${h.categoria || "—"}</td>
         <td>${Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo.join(", ") : "—"}</td>
         <td>${planDe(h)}</td>
@@ -2185,7 +2185,7 @@ function generarResumen(
       // Bloques de 12 filas: cada <table> cabe en una hoja horizontal y se coloca ENTERA (sin cortar filas);
       // el paginador con relleno greedy empaca varias tablas por hoja, sin espacios innecesarios.
       const tablas: string[] = [];
-      for (let i = 0; i < filas.length; i += 12) tablas.push(`<table style="margin-bottom:14px">${thead}<tbody>${filas.slice(i, i + 12).join("")}</tbody></table>`);
+      for (let i = 0; i < filas.length; i += 6) tablas.push(`<table style="margin-bottom:14px">${thead}<tbody>${filas.slice(i, i + 6).join("")}</tbody></table>`);
       return tablas.join("");
     }).join("");
 
