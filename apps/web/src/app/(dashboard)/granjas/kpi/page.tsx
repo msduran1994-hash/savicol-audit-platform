@@ -947,7 +947,7 @@ function footer(): string {
 // ─── SECCIÓN INDICADORES DE MORTALIDAD ────────────────────────────────────────
 // Trazabilidad (lotes) + Mortalidad por Conteo de Picos (de los anexos del hallazgo,
 // con el % respecto al conteo de picos en letra grande y el reporte de detalle).
-function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: any[], hallazgos: any[] = []): string {
+function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: any[], hallazgos: any[] = [], ocultarConteoPicos = false): string {
   const fmt = (n: number) => n.toLocaleString("es-CO", { maximumFractionDigits: 2 });
 
   // Bloque 1 — Trazabilidad (aves ingresadas/actuales/muertes): RETIRADO por solicitud
@@ -1007,7 +1007,7 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
       <div style="font-size:11px;color:#334155;margin-top:6px"><strong>Interpretación técnica:</strong> mortalidad del ${pctNueva.toFixed(2)}%, ${pctNueva >= 8 ? "crítica — requiere atención inmediata" : pctNueva >= 4 ? "elevada — requiere seguimiento y plan de acción" : "dentro de parámetros aceptables"}.</div>
       <p style="font-size:9px;color:#94a3b8;margin-top:4px">% Mortalidad = Total mortalidad de aves (Σ mortalidad diaria) ÷ aves recibidas.</p>` : "";
 
-    const conteoPicos = conteo > 0 ? `
+    const conteoPicos = (conteo > 0 && !ocultarConteoPicos) ? `
       <div style="font-size:12px;font-weight:700;color:#0D1526;margin:14px 0 6px">Mortalidad por conteo de picos (detalle)</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;margin-bottom:4px">
         <span>Conteo de picos: <strong>${fmt(conteo)}</strong></span>
@@ -1198,10 +1198,15 @@ function seccionBitacora(hallazgos: any[], granjas: any[], modo: "resumen" | "de
   if (!conBit.length) return "";
   const total = conBit.reduce((s, x) => s + x.a.bitacoraIngreso.length, 0);
   if (modo === "compacto") {
-    // Tabla comprimida: sólo Fecha y Responsable, aplanando todos los ingresos.
-    const filas = conBit.flatMap(({ a }) => a.bitacoraIngreso.map(r => `<tr><td>${r.fecha || "—"}</td><td>${r.responsable || "—"}</td></tr>`)).join("");
+    // Tabla comprimida en 4 columnas (2 ingresos por fila) para ahorrar espacio: Fecha · Responsable · Fecha · Responsable.
+    const items = conBit.flatMap(({ a }) => a.bitacoraIngreso.map(r => ({ f: r.fecha || "—", n: r.responsable || "—" })));
+    const filas: string[] = [];
+    for (let i = 0; i < items.length; i += 2) {
+      const x = items[i], y = items[i + 1];
+      filas.push(`<tr><td>${x.f}</td><td>${x.n}</td><td>${y ? y.f : ""}</td><td>${y ? y.n : ""}</td></tr>`);
+    }
     return `<div class="section"><div class="section-title">Bitácora de Ingreso</div>
-      <table><thead><tr><th style="width:30%">Fecha</th><th>Responsable</th></tr></thead><tbody>${filas}</tbody></table></div>`;
+      <table><thead><tr><th style="width:16%">Fecha</th><th style="width:34%">Responsable</th><th style="width:16%">Fecha</th><th style="width:34%">Responsable</th></tr></thead><tbody>${filas.join("")}</tbody></table></div>`;
   }
   if (modo === "resumen") {
     const lineas = conBit.map(({ h, a }) => {
@@ -1228,10 +1233,15 @@ function seccionColaboradores(hallazgos: any[], granjas: any[], modo: "resumen" 
   if (!conCol.length) return "";
   const total = conCol.reduce((s, x) => s + x.a.registroColaboradores.length, 0);
   if (modo === "compacto") {
-    // Sólo los participantes registrados: tabla plana Nombre / Cargo.
-    const filas = conCol.flatMap(({ a }) => a.registroColaboradores.map(r => `<tr><td>${r.nombre || "—"}</td><td>${r.cargo || "—"}</td></tr>`)).join("");
+    // Participantes registrados en 4 columnas (2 por fila) para ahorrar espacio: Nombre · Cargo · Nombre · Cargo.
+    const items = conCol.flatMap(({ a }) => a.registroColaboradores.map(r => ({ n: r.nombre || "—", c: r.cargo || "—" })));
+    const filas: string[] = [];
+    for (let i = 0; i < items.length; i += 2) {
+      const x = items[i], y = items[i + 1];
+      filas.push(`<tr><td>${x.n}</td><td>${x.c}</td><td>${y ? y.n : ""}</td><td>${y ? y.c : ""}</td></tr>`);
+    }
     return `<div class="section"><div class="section-title">Registro de Colaboradores</div>
-      <table><thead><tr><th>Nombre</th><th>Cargo</th></tr></thead><tbody>${filas}</tbody></table></div>`;
+      <table><thead><tr><th>Nombre</th><th>Cargo</th><th>Nombre</th><th>Cargo</th></tr></thead><tbody>${filas.join("")}</tbody></table></div>`;
   }
   if (modo === "resumen") {
     const lineas = conCol.map(({ h, a }) => {
@@ -1755,7 +1765,7 @@ ${seccionFortalezas(kpis, hallazgos)}
 ${seccionRecomendaciones(kpis, hallazgos)}
 
 <div class="divider">Capítulo IV — Soportes y Seguimiento</div>
-${seccionMortalidad(mortalidad, granjas, hallazgos)}
+${seccionMortalidad(mortalidad, granjas, hallazgos, true)}
 ${seccionPaneles(hallazgos, granjas, "Mortalidad · Resumen Ejecutivo", (a) => resumenMortalidadDiaria(a.registroMortalidadDiaria))}
 ${graficosMortalidadTendencia(hallazgos)}
 <div class="section">
