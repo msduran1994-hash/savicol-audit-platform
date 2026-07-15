@@ -184,13 +184,19 @@ export type DatosGenerales = {
 };
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
+// Parsea una fecha respetando el día LOCAL: las cadenas "YYYY-MM-DD" (input date) se
+// interpretan en zona local, no UTC, para que no muestren el día anterior (Colombia UTC-5).
+function parseFechaLocal(d: string): Date {
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(d);
+}
 function fmtFecha(d?: string) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("es-CO", { year:"numeric", month:"long", day:"numeric" });
+  return parseFechaLocal(d).toLocaleDateString("es-CO", { year:"numeric", month:"long", day:"numeric" });
 }
 function fmtFechaCorta(d?: string) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("es-CO");
+  return parseFechaLocal(d).toLocaleDateString("es-CO");
 }
 function clsBadge(e: string) {
   const u = e?.toUpperCase().replace(/ /g,"_");
@@ -801,7 +807,7 @@ function seccionHallazgos(hallazgos: any[], granjas: any[], limite=15, introHTML
       <tbody>${lista.map(h => {
         const g = granjas.find(gr=>gr.id===h.granjaId);
         return `<tr>
-          <td>${h.titulo?.slice(0,35) || "—"}</td>
+          <td>${h.titulo || "—"}</td>
           <td>${g?.nombre || "—"}</td>
           <td>${h.auditorNombre || "—"}</td>
           <td>${fmtFechaCorta(h.fechaVisita)}</td>
@@ -863,14 +869,7 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
         <div class="kpi-meta">
           Granja: <strong>${g?.nombre||"—"}</strong> ·
           Responsable: <strong>${k.responsable||"—"}</strong>
-          ${h ? ` · Hallazgo: ${h.titulo?.slice(0,30)}` : ""}
-          ${k.fechaCompromiso ? ` · Compromiso: ${fmtFechaCorta(k.fechaCompromiso)}` : ""}
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <div class="progress-bar-bg" style="flex:1">
-            <div class="progress-bar-fill" style="width:${pct}%;background:${fillColor}"></div>
-          </div>
-          <span style="font-size:10px;font-weight:700">${pct}%</span>
+          ${h ? ` · Hallazgo: ${h.titulo}` : ""}
         </div>
         ${seguResp ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Seguimiento:</strong> ${seguResp}</div>` : ""}
         ${seguAudNombre ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Auditor de seguimiento:</strong> ${seguAudNombre}</div>` : ""}
