@@ -2264,32 +2264,33 @@ function generarResumen(
       const caption  = `${g.nombre || "—"} &nbsp;·&nbsp; % Mortalidad general: <strong style="color:#EF4444">${pctGen === null ? "—" : pctGen.toFixed(2) + "%"}</strong> &nbsp;·&nbsp; Diferencia general de Bultos: <strong style="color:#0EA5E9">${_fmtAnx(difGen)} bultos</strong> (${_fmtAnx(difGenKg)} Kg)`;
 
       const colHeaders = `<tr><th style="width:8%">Fecha visita</th><th style="width:9%">Granja</th><th style="width:22%">Hallazgo</th><th style="width:10%">Categoría</th><th style="width:12%">Tipo de Riesgo</th><th style="width:31%">Planes de acción</th><th style="width:8%">Criticidad</th></tr>`;
-      const ordenados = [...hs].sort((a, b) => critRank(b) - critRank(a));
-      // Una tabla por hallazgo (1 fila): con la descripción y el plan COMPLETOS las filas son
-      // altas; así cada <table> cabe en la hoja y NUNCA se corta una fila. La banda de la granja
-      // (caption) va sólo en el primer hallazgo; los encabezados de columna, en todos.
-      return ordenados.map((h, idx) => {
-        const fila = `<tr>
-          <td>${fmtFechaCorta(h.fechaVisita)}</td>
-          <td>${g.nombre || "—"}</td>
-          <td><strong>${h.titulo || "—"}</strong>${h.descripcion ? `<div style="font-weight:400;color:#475569;margin-top:3px;line-height:1.4">${h.descripcion}</div>` : ""}</td>
-          <td>${h.categoria || "—"}</td>
-          <td>${Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo.join(", ") : "—"}</td>
-          <td>${planDe(h)}</td>
-          <td>${h.criticidad || "—"}</td>
-        </tr>`;
-        const capRow = idx === 0 ? `<tr><th colspan="7" style="background:#0D1526;color:#fff;text-align:left;font-size:12px;padding:7px 10px;font-weight:700">${caption}</th></tr>` : "";
-        return `<table style="margin-bottom:6px"><thead>${capRow}${colHeaders}</thead><tbody>${fila}</tbody></table>`;
-      }).join("");
+      const filas = [...hs].sort((a, b) => critRank(b) - critRank(a)).map(h => `<tr>
+        <td>${fmtFechaCorta(h.fechaVisita)}</td>
+        <td>${g.nombre || "—"}</td>
+        <td><strong>${h.titulo || "—"}</strong>${h.descripcion ? `<div style="font-weight:400;color:#475569;margin-top:3px;line-height:1.35">${h.descripcion}</div>` : ""}</td>
+        <td>${h.categoria || "—"}</td>
+        <td>${Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo.join(", ") : "—"}</td>
+        <td>${planDe(h)}</td>
+        <td>${h.criticidad || "—"}</td>
+      </tr>`);
+      // Tabla agrupada POR GRANJA: la banda de la granja (caption) y los encabezados van UNA vez
+      // por granja; los hallazgos son las filas. Se parten en bloques que caben en la hoja para no
+      // cortar filas, manteniendo el mínimo de hojas.
+      const chunks: string[] = [];
+      for (let i = 0; i < filas.length; i += 4) {
+        const capRow = i === 0 ? `<tr><th colspan="7" style="background:#0D1526;color:#fff;text-align:left;font-size:11px;padding:6px 10px;font-weight:700">${caption}</th></tr>` : "";
+        chunks.push(`<table style="margin-bottom:8px"><thead>${capRow}${colHeaders}</thead><tbody>${filas.slice(i, i + 4).join("")}</tbody></table>`);
+      }
+      return chunks.join("");
     }).join("");
 
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Informe Resumen — Pollos Savicol S.A.S.</title>
 <style>${CSS_BASE}
-/* Informe Resumen: tipografía uniforme Times New Roman 12 en toda la estructura */
+/* Informe Resumen: tipografía uniforme Times New Roman tamaño 10 en toda la estructura */
 .page,.page td,.page th,.page div,.page p,.page span,.page strong{font-family:'Times New Roman',Times,serif}
-.page td,.page th{font-size:12px}
-.page .section-title{font-size:14px}
+.page td,.page th{font-size:10px}
+.page .section-title{font-size:12px}
 </style></head><body><div class="page">
 ${portada(`Informe Resumen Ejecutivo N° ${num}`, `Comparativo por Granja · ${codigo} · Versión 1.0`, kpis, hallazgos, auditor, undefined, datos, true)}
 
