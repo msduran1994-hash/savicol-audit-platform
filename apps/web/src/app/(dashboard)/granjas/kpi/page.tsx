@@ -1589,11 +1589,22 @@ function seccionMetodologia(kpis: any[], hallazgos: any[], granjas: any[]): stri
   </div>`;
 }
 
-// Marco legal aplicable (parametrizable — campo editable por informe)
+// Marco legal aplicable — normatividad FIJA por defecto. Si el formulario trae un texto
+// propio (campo "Marco legal aplicable"), éste reemplaza la lista fija.
+const MARCO_LEGAL_ITEMS = [
+  "Resolución 3651 de 2014 (ICA) — Normas de bioseguridad para establecimientos avícolas.",
+  "Decreto 1500 de 2007 (Ministerio de Salud) — Sistema de inspección y control para productos cárnicos.",
+  "Resolución 2674 de 2013 (ICA) — Buenas prácticas de manufactura (BPM y POES).",
+  "Resolución 1515 de 2015 (RSPA) — Registro sanitario avícola.",
+  "Resolución 3642 de 2013, art. 10 numeral 10.2.15 — Identificación de áreas y separación física elaborada en materiales resistentes a la corrosión, no absorbentes, de fácil limpieza y desinfección.",
+  "Resolución 3650 de 2014 — Certificación de bioseguridad.",
+  "Resolución 240 de 2013 (ICA) — Medidas sanitarias para producción avícola.",
+  "Políticas internas de calidad, inocuidad y control interno de la empresa.",
+];
 function seccionMarcoLegal(marcoLegal?: string): string {
   const cuerpo = (marcoLegal && marcoLegal.trim())
     ? marcoLegal.trim().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>")
-    : `<em style="color:#94a3b8">El marco legal aplicable no fue especificado para este informe. En el formulario de generación (campo "Marco legal aplicable") puede indicarse la normatividad sanitaria, ambiental y de bioseguridad vigente que aplique al alcance auditado.</em>`;
+    : `<ul style="margin:0;padding-left:18px;line-height:1.75">${MARCO_LEGAL_ITEMS.map(i => `<li>${i}</li>`).join("")}</ul>`;
   return `<div class="section"><div class="section-title">Marco Legal Aplicable</div>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #4A7AFF;border-radius:6px;padding:12px 14px;font-size:13px;line-height:1.7;color:#334155;text-align:justify">${cuerpo}</div></div>`;
 }
