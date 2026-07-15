@@ -2264,7 +2264,7 @@ function generarResumen(
       const caption  = `${g.nombre || "—"} &nbsp;·&nbsp; % Mortalidad general: <strong style="color:#EF4444">${pctGen === null ? "—" : pctGen.toFixed(2) + "%"}</strong> &nbsp;·&nbsp; Diferencia general de Bultos: <strong style="color:#0EA5E9">${_fmtAnx(difGen)} bultos</strong> (${_fmtAnx(difGenKg)} Kg)`;
 
       const colHeaders = `<tr><th style="width:8%">Fecha visita</th><th style="width:9%">Granja</th><th style="width:22%">Hallazgo</th><th style="width:10%">Categoría</th><th style="width:12%">Tipo de Riesgo</th><th style="width:31%">Planes de acción</th><th style="width:8%">Criticidad</th></tr>`;
-      const filaDe = (h: any) => `<tr>
+      const filas = [...hs].sort((a, b) => critRank(b) - critRank(a)).map(h => `<tr>
         <td>${fmtFechaCorta(h.fechaVisita)}</td>
         <td>${g.nombre || "—"}</td>
         <td><strong>${h.titulo || "—"}</strong>${h.descripcion ? `<div style="font-weight:400;color:#475569;margin-top:3px;line-height:1.35">${h.descripcion}</div>` : ""}</td>
@@ -2272,30 +2272,12 @@ function generarResumen(
         <td>${Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo.join(", ") : "—"}</td>
         <td>${planDe(h)}</td>
         <td>${h.criticidad || "—"}</td>
-      </tr>`;
-      // Altura estimada de cada fila (nº de líneas × alto) para EMPAQUETAR filas sin que la tabla
-      // exceda la hoja horizontal: así el paginador coloca cada <table> ENTERA y NUNCA corta la
-      // información al cambiar de página. Agrupado por granja: caption sólo en el primer bloque.
-      const rowPx = (h: any) => {
-        const desc = h.descripcion || "", plan = planDe(h), riesgo = Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo.join(", ") : "";
-        const lh = Math.ceil((h.titulo || "").length / 36) + (desc ? Math.ceil(desc.length / 36) : 0);
-        const lp = Math.ceil((plan.length || 1) / 50);
-        const lr = Math.ceil((riesgo.length || 1) / 18);
-        return 16 + Math.max(lh, lp, lr, 1) * 14;
-      };
-      const ordenados = [...hs].sort((a, b) => critRank(b) - critRank(a));
-      const grupos: any[][] = [];
-      let actual: any[] = [], acum = 0;
-      for (const h of ordenados) {
-        const rpx = rowPx(h);
-        if (actual.length && acum + rpx > 500) { grupos.push(actual); actual = []; acum = 0; }
-        actual.push(h); acum += rpx;
-      }
-      if (actual.length) grupos.push(actual);
-      return grupos.map((grupo, gi) => {
-        const capRow = gi === 0 ? `<tr><th colspan="7" style="background:#0D1526;color:#fff;text-align:left;font-size:11px;padding:6px 10px;font-weight:700">${caption}</th></tr>` : "";
-        return `<table style="margin-bottom:8px"><thead>${capRow}${colHeaders}</thead><tbody>${grupo.map(filaDe).join("")}</tbody></table>`;
-      }).join("");
+      </tr>`).join("");
+      // UNA sola tabla por granja: el caption (banda de la granja) y los encabezados van en el
+      // thead y se REPITEN en cada hoja; el motor pagina la tabla por límite de fila, sin cortar
+      // información ni crear tablas por hoja/por hallazgo.
+      const capRow = `<tr><th colspan="7" style="background:#0D1526;color:#fff;text-align:left;font-size:11px;padding:6px 10px;font-weight:700">${caption}</th></tr>`;
+      return `<table style="margin-bottom:10px"><thead>${capRow}${colHeaders}</thead><tbody>${filas}</tbody></table>`;
     }).join("");
 
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
@@ -2447,6 +2429,9 @@ async function htmlToPDFBase64(html: string, orientation: "portrait" | "landscap
           } catch { /* noop */ }
         },
       });
+    // Captura SIN colchón de padding: para paginar tablas por fila con alineación exacta.
+    const capturarPlano = (el: HTMLElement) =>
+      html2canvas(el, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: "#ffffff", logging: false, windowWidth: 900 });
     const nuevaPagina = () => { pdf.addPage(); y = mTop; pageVacia = true; };
 
     // Coloca un canvas preservando su proporción (centrado según el ancho real del
@@ -2478,6 +2463,53 @@ async function htmlToPDFBase64(html: string, orientation: "portrait" | "landscap
       }
     };
 
+    // Pagina una <table> cortando SÓLO en límites de fila (nunca a mitad de texto) y repitiendo
+    // el encabezado (thead) en cada hoja. Empaca las filas que caben para minimizar hojas: la
+    // tabla es UNA sola en el HTML; el corte entre páginas lo hace el motor sin perder información.
+    const colocarTabla = async (table: HTMLElement) => {
+      const canvas = await capturarPlano(table);
+      const rows = Array.from(table.querySelectorAll("tbody > tr")).filter((r): r is HTMLElement => r instanceof HTMLElement);
+      const domH = table.getBoundingClientRect().height;
+      if (!canvas.width || !canvas.height || !rows.length || domH <= 0) { colocarCanvas(canvas, table.offsetWidth); return; }
+      const wmm = Math.min(pageW, (table.offsetWidth / 900) * pageW);
+      const x = (pageW - wmm) / 2;
+      const mmPorCanvasPx = wmm / canvas.width;                     // mm por px del canvas
+      const sc = canvas.height / domH;                              // px de canvas por px del DOM
+      const tTop = table.getBoundingClientRect().top;
+      const thead = table.querySelector("thead") as HTMLElement | null;
+      const theadPx = thead ? Math.round(thead.getBoundingClientRect().height * sc) : 0;
+      const bounds = rows.map(r => { const rr = r.getBoundingClientRect(); return { top: Math.round((rr.top - tTop) * sc), bot: Math.round((rr.bottom - tTop) * sc) }; });
+      const dibujar = (top: number, bot: number) => {
+        const bodyH = bot - top, totalH = theadPx + bodyH;
+        const pc = document.createElement("canvas");
+        pc.width = canvas.width; pc.height = totalH;
+        const ctx = pc.getContext("2d");
+        if (!ctx) return 0;
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, pc.width, pc.height);
+        if (theadPx > 0) ctx.drawImage(canvas, 0, 0, canvas.width, theadPx, 0, 0, canvas.width, theadPx);
+        ctx.drawImage(canvas, 0, top, canvas.width, bodyH, 0, theadPx, canvas.width, bodyH);
+        const hmm = totalH * mmPorCanvasPx;
+        pdf.addImage(pc.toDataURL("image/jpeg", 0.9), "JPEG", x, y, wmm, hmm, undefined, "FAST");
+        return hmm;
+      };
+      let i = 0;
+      while (i < rows.length) {
+        const filaH0mm = (bounds[i].bot - bounds[i].top) * mmPorCanvasPx;
+        if (!pageVacia && (theadPx * mmPorCanvasPx + filaH0mm) > (pageH - mBottom - y) + 0.5) nuevaPagina();
+        const budgetPx = ((pageH - mBottom - y) / mmPorCanvasPx) - theadPx; // cuerpo disponible en px de canvas
+        let j = i, usado = 0;
+        while (j < rows.length) {
+          const fH = bounds[j].bot - bounds[j].top;
+          if (j > i && usado + fH > budgetPx) break;
+          usado += fH; j++;
+        }
+        const hmm = dibujar(bounds[i].top, bounds[j - 1].bot);
+        y += hmm; pageVacia = false;
+        i = j;
+        if (i < rows.length) nuevaPagina();
+      }
+    };
+
     // Un elemento es "hoja" (se coloca ENTERO, nunca se parte en hijos): tablas, filas,
     // imágenes, gráficos SVG/canvas, tarjetas KPI/chart/firma/metric y cualquier contenedor
     // flex/grid (partirlo rompería su maquetación en columnas). El resto (secciones y
@@ -2500,6 +2532,11 @@ async function htmlToPDFBase64(html: string, orientation: "portrait" | "landscap
     const colocarElemento = async (el: HTMLElement, prof: number): Promise<void> => {
       const hmmAprox = el.offsetHeight * mmPerPx;
       const restante = pageH - mBottom - y;
+      // Tabla que no cabe entera en lo que resta: paginar por FILAS (sin cortar filas, thead repetido).
+      if (el.tagName === "TABLE" && el.querySelector("tbody > tr") && (hmmAprox > usableH || (hmmAprox > restante && !pageVacia))) {
+        await colocarTabla(el);
+        return;
+      }
       const hijos = Array.from(el.children).filter((c): c is HTMLElement => c instanceof HTMLElement && c.offsetHeight > 0);
       if (!esHoja(el) && hijos.length > 1 && prof < 4 && (hmmAprox > usableH || (hmmAprox > restante && !pageVacia))) {
         for (const hijo of hijos) await colocarElemento(hijo, prof + 1);
