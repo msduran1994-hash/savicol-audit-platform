@@ -177,6 +177,10 @@ export type DatosGenerales = {
   administrador: string;
   oficialCumplimiento: string;
   tituloActividad: string;
+  // Campos del Informe Ejecutivo (opcionales — sólo portada de ese modelo).
+  tecnicoVeterinario?: string;
+  lote?: string;
+  edadLote?: string;
 };
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
@@ -614,7 +618,7 @@ function seccionDashboardEjecutivo(kpis: any[], hallazgos: any[], granjas: any[]
 }
 
 // ─── PORTADA COMPARTIDA ───────────────────────────────────────────────────────
-function portada(titulo: string, subtitulo: string, kpis: any[], hallazgos: any[], auditor: string, granjaFiltro?: string, datos?: DatosGenerales, ocultarKPI?: boolean): string {
+function portada(titulo: string, subtitulo: string, kpis: any[], hallazgos: any[], auditor: string, granjaFiltro?: string, datos?: DatosGenerales, ocultarKPI?: boolean, extraMeta?: { label: string; value: string }[]): string {
   const fecha = fmtFecha(new Date().toISOString());
   const pct   = porcentaje(kpis);
   const auditores = [datos?.auditor1, datos?.auditor2].filter(Boolean).join(" · ") || auditor || "Equipo de Auditoría";
@@ -627,6 +631,7 @@ function portada(titulo: string, subtitulo: string, kpis: any[], hallazgos: any[
   meta.push(ocultarKPI
     ? { label: "Hallazgos Reportados", value: `${hallazgos.length}` }
     : { label: "Avance Global KPI", value: `${pct}% · ${kpis.length} planes` });
+  if (extraMeta) extraMeta.forEach(m => { if (m.value) meta.push(m); });
   return `
   <div class="cover">
     <div class="logo-box">
@@ -881,24 +886,32 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
 }
 
 // ─── SECCIÓN FIRMA DIGITAL ────────────────────────────────────────────────────
-function seccionFirma(auditor: string, cargo="Auditor Interno", datos?: DatosGenerales, ordenGeneral=false): string {
+function seccionFirma(auditor: string, cargo="Auditor Interno", datos?: DatosGenerales, ordenGeneral=false, rolesEjecutivo=false): string {
   const fecha = fmtFechaCorta(new Date().toISOString());
   const hash  = `SHA-${Date.now().toString(36).toUpperCase()}`;
   // Firmantes: con datos generales se usan los roles del formulario; si no, auditor + gerencia.
   const firmantes: { nombre: string; cargo: string; nota?: string }[] = [];
-  if (datos?.auditor1) firmantes.push({ nombre: datos.auditor1, cargo: "Auditor 1", nota: `Firma digital: ${hash}` });
-  if (datos?.auditor2) firmantes.push({ nombre: datos.auditor2, cargo: "Auditor 2" });
-  if (!datos?.auditor1 && !datos?.auditor2) firmantes.push({ nombre: auditor || "Auditor Interno", cargo, nota: `Firma digital: ${hash}` });
-  if (ordenGeneral) {
-    // Informe General — orden solicitado: Auditor · Responsable del Proceso · Administrador · Oficial de Cumplimiento · Gerencia
-    firmantes.push({ nombre: "", cargo: "Responsable del Proceso" });
+  if (rolesEjecutivo) {
+    // Informe Ejecutivo — orden solicitado: Auditor · Técnico Veterinario · Administrador · Oficial de Cumplimiento
+    firmantes.push({ nombre: datos?.auditor1 || auditor || "Auditor Interno", cargo: "Auditor", nota: `Firma digital: ${hash}` });
+    firmantes.push({ nombre: datos?.tecnicoVeterinario || "", cargo: "Técnico Veterinario" });
     firmantes.push({ nombre: datos?.administrador || "", cargo: "Administrador" });
     firmantes.push({ nombre: datos?.oficialCumplimiento || "", cargo: "Oficial de Cumplimiento" });
-    firmantes.push({ nombre: datos?.gerenteGeneral || "Gerencia General", cargo: "Gerencia", nota: "V°B° — Pendiente de aprobación" });
   } else {
-    firmantes.push({ nombre: datos?.gerenteGeneral || "Gerencia General", cargo: "Gerente General", nota: "V°B° — Pendiente de aprobación" });
-    if (datos?.administrador)        firmantes.push({ nombre: datos.administrador, cargo: "Administrador" });
-    if (datos?.oficialCumplimiento)  firmantes.push({ nombre: datos.oficialCumplimiento, cargo: "Oficial de Cumplimiento" });
+    if (datos?.auditor1) firmantes.push({ nombre: datos.auditor1, cargo: "Auditor 1", nota: `Firma digital: ${hash}` });
+    if (datos?.auditor2) firmantes.push({ nombre: datos.auditor2, cargo: "Auditor 2" });
+    if (!datos?.auditor1 && !datos?.auditor2) firmantes.push({ nombre: auditor || "Auditor Interno", cargo, nota: `Firma digital: ${hash}` });
+    if (ordenGeneral) {
+      // Informe General — orden solicitado: Auditor · Responsable del Proceso · Administrador · Oficial de Cumplimiento · Gerencia
+      firmantes.push({ nombre: "", cargo: "Responsable del Proceso" });
+      firmantes.push({ nombre: datos?.administrador || "", cargo: "Administrador" });
+      firmantes.push({ nombre: datos?.oficialCumplimiento || "", cargo: "Oficial de Cumplimiento" });
+      firmantes.push({ nombre: datos?.gerenteGeneral || "Gerencia General", cargo: "Gerencia", nota: "V°B° — Pendiente de aprobación" });
+    } else {
+      firmantes.push({ nombre: datos?.gerenteGeneral || "Gerencia General", cargo: "Gerente General", nota: "V°B° — Pendiente de aprobación" });
+      if (datos?.administrador)        firmantes.push({ nombre: datos.administrador, cargo: "Administrador" });
+      if (datos?.oficialCumplimiento)  firmantes.push({ nombre: datos.oficialCumplimiento, cargo: "Oficial de Cumplimiento" });
+    }
   }
 
   const box = (f: { nombre: string; cargo: string; nota?: string }) => `
@@ -1180,10 +1193,16 @@ function graficosMortalidad(hallazgos: any[], granjas: any[]): string {
 }
 
 // ─── SECCIÓN BITÁCORA DE INGRESO A LA GRANJA (resumen / detalle) ──────────────
-function seccionBitacora(hallazgos: any[], granjas: any[], modo: "resumen" | "detalle"): string {
+function seccionBitacora(hallazgos: any[], granjas: any[], modo: "resumen" | "detalle" | "compacto"): string {
   const conBit = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) })).filter(x => x.a.bitacoraIngreso.length > 0);
   if (!conBit.length) return "";
   const total = conBit.reduce((s, x) => s + x.a.bitacoraIngreso.length, 0);
+  if (modo === "compacto") {
+    // Tabla comprimida: sólo Fecha y Responsable, aplanando todos los ingresos.
+    const filas = conBit.flatMap(({ a }) => a.bitacoraIngreso.map(r => `<tr><td>${r.fecha || "—"}</td><td>${r.responsable || "—"}</td></tr>`)).join("");
+    return `<div class="section"><div class="section-title">Bitácora de Ingreso</div>
+      <table><thead><tr><th style="width:30%">Fecha</th><th>Responsable</th></tr></thead><tbody>${filas}</tbody></table></div>`;
+  }
   if (modo === "resumen") {
     const lineas = conBit.map(({ h, a }) => {
       const g = granjas.find(gr => gr.id === h.granjaId);
@@ -1204,10 +1223,16 @@ function seccionBitacora(hallazgos: any[], granjas: any[], modo: "resumen" | "de
 }
 
 // ─── SECCIÓN REGISTRO DE COLABORADORES (resumen / detalle) ────────────────────
-function seccionColaboradores(hallazgos: any[], granjas: any[], modo: "resumen" | "detalle"): string {
+function seccionColaboradores(hallazgos: any[], granjas: any[], modo: "resumen" | "detalle" | "compacto"): string {
   const conCol = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) })).filter(x => x.a.registroColaboradores.length > 0);
   if (!conCol.length) return "";
   const total = conCol.reduce((s, x) => s + x.a.registroColaboradores.length, 0);
+  if (modo === "compacto") {
+    // Sólo los participantes registrados: tabla plana Nombre / Cargo.
+    const filas = conCol.flatMap(({ a }) => a.registroColaboradores.map(r => `<tr><td>${r.nombre || "—"}</td><td>${r.cargo || "—"}</td></tr>`)).join("");
+    return `<div class="section"><div class="section-title">Registro de Colaboradores</div>
+      <table><thead><tr><th>Nombre</th><th>Cargo</th></tr></thead><tbody>${filas}</tbody></table></div>`;
+  }
   if (modo === "resumen") {
     const lineas = conCol.map(({ h, a }) => {
       const g = granjas.find(gr => gr.id === h.granjaId);
@@ -1683,33 +1708,73 @@ function generarModelo1(
   evidenciasPorHallazgo?: Record<string, any[]>, marcoLegal?: string,
   mortalidad?: MortalidadResumen, datos?: DatosGenerales
 ): string {
+  const year   = new Date().getFullYear();
+  const num    = datos?.numeroInforme || `AU-EJE-${year}-${String(Date.now()).slice(-4)}`;
+  const codigo = `IEA-AUD-${year}-${datos?.numeroInforme?.match(/\d+/)?.[0] ?? String(Date.now()).slice(-4)}`;
+
+  // Diferencia general de bultos del alcance (Cap. IV, sin tabla extensa).
+  let dIng = 0, dSal = 0, dFis = 0, dKg = 0, dKgN = 0;
+  hallazgos.forEach(h => {
+    const a = parseAnexos(h.anexosTecnicos);
+    dIng += totalIngresoUnidades(a); dFis += totalInventarioBultos(a);
+    dSal += (a.totalBultos?.bloques?.[0]?.filas ?? []).reduce((s: number, f: any) => s + anexNum(f.cantidad), 0);
+    dKg += anexNum(a.registroBultosConsumidos?.kgPorBulto) || 40; dKgN++;
+  });
+  const difBultos   = (dSal + dFis) - dIng;
+  const difBultosKg = difBultos * (dKgN ? dKg / dKgN : 40);
+  const hayInv = dIng > 0 || dSal > 0 || dFis > 0;
+
+  const extraMeta = [
+    { label: "Técnico Veterinario", value: datos?.tecnicoVeterinario || "" },
+    { label: "Administrador de Granja", value: datos?.administrador || "" },
+    { label: "Lote", value: datos?.lote || "" },
+    { label: "Edad del Lote", value: datos?.edadLote || "" },
+    { label: "Código Documental", value: `${codigo} · Versión 1.0` },
+  ];
+
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Informe Ejecutivo — Pollos Savicol S.A.S.</title>
-<style>${CSS_BASE}</style></head><body><div class="page">
-${portada("Informe Ejecutivo de Auditoría", "Control Interno y Cumplimiento KPI", kpis, hallazgos, auditor, undefined, datos)}
+<title>Informe Ejecutivo de Auditoría — Pollos Savicol S.A.S.</title>
+<style>${CSS_BASE}
+.divider{text-align:center;padding:12px;margin-top:6px;background:linear-gradient(90deg,transparent,#e2e8f0,transparent);
+  font-size:11px;color:#475569;font-weight:700;letter-spacing:.08em;text-transform:uppercase;page-break-inside:avoid;page-break-after:avoid}
+</style></head><body><div class="page">
+${portada(`Informe Ejecutivo de Auditoría N° ${num}`, "Control Interno y Cumplimiento KPI", kpis, hallazgos, auditor, granjas[0]?.nombre, datos, false, extraMeta)}
 
-${seccionMortalidad(mortalidad, granjas, hallazgos)}
-${seccionPaneles(hallazgos, granjas, "Resumen Ejecutivo · Indicadores de Mortalidad", (a) => resumenRecepcionAves(a))}
+<div class="divider">Capítulo I — Aspectos Preliminares</div>
+${seccionMetodologia(kpis, hallazgos, granjas)}
 
+<div class="divider">Capítulo II — Características Generales</div>
+${seccionMarcoLegal(marcoLegal)}
 ${seccionHallazgos(hallazgos, granjas, 20, resumenCorporativoParrafo(kpis, hallazgos))}
-
 ${seccionKPIs(kpis, granjas, hallazgos)}
-
-${seccionMortalidadDiaria(hallazgos, granjas, "detalle")}
-${seccionPaneles(hallazgos, granjas, "Resumen Ejecutivo · Registro Mortalidad Diaria", (a) => resumenMortalidadDiaria(a.registroMortalidadDiaria))}
-
-${seccionBultosConsumidos(hallazgos, granjas, "detalle")}
-${seccionPaneles(hallazgos, granjas, "Resumen Ejecutivo · Bultos Consumidos por Día", (a) => resumenBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a)))}
-
-${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
-
-${seccionBitacora(hallazgos, granjas, "detalle")}
-
-${seccionColaboradores(hallazgos, granjas, "detalle")}
-
+${seccionRiesgos(hallazgos)}
 ${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
 
-${seccionFirma(auditor, "Auditor Interno", datos)}
+<div class="divider">Capítulo III — Consideraciones</div>
+${seccionFortalezas(kpis, hallazgos)}
+${seccionRecomendaciones(kpis, hallazgos)}
+
+<div class="divider">Capítulo IV — Soportes y Seguimiento</div>
+${seccionMortalidad(mortalidad, granjas, hallazgos)}
+${seccionPaneles(hallazgos, granjas, "Mortalidad · Resumen Ejecutivo", (a) => resumenMortalidadDiaria(a.registroMortalidadDiaria))}
+${graficosMortalidadTendencia(hallazgos)}
+<div class="section">
+  <div class="section-title">Inventario de Alimento</div>
+  ${hayInv ? `<table><tbody>
+    <tr><td style="width:40%;font-weight:600;color:#0D1526">Diferencia general</td><td><strong style="color:${difBultos !== 0 ? "#F97316" : "#22C55E"};font-size:14px">${_fmtAnx(difBultos)} bultos</strong> &nbsp;·&nbsp; ${_fmtAnx(difBultosKg)} Kg</td></tr>
+    <tr><td style="color:#64748b;font-size:11px" colspan="2">(Salida + Conteo físico) − Ingreso</td></tr>
+  </tbody></table>` : `<p style="font-size:11px;color:#94a3b8">Sin registros de inventario de alimento en el alcance.</p>`}
+</div>
+${seccionPaneles(hallazgos, granjas, "Consumo de Alimento · Resumen Ejecutivo", (a) => resumenBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a)))}
+${graficosConsumoTendencia(hallazgos)}
+${seccionBitacora(hallazgos, granjas, "compacto")}
+${seccionColaboradores(hallazgos, granjas, "compacto")}
+${seccionFirma(auditor, "Auditor Interno", datos, false, true)}
+<div class="section" style="page-break-inside:avoid">
+  <div style="padding:10px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;font-size:11px;color:#0c4a6e;text-align:justify">
+    <strong>Certificación.</strong> Se certifica que el presente Informe Ejecutivo de Auditoría (${codigo} · Versión 1.0) fue generado por el Sistema de Auditoría Interna de ${EMPRESA.nombre} (NIT ${EMPRESA.nit}) a partir de los registros filtrados vigentes al momento de su emisión, garantizando la trazabilidad completa hallazgo → plan de acción → evidencia → seguimiento. Documento confidencial de uso interno.
+  </div>
+</div>
 ${footer()}
 </div></body></html>`;
 }
@@ -2601,8 +2666,20 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
                 <span className={FLD}>Administrador</span>
                 <input value={datos.administrador} onChange={e=>setD("administrador", e.target.value)} className={INP_STYLE} placeholder="Nombre del Administrador"/>
               </div>
+              <div>
+                <span className={FLD}>Técnico Veterinario <span className="text-[#475569] font-normal normal-case">(Ejecutivo)</span></span>
+                <input value={datos.tecnicoVeterinario ?? ""} onChange={e=>setD("tecnicoVeterinario", e.target.value)} className={INP_STYLE} placeholder="Nombre del Técnico Veterinario"/>
+              </div>
+              <div>
+                <span className={FLD}>Lote <span className="text-[#475569] font-normal normal-case">(Ejecutivo)</span></span>
+                <input value={datos.lote ?? ""} onChange={e=>setD("lote", e.target.value)} className={INP_STYLE} placeholder="Identificación del lote"/>
+              </div>
+              <div>
+                <span className={FLD}>Edad del Lote <span className="text-[#475569] font-normal normal-case">(Ejecutivo)</span></span>
+                <input value={datos.edadLote ?? ""} onChange={e=>setD("edadLote", e.target.value)} className={INP_STYLE} placeholder="p.ej. 35 días"/>
+              </div>
             </div>
-            <p className="text-[9px] text-[#475569] mt-1.5 px-1">Se incorporan automáticamente en la portada y las firmas de todos los modelos seleccionados.</p>
+            <p className="text-[9px] text-[#475569] mt-1.5 px-1">Se incorporan automáticamente en la portada y las firmas de todos los modelos seleccionados. Los campos marcados (Ejecutivo) sólo aparecen en el Informe Ejecutivo.</p>
           </div>
 
           {/* Selección múltiple de modelos */}
@@ -3068,6 +3145,18 @@ export default function KPIPage() {
             const fecha = new Date().toISOString().slice(0, 10);
             // Un PDF por cada modelo seleccionado.
             for (const modelo of modelosSel) {
+              if (modelo === "1-ejecutivo") {
+                // Informe Ejecutivo: un PDF por granja/lote del alcance (portada y lote propios).
+                const lista = granjasFiltradas.length ? granjasFiltradas : [null as any];
+                for (const g of lista) {
+                  const kG = g ? filtered.filter((k: any) => k.granjaId === g.id) : filtered;
+                  const hG = g ? hallazgosFiltrados.filter((h: any) => h.granjaId === g.id) : hallazgosFiltrados;
+                  const html = htmlDeModelo(modelo, kG, hG, g ? [g] : granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidadKPI, datos);
+                  const { b64 } = await htmlToPDFBase64(html, "portrait");
+                  descargarPDFBase64(b64, `Informe-Ejecutivo-${(g?.nombre || "General").replace(/\s+/g, "-")}-${fecha}.pdf`);
+                }
+                continue;
+              }
               const esH = modelo === "6-hallazgos";
               const html = htmlDeModelo(modelo, filtered, esH ? hallazgosRep : hallazgosFiltrados, esH ? granjasRep : granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, esH ? mortalidadRep : mortalidadKPI, datos);
               const { b64 } = await htmlToPDFBase64(html, modelo === "2-resumen" ? "landscape" : "portrait");
@@ -3101,6 +3190,18 @@ export default function KPIPage() {
             // Genera el PDF de cada modelo seleccionado (mismo HTML que la descarga).
             const pdfs: { b64: string; filename: string; titulo: string }[] = [];
             for (const modelo of modelosSel) {
+              if (modelo === "1-ejecutivo") {
+                // Informe Ejecutivo: un PDF por granja/lote del alcance.
+                const lista = granjasFiltradas.length ? granjasFiltradas : [null as any];
+                for (const g of lista) {
+                  const kG = g ? filtered.filter((k: any) => k.granjaId === g.id) : filtered;
+                  const hG = g ? hallazgosFiltrados.filter((h: any) => h.granjaId === g.id) : hallazgosFiltrados;
+                  const html = htmlDeModelo(modelo, kG, hG, g ? [g] : granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidadKPI, datos);
+                  const { b64 } = await htmlToPDFBase64(html, "portrait");
+                  pdfs.push({ b64, filename: `Informe-Ejecutivo-${(g?.nombre || "General").replace(/\s+/g, "-")}-${fecha}.pdf`, titulo: `Ejecutivo · ${g?.nombre || "General"}` });
+                }
+                continue;
+              }
               const esH = modelo === "6-hallazgos";
               const html = htmlDeModelo(modelo, filtered, esH ? hallazgosRep : hallazgosFiltrados, esH ? granjasRep : granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, esH ? mortalidadRep : mortalidadKPI, datos);
               const { b64 } = await htmlToPDFBase64(html, modelo === "2-resumen" ? "landscape" : "portrait");
