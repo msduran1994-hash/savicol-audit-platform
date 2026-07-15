@@ -19,7 +19,7 @@ import {
 } from "@/lib/anexos-tecnicos";
 import { EnvioCorreoModal } from "@/components/informes/envio-correo";
 import {
-  Target, Plus, Filter, X, Trash2, Edit2, AlertCircle,
+  Target, Plus, Filter, X, Trash2, Edit2, AlertCircle, Check,
   Loader2, CheckCircle2, Sparkles, FileText, TrendingUp, Bell, ChevronDown,
   ImagePlus, Image as ImageIcon,
 } from "lucide-react";
@@ -2356,7 +2356,7 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
 // ─── Modal selector de modelos de informe ─────────────────────────────────────
 function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsList, resultadosCount, onClose, onGenerar, onEnviar }: {
   granjas:    any[];
-  filtrosActivos?: { fEstado: string; fGranja: string; fAuditor: string; fTipoRiesgo: string; fFechaHallazgo: string };
+  filtrosActivos?: { fEstado: string; fGranjas: string[]; fAuditor: string; fTipoRiesgo: string; fFechaHallazgo: string };
   granjasList?:    any[];
   auditorsList?:   any[];
   resultadosCount?: number;
@@ -2396,9 +2396,9 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
     const f = filtrosActivos;
     if (!f) return [];
     const arr: { label: string; valor: string }[] = [];
-    if (f.fGranja) {
-      const g = (granjasList ?? []).find((x:any) => x.id === f.fGranja);
-      arr.push({ label: "Granja", valor: g?.nombre ?? f.fGranja });
+    if (f.fGranjas.length) {
+      const nombres = f.fGranjas.map((id) => (granjasList ?? []).find((x:any) => x.id === id)?.nombre ?? id);
+      arr.push({ label: f.fGranjas.length > 1 ? "Granjas" : "Granja", valor: nombres.join(", ") });
     }
     if (f.fAuditor) {
       const a = (auditorsList ?? []).find((x:any) => x.id === f.fAuditor);
@@ -2643,7 +2643,8 @@ export default function KPIPage() {
 
   // ── Filtros superiores ────────────────────────────────────────────────────
   const [fEstado,        setFEstado]        = useState("");
-  const [fGranja,        setFGranja]        = useState("");
+  const [fGranjas,       setFGranjas]       = useState<string[]>([]);   // multi-selección de granjas
+  const [granjaMenuOpen, setGranjaMenuOpen] = useState(false);
   const [fAuditor,       setFAuditor]       = useState("");
   const [fTipoRiesgo,    setFTipoRiesgo]    = useState("");
   const [fFechaHallazgo, setFFechaHallazgo] = useState("");
@@ -2659,7 +2660,7 @@ export default function KPIPage() {
       const d = displayEstado(k.estado);
       return d === fEstado || k.estado === fEstado;
     });
-    if (fGranja)   list = list.filter(k => k.granjaId === fGranja);
+    if (fGranjas.length) list = list.filter(k => fGranjas.includes(k.granjaId));
     if (fAuditor)  list = list.filter(k => {
       const h = k.hallazgoId ? hallazgos.find(h => h.id === k.hallazgoId) : null;
       return h?.auditorId === fAuditor;
@@ -2675,9 +2676,9 @@ export default function KPIPage() {
       return h?.fechaVisita?.startsWith(fFechaHallazgo);
     });
     return list;
-  }, [kpis, hallazgos, fEstado, fGranja, fAuditor, fTipoRiesgo, fFechaHallazgo]);
+  }, [kpis, hallazgos, fEstado, fGranjas, fAuditor, fTipoRiesgo, fFechaHallazgo]);
 
-  const hayFiltros = !!(fEstado || fGranja || fAuditor || fTipoRiesgo || fFechaHallazgo);
+  const hayFiltros = !!(fEstado || fGranjas.length || fAuditor || fTipoRiesgo || fFechaHallazgo);
 
   // ── Indicadores ───────────────────────────────────────────────────────────
   const total       = kpis.length;
@@ -2689,7 +2690,7 @@ export default function KPIPage() {
 
   const SEL = "px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white focus:outline-none hover:border-[#2A3F6A] transition-colors cursor-pointer";
 
-  const filtrosActivos = { fEstado, fGranja, fAuditor, fTipoRiesgo, fFechaHallazgo };
+  const filtrosActivos = { fEstado, fGranjas, fAuditor, fTipoRiesgo, fFechaHallazgo };
 
   return (
     <div className="flex flex-col min-h-full">
@@ -2769,7 +2770,7 @@ export default function KPIPage() {
             <span className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wider">Filtros</span>
             {hayFiltros && (
               <button
-                onClick={() => { setFEstado(""); setFGranja(""); setFAuditor(""); setFTipoRiesgo(""); setFFechaHallazgo(""); }}
+                onClick={() => { setFEstado(""); setFGranjas([]); setFAuditor(""); setFTipoRiesgo(""); setFFechaHallazgo(""); }}
                 className="ml-auto flex items-center gap-1 text-[10px] text-[#64748B] hover:text-white px-2 py-0.5 rounded border border-[#1E2D4A] hover:border-[#4A7AFF] transition-colors"
               >
                 <X className="w-3 h-3"/>Limpiar
@@ -2784,12 +2785,33 @@ export default function KPIPage() {
                 {ESTADO_KPI.map(e=><option key={e}>{e}</option>)}
               </select>
             </div>
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-0.5 relative">
               <span className="text-[10px] text-[#64748B] px-1">Granja</span>
-              <select value={fGranja} onChange={e=>setFGranja(e.target.value)} className={SEL}>
-                <option value="">Todas las granjas</option>
-                {granjas.map(g=><option key={g.id} value={g.id}>{g.nombre}</option>)}
-              </select>
+              <button type="button" onClick={()=>setGranjaMenuOpen(o=>!o)} className={SEL + " flex items-center justify-between gap-2 min-w-[150px]"}>
+                <span className="truncate">{fGranjas.length === 0 ? "Todas las granjas" : fGranjas.length === 1 ? (granjas.find(g=>g.id===fGranjas[0])?.nombre ?? "1 granja") : `${fGranjas.length} granjas`}</span>
+                <ChevronDown className="w-3 h-3 shrink-0 text-[#64748B]"/>
+              </button>
+              {granjaMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={()=>setGranjaMenuOpen(false)}/>
+                  <div className="absolute z-30 top-full mt-1 left-0 w-56 max-h-64 overflow-y-auto rounded-lg border border-[#1E2D4A] bg-[#0D1526] shadow-xl p-1">
+                    <button type="button" onClick={()=>setFGranjas([])} className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-[#1A2540] flex items-center gap-2">
+                      <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center shrink-0 ${fGranjas.length===0 ? "bg-[#4A7AFF] border-[#4A7AFF]" : "border-[#334155]"}`}>{fGranjas.length===0 && <Check className="w-2.5 h-2.5 text-white"/>}</span>
+                      <span className={fGranjas.length===0 ? "text-white" : "text-[#94A3B8]"}>Todas las granjas</span>
+                    </button>
+                    {granjas.map(g=>{
+                      const on = fGranjas.includes(g.id);
+                      return (
+                        <button key={g.id} type="button" onClick={()=>setFGranjas(on ? fGranjas.filter(x=>x!==g.id) : [...fGranjas, g.id])}
+                          className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-[#1A2540] flex items-center gap-2">
+                          <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center shrink-0 ${on ? "bg-[#4A7AFF] border-[#4A7AFF]" : "border-[#334155]"}`}>{on && <Check className="w-2.5 h-2.5 text-white"/>}</span>
+                          <span className={`truncate ${on ? "text-white" : "text-[#94A3B8]"}`}>{g.nombre}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex flex-col gap-0.5">
               <span className="text-[10px] text-[#64748B] px-1">Auditor</span>
@@ -2949,7 +2971,7 @@ export default function KPIPage() {
             // del módulo (con o sin plan KPI).
             const necesitaHallazgos = modelosSel.includes("6-hallazgos");
             const hallazgosRep = necesitaHallazgos ? hallazgos.filter(h =>
-              (!fGranja     || h.granjaId === fGranja) &&
+              (!fGranjas.length || fGranjas.includes(h.granjaId)) &&
               (!fAuditor    || h.auditorId === fAuditor) &&
               (!fTipoRiesgo || (Array.isArray(h.tiposRiesgo) && (h.tiposRiesgo as string[]).includes(fTipoRiesgo))) &&
               (!fFechaHallazgo || (h.fechaVisita || "").startsWith(fFechaHallazgo))
@@ -2981,7 +3003,7 @@ export default function KPIPage() {
             const granjasFiltradas   = granjas.filter(g => gIds.has(g.id));
             const necesitaHallazgos = modelosSel.includes("6-hallazgos");
             const hallazgosRep = necesitaHallazgos ? hallazgos.filter(h =>
-              (!fGranja     || h.granjaId === fGranja) &&
+              (!fGranjas.length || fGranjas.includes(h.granjaId)) &&
               (!fAuditor    || h.auditorId === fAuditor) &&
               (!fTipoRiesgo || (Array.isArray(h.tiposRiesgo) && (h.tiposRiesgo as string[]).includes(fTipoRiesgo))) &&
               (!fFechaHallazgo || (h.fechaVisita || "").startsWith(fFechaHallazgo))
