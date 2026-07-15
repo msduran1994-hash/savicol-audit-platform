@@ -2479,33 +2479,37 @@ async function htmlToPDFBase64(html: string, orientation: "portrait" | "landscap
       const thead = table.querySelector("thead") as HTMLElement | null;
       const theadPx = thead ? Math.round(thead.getBoundingClientRect().height * sc) : 0;
       const bounds = rows.map(r => { const rr = r.getBoundingClientRect(); return { top: Math.round((rr.top - tTop) * sc), bot: Math.round((rr.bottom - tTop) * sc) }; });
-      const dibujar = (top: number, bot: number) => {
-        const bodyH = bot - top, totalH = theadPx + bodyH;
+      // El encabezado (banda de granja + títulos de columna) se dibuja SÓLO en la primera hoja de
+      // la tabla; si continúa en otra hoja, se muestran únicamente las filas → una sola tabla por granja.
+      const dibujar = (top: number, bot: number, conHead: boolean) => {
+        const headPx = conHead ? theadPx : 0;
+        const bodyH = bot - top, totalH = headPx + bodyH;
         const pc = document.createElement("canvas");
         pc.width = canvas.width; pc.height = totalH;
         const ctx = pc.getContext("2d");
         if (!ctx) return 0;
         ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, pc.width, pc.height);
-        if (theadPx > 0) ctx.drawImage(canvas, 0, 0, canvas.width, theadPx, 0, 0, canvas.width, theadPx);
-        ctx.drawImage(canvas, 0, top, canvas.width, bodyH, 0, theadPx, canvas.width, bodyH);
+        if (headPx > 0) ctx.drawImage(canvas, 0, 0, canvas.width, theadPx, 0, 0, canvas.width, theadPx);
+        ctx.drawImage(canvas, 0, top, canvas.width, bodyH, 0, headPx, canvas.width, bodyH);
         const hmm = totalH * mmPorCanvasPx;
         pdf.addImage(pc.toDataURL("image/jpeg", 0.9), "JPEG", x, y, wmm, hmm, undefined, "FAST");
         return hmm;
       };
-      let i = 0;
+      let i = 0, primera = true;
       while (i < rows.length) {
+        const headPx = primera ? theadPx : 0;
         const filaH0mm = (bounds[i].bot - bounds[i].top) * mmPorCanvasPx;
-        if (!pageVacia && (theadPx * mmPorCanvasPx + filaH0mm) > (pageH - mBottom - y) + 0.5) nuevaPagina();
-        const budgetPx = ((pageH - mBottom - y) / mmPorCanvasPx) - theadPx; // cuerpo disponible en px de canvas
+        if (!pageVacia && (headPx * mmPorCanvasPx + filaH0mm) > (pageH - mBottom - y) + 0.5) nuevaPagina();
+        const budgetPx = ((pageH - mBottom - y) / mmPorCanvasPx) - headPx; // cuerpo disponible en px de canvas
         let j = i, usado = 0;
         while (j < rows.length) {
           const fH = bounds[j].bot - bounds[j].top;
           if (j > i && usado + fH > budgetPx) break;
           usado += fH; j++;
         }
-        const hmm = dibujar(bounds[i].top, bounds[j - 1].bot);
+        const hmm = dibujar(bounds[i].top, bounds[j - 1].bot, primera);
         y += hmm; pageVacia = false;
-        i = j;
+        i = j; primera = false;
         if (i < rows.length) nuevaPagina();
       }
     };
