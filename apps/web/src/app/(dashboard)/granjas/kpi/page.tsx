@@ -2229,7 +2229,7 @@ function generarResumen(
     const t = kpis.filter(k => k.hallazgoId === h.id)
       .map(k => (k.planAccionVeterinario && k.planAccionVeterinario !== "—") ? k.planAccionVeterinario : k.accion)
       .filter(Boolean).join("  |  ");
-    return t ? (t.length > 200 ? t.slice(0, 197) + "…" : t) : "—";
+    return t || "—";
   };
 
   // Una tabla por GRANJA (sólo granjas con hallazgos en el alcance), ordenadas por nombre.
@@ -2252,29 +2252,34 @@ function generarResumen(
       const difGenKg = difGen * (hs.length ? kgAcum / hs.length : 40);
       const caption  = `${g.nombre || "—"} &nbsp;·&nbsp; % Mortalidad general: <strong style="color:#EF4444">${pctGen === null ? "—" : pctGen.toFixed(2) + "%"}</strong> &nbsp;·&nbsp; Diferencia general de Bultos: <strong style="color:#0EA5E9">${_fmtAnx(difGen)} bultos</strong> (${_fmtAnx(difGenKg)} Kg)`;
 
-      const filas = [...hs].sort((a, b) => critRank(b) - critRank(a)).map(h => `<tr>
-        <td>${fmtFechaCorta(h.fechaVisita)}</td>
-        <td>${g.nombre || "—"}</td>
-        <td><strong>${(h.titulo || "—").slice(0, 90)}</strong>${h.descripcion ? `<div style="font-weight:400;color:#64748b;font-size:9px;margin-top:2px;line-height:1.35">${h.descripcion.length > 220 ? h.descripcion.slice(0, 217) + "…" : h.descripcion}</div>` : ""}</td>
-        <td>${h.categoria || "—"}</td>
-        <td>${Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo.join(", ") : "—"}</td>
-        <td>${planDe(h)}</td>
-        <td>${h.criticidad || "—"}</td>
-      </tr>`);
-      const thead = `<thead>
-        <tr><th colspan="7" style="background:#0D1526;color:#fff;text-align:left;font-size:12px;padding:7px 10px;font-weight:700">${caption}</th></tr>
-        <tr><th style="width:8%">Fecha visita</th><th style="width:10%">Granja</th><th style="width:20%">Hallazgo</th><th style="width:11%">Categoría</th><th style="width:13%">Tipo de Riesgo</th><th style="width:30%">Planes de acción</th><th style="width:8%">Criticidad</th></tr>
-      </thead>`;
-      // Bloques de 12 filas: cada <table> cabe en una hoja horizontal y se coloca ENTERA (sin cortar filas);
-      // el paginador con relleno greedy empaca varias tablas por hoja, sin espacios innecesarios.
-      const tablas: string[] = [];
-      for (let i = 0; i < filas.length; i += 6) tablas.push(`<table style="margin-bottom:14px">${thead}<tbody>${filas.slice(i, i + 6).join("")}</tbody></table>`);
-      return tablas.join("");
+      const colHeaders = `<tr><th style="width:8%">Fecha visita</th><th style="width:9%">Granja</th><th style="width:22%">Hallazgo</th><th style="width:10%">Categoría</th><th style="width:12%">Tipo de Riesgo</th><th style="width:31%">Planes de acción</th><th style="width:8%">Criticidad</th></tr>`;
+      const ordenados = [...hs].sort((a, b) => critRank(b) - critRank(a));
+      // Una tabla por hallazgo (1 fila): con la descripción y el plan COMPLETOS las filas son
+      // altas; así cada <table> cabe en la hoja y NUNCA se corta una fila. La banda de la granja
+      // (caption) va sólo en el primer hallazgo; los encabezados de columna, en todos.
+      return ordenados.map((h, idx) => {
+        const fila = `<tr>
+          <td>${fmtFechaCorta(h.fechaVisita)}</td>
+          <td>${g.nombre || "—"}</td>
+          <td><strong>${h.titulo || "—"}</strong>${h.descripcion ? `<div style="font-weight:400;color:#475569;margin-top:3px;line-height:1.4">${h.descripcion}</div>` : ""}</td>
+          <td>${h.categoria || "—"}</td>
+          <td>${Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo.join(", ") : "—"}</td>
+          <td>${planDe(h)}</td>
+          <td>${h.criticidad || "—"}</td>
+        </tr>`;
+        const capRow = idx === 0 ? `<tr><th colspan="7" style="background:#0D1526;color:#fff;text-align:left;font-size:12px;padding:7px 10px;font-weight:700">${caption}</th></tr>` : "";
+        return `<table style="margin-bottom:6px"><thead>${capRow}${colHeaders}</thead><tbody>${fila}</tbody></table>`;
+      }).join("");
     }).join("");
 
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Informe Resumen — Pollos Savicol S.A.S.</title>
-<style>${CSS_BASE}</style></head><body><div class="page">
+<style>${CSS_BASE}
+/* Informe Resumen: tipografía uniforme Times New Roman 12 en toda la estructura */
+.page,.page td,.page th,.page div,.page p,.page span,.page strong{font-family:'Times New Roman',Times,serif}
+.page td,.page th{font-size:12px}
+.page .section-title{font-size:14px}
+</style></head><body><div class="page">
 ${portada(`Informe Resumen Ejecutivo N° ${num}`, `Comparativo por Granja · ${codigo} · Versión 1.0`, kpis, hallazgos, auditor, undefined, datos, true)}
 
 <div class="section">
