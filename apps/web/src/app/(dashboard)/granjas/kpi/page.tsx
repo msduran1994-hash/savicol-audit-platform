@@ -1071,27 +1071,24 @@ function seccionAnexosTecnicos(hallazgos: any[], granjas: any[], modo: "resumen"
         <table>${th(["Fecha", "Concepto", "Unidades", "Cantidad (Kg)", "Peso Total Kg"])}<tbody>${a.ingresoBultos.map(r => `<tr><td>${r.fecha || "—"}</td><td>${r.concepto || "—"}</td>${R(r.unidades)}${R(r.cantidadKg)}<td style="text-align:right;font-weight:700">${_fmtAnx(pesoTotalIngreso(r))}</td></tr>`).join("")}<tr><td colspan="4" style="text-align:right;font-weight:700">Peso total (Kg)</td><td style="text-align:right;font-weight:800;color:#22C55E">${_fmtAnx(tot)}</td></tr></tbody></table>`);
       else t.push(`<div style="font-size:11px;color:#475569">• Ingreso de Bultos: ${a.ingresoBultos.length} registro(s) · <strong>${_fmtAnx(tot)}</strong> Kg</div>`);
     }
-    // Total de Bultos · Conciliación: Ingreso (auto) − Salida (manual) − Conteo físico (auto)
-    // − Bultos consumidos (auto), en bultos.
+    // Total de Bultos · Diferencia en alimento = (Salida + Conteo físico) − Ingreso [bultos];
+    // Kg = diferencia × kg/bulto (config, def. 40). "Bultos consumidos" NO entra en la validación.
     const _ing = totalIngresoUnidades(a), _ingKg = totalIngresoKg(a);
     const _salF = a.totalBultos.bloques[0]?.filas ?? [];
     const _sal = _salF.reduce((s: number, f: any) => s + anexNum(f.cantidad), 0), _salKg = _salF.reduce((s: number, f: any) => s + anexNum(f.pesoTotalKg), 0);
-    const _fis = totalInventarioBultos(a), _cons = totalBultosConsumidos(a), _consKg = totalKgConsumidos(a);
-    const _bultosSolo = totalInventarioBultosSolo(a), _lonas = totalInventarioLonas(a), _difSolo = _ing - _sal - _bultosSolo;
-    if (_ing > 0 || _sal > 0 || _fis > 0 || _cons > 0 || a.totalBultos.observaciones?.trim()) {
-      const totGral = _ing - _sal - _fis - _cons;
+    const _fis = totalInventarioBultos(a);
+    const _kgBulto = anexNum(a.registroBultosConsumidos?.kgPorBulto) || 40;
+    const _difUnd = (_sal + _fis) - _ing, _difKg = _difUnd * _kgBulto;
+    if (_ing > 0 || _sal > 0 || _fis > 0 || a.totalBultos.observaciones?.trim()) {
       if (modo === "detalle") {
-        t.push(`<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 4px">Total de Bultos · Conciliación</div>
+        t.push(`<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 4px">Total de Bultos · Diferencia en alimento</div>
           <table>${th(["Bloque", "Bultos", "Kg"])}<tbody>
             <tr><td>Ingreso Bultos Alimento</td>${R(_ing)}<td style="text-align:right">${_fmtAnx(_ingKg)}</td></tr>
             <tr><td>Salida de Bultos</td>${R(_sal)}<td style="text-align:right">${_fmtAnx(_salKg)}</td></tr>
             <tr><td>Conteo físico Bultos</td>${R(_fis)}<td style="text-align:right">—</td></tr>
-            <tr><td>Bultos Consumidos</td>${R(_cons)}<td style="text-align:right">${_fmtAnx(_consKg)}</td></tr>
-            <tr><td style="text-align:right;font-weight:700">Total general (Ingreso − Salida − Conteo físico − Bultos consumidos)</td><td style="text-align:right;font-weight:800;color:${totGral !== 0 ? "#EF4444" : "#22C55E"}">${_fmtAnx(totGral)}</td><td></td></tr>
-            <tr><td style="text-align:right;font-weight:700">Diferencia solo Bultos (Ingreso − Salida − Conteo físico, solo bultos)</td><td style="text-align:right;font-weight:800;color:${_difSolo !== 0 ? "#EF4444" : "#22C55E"}">${_fmtAnx(_difSolo)}</td><td></td></tr>
-            <tr><td>Total lonas (Inventario Bultos)</td>${R(_lonas)}<td style="text-align:right">—</td></tr>
+            <tr><td style="text-align:right;font-weight:700">Diferencia en alimento ((Salida + Conteo físico) − Ingreso)</td><td style="text-align:right;font-weight:800;color:${_difUnd !== 0 ? "#F97316" : "#22C55E"}">${_fmtAnx(_difUnd)}</td><td style="text-align:right;font-weight:800;color:#0EA5E9">${_fmtAnx(_difKg)}</td></tr>
           </tbody></table>${a.totalBultos.observaciones?.trim() ? `<div style="font-size:11px;margin-top:4px"><strong>Observaciones:</strong> ${a.totalBultos.observaciones}</div>` : ""}`);
-      } else t.push(`<div style="font-size:11px;color:#475569">• Total de Bultos: ingreso ${_fmtAnx(_ing)} − salida ${_fmtAnx(_sal)} − físico ${_fmtAnx(_fis)} − consumidos ${_fmtAnx(_cons)} = faltante <strong>${_fmtAnx(totGral)}</strong> bultos · dif. solo bultos <strong>${_fmtAnx(_difSolo)}</strong> · lonas ${_fmtAnx(_lonas)}</div>`);
+      } else t.push(`<div style="font-size:11px;color:#475569">• Total de Bultos — diferencia en alimento: (salida ${_fmtAnx(_sal)} + físico ${_fmtAnx(_fis)}) − ingreso ${_fmtAnx(_ing)} = <strong>${_fmtAnx(_difUnd)}</strong> bultos · <strong>${_fmtAnx(_difKg)}</strong> Kg</div>`);
     }
 
     return `<div style="page-break-inside:avoid;margin-bottom:${modo === "detalle" ? "16" : "8"}px;${modo === "detalle" ? "border:1px solid #e2e8f0;border-radius:8px;padding:12px" : ""}">

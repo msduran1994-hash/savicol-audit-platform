@@ -242,10 +242,11 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
     const fisUnd = totalInventarioBultos(value);                                 // Bloque 3 (auto)
     const salUnd = salidaFilas.reduce((s, f) => s + num(f.cantidad), 0);         // Bloque 2 (manual)
     const salKg  = salidaFilas.reduce((s, f) => s + num(f.pesoTotalKg), 0);
-    const consumidos = totalBultosConsumidos(value), consKg = totalKgConsumidos(value); // Bloque 4 (auto)
-    const totalGeneral = ingUnd - salUnd - fisUnd - consumidos; // Ingreso − Salida − Conteo físico − Consumidos
-    const bultosSolo = totalInventarioBultosSolo(value), lonas = totalInventarioLonas(value); // Inventario: bultos / lonas
-    const difSoloBultos = ingUnd - salUnd - bultosSolo; // Ingreso − Salida − Conteo físico (SOLO bultos, sin lonas)
+    // Diferencia en alimento = (Bloque 2 Salida + Bloque 3 Conteo físico) − Bloque 1 Ingreso [bultos].
+    // En Kg = diferencia (bultos) × kg/bulto (config, def. 40), coherente con las unidades.
+    const kgBulto = num(value.registroBultosConsumidos?.kgPorBulto) || 40;
+    const difUnd  = (salUnd + fisUnd) - ingUnd;
+    const difKg   = difUnd * kgBulto;
     const BloqueAuto = (n: number, titulo: string, fuente: string, und: number, kg: number | null, color: string) => (
       <div key={n} className="rounded-lg border border-[#1E2D4A] bg-[#0A111F] p-3">
         <div className="flex items-center justify-between mb-1">
@@ -289,27 +290,16 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
           <button type="button" onClick={addSalida} className="px-3 py-1 rounded text-[11px] bg-[#1A2540] text-white flex items-center gap-1 hover:bg-[#22304d]"><Plus className="w-3 h-3" />Agregar fila</button>
         </div>
         {BloqueAuto(3, "Conteo físico Bultos", "Inventario Bultos", fisUnd, null, "#8B5CF6")}
-        {BloqueAuto(4, "Bultos Consumidos", "Bultos Consumidos", consumidos, consKg, "#14B8A6")}
-        {/* Total general = Ingreso − Salida − Conteo físico − Bultos Consumidos */}
+        {/* Diferencia en alimento = (Salida + Conteo físico) − Ingreso [bultos]; Kg = diferencia × kg/bulto */}
         <div className="rounded-lg border border-[#2A3F6A] bg-[#0D1526] p-3 flex items-center justify-between">
           <div>
-            <div className="text-[11px] font-semibold text-white">Total general (faltante de bultos)</div>
-            <div className="text-[9px] text-[#475569]">Ingreso − Salida − Conteo físico − Bultos consumidos = {fmt(ingUnd)} − {fmt(salUnd)} − {fmt(fisUnd)} − {fmt(consumidos)}</div>
+            <div className="text-[11px] font-semibold text-white">Diferencia en alimento</div>
+            <div className="text-[9px] text-[#475569]">(Salida + Conteo físico) − Ingreso = ({fmt(salUnd)} + {fmt(fisUnd)}) − {fmt(ingUnd)}</div>
+            <div className="text-[9px] text-[#475569]">Kg = {fmt(difUnd)} bultos × {fmt(kgBulto)} kg/bulto</div>
           </div>
-          <span className="text-xl font-bold" style={{ color: totalGeneral !== 0 ? "#EF4444" : "#22C55E" }}>{fmt(totalGeneral)} <span className="text-[11px] text-[#94A3B8]">bultos</span></span>
-        </div>
-        {/* Diferencia SOLO bultos (sin lonas) + total de lonas del Inventario */}
-        <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-[11px] font-semibold text-white">Diferencia solo Bultos (sin lonas)</div>
-              <div className="text-[9px] text-[#475569]">Ingreso − Salida − Conteo físico (solo bultos) = {fmt(ingUnd)} − {fmt(salUnd)} − {fmt(bultosSolo)}</div>
-            </div>
-            <span className="text-xl font-bold" style={{ color: difSoloBultos !== 0 ? "#EF4444" : "#22C55E" }}>{fmt(difSoloBultos)} <span className="text-[11px] text-[#94A3B8]">bultos</span></span>
-          </div>
-          <div className="flex items-center justify-between px-1 pt-1.5 border-t border-[#1E2D4A]">
-            <span className="text-[11px] text-[#94A3B8]">Total lonas (Inventario Bultos)</span>
-            <span className="text-sm font-bold text-[#8B5CF6]">{fmt(lonas)} lonas</span>
+          <div className="text-right">
+            <div className="text-xl font-bold" style={{ color: difUnd !== 0 ? "#F97316" : "#22C55E" }}>{fmt(difUnd)} <span className="text-[11px] text-[#94A3B8]">bultos</span></div>
+            <div className="text-sm font-bold text-[#0EA5E9]">{fmt(difKg)} <span className="text-[10px] text-[#94A3B8]">Kg</span></div>
           </div>
         </div>
         {/* Observaciones (manual) */}
