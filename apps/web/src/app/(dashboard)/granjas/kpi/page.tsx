@@ -808,7 +808,7 @@ function seccionHallazgos(hallazgos: any[], granjas: any[], limite=15, introHTML
 }
 
 // ─── SECCIÓN PLANES KPI ───────────────────────────────────────────────────────
-function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[]): string {
+function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPorHallazgo?: Record<string, any[]>, detallado=false): string {
   return `
   <div class="section">
     <div class="section-title">Gestión de Planes de Acción KPI</div>
@@ -821,6 +821,34 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[]): string {
       const seguResp = seguPartsK.find((p:string)=>p.startsWith("RESP:"))?.slice(5) || "";
       const seguAud  = seguPartsK.find((p:string)=>p.startsWith("AUD:"))?.slice(4) || "";
       const seguAudNombre = seguPartsK.find((p:string)=>p.startsWith("AUDNOM:"))?.slice(7) || "";
+      if (detallado) {
+        const fotos = (k.hallazgoId ? (evidenciasPorHallazgo?.[k.hallazgoId] || []) : []);
+        const categoria = h?.categoria || (h?.tiposRiesgo?.join(", ")) || "";
+        const auditorNom = seguAudNombre || h?.auditorNombre || "";
+        return `<div class="kpi-item" style="page-break-inside:avoid">
+          <div class="kpi-item-header">
+            <div class="kpi-item-title">${h?.titulo || k.accion}</div>
+            <span class="badge ${clsBadge(k.estado)}">${displayEstado(k.estado)}</span>
+          </div>
+          <div class="kpi-meta">
+            Granja: <strong>${g?.nombre||"—"}</strong> ·
+            Responsable: <strong>${k.responsable||"—"}</strong>
+            ${k.fechaCompromiso ? ` · Compromiso: ${fmtFechaCorta(k.fechaCompromiso)}` : ""}
+            ${categoria ? ` · Categoría: <strong>${categoria}</strong>` : ""}
+          </div>
+          ${h?.descripcion ? `<div style="font-size:10px;color:#475569;margin:2px 0 6px"><strong>Descripción del Hallazgo:</strong> ${h.descripcion}</div>` : ""}
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <div class="progress-bar-bg" style="flex:1"><div class="progress-bar-fill" style="width:${pct}%;background:${fillColor}"></div></div>
+            <span style="font-size:10px;font-weight:700">${pct}%</span>
+          </div>
+          ${auditorNom ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Auditor:</strong> ${auditorNom}</div>` : ""}
+          ${seguResp ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Seguimiento:</strong> ${seguResp}</div>` : ""}
+          ${seguAud ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Observación del Seguimiento:</strong> ${seguAud}</div>` : ""}
+          ${k.planAccionVeterinario && k.planAccionVeterinario !== "—" ? `
+          <div class="plan-box"><div class="plan-box-title">Plan de Acción</div><div class="plan-box-text">${k.planAccionVeterinario}</div></div>` : ""}
+          ${fotos.length ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:700;color:#0D1526;margin-bottom:4px">Evidencia Fotográfica (${fotos.length})</div>${evidenciasGridHTML(fotos.map((ev:any)=>({src:ev.url, titulo:ev.nombre||undefined, pie:ev.categoria||undefined})))}</div>` : ""}
+        </div>`;
+      }
       return `<div class="kpi-item">
         <div class="kpi-item-header">
           <div class="kpi-item-title">${k.accion}</div>
@@ -852,7 +880,7 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[]): string {
 }
 
 // ─── SECCIÓN FIRMA DIGITAL ────────────────────────────────────────────────────
-function seccionFirma(auditor: string, cargo="Auditor Interno", datos?: DatosGenerales): string {
+function seccionFirma(auditor: string, cargo="Auditor Interno", datos?: DatosGenerales, ordenGeneral=false): string {
   const fecha = fmtFechaCorta(new Date().toISOString());
   const hash  = `SHA-${Date.now().toString(36).toUpperCase()}`;
   // Firmantes: con datos generales se usan los roles del formulario; si no, auditor + gerencia.
@@ -860,9 +888,17 @@ function seccionFirma(auditor: string, cargo="Auditor Interno", datos?: DatosGen
   if (datos?.auditor1) firmantes.push({ nombre: datos.auditor1, cargo: "Auditor 1", nota: `Firma digital: ${hash}` });
   if (datos?.auditor2) firmantes.push({ nombre: datos.auditor2, cargo: "Auditor 2" });
   if (!datos?.auditor1 && !datos?.auditor2) firmantes.push({ nombre: auditor || "Auditor Interno", cargo, nota: `Firma digital: ${hash}` });
-  firmantes.push({ nombre: datos?.gerenteGeneral || "Gerencia General", cargo: "Gerente General", nota: "V°B° — Pendiente de aprobación" });
-  if (datos?.administrador)        firmantes.push({ nombre: datos.administrador, cargo: "Administrador" });
-  if (datos?.oficialCumplimiento)  firmantes.push({ nombre: datos.oficialCumplimiento, cargo: "Oficial de Cumplimiento" });
+  if (ordenGeneral) {
+    // Informe General — orden solicitado: Auditor · Responsable del Proceso · Administrador · Oficial de Cumplimiento · Gerencia
+    firmantes.push({ nombre: "", cargo: "Responsable del Proceso" });
+    firmantes.push({ nombre: datos?.administrador || "", cargo: "Administrador" });
+    firmantes.push({ nombre: datos?.oficialCumplimiento || "", cargo: "Oficial de Cumplimiento" });
+    firmantes.push({ nombre: datos?.gerenteGeneral || "Gerencia General", cargo: "Gerencia", nota: "V°B° — Pendiente de aprobación" });
+  } else {
+    firmantes.push({ nombre: datos?.gerenteGeneral || "Gerencia General", cargo: "Gerente General", nota: "V°B° — Pendiente de aprobación" });
+    if (datos?.administrador)        firmantes.push({ nombre: datos.administrador, cargo: "Administrador" });
+    if (datos?.oficialCumplimiento)  firmantes.push({ nombre: datos.oficialCumplimiento, cargo: "Oficial de Cumplimiento" });
+  }
 
   const box = (f: { nombre: string; cargo: string; nota?: string }) => `
       <div class="firma-box" style="page-break-inside:avoid">
@@ -1255,6 +1291,44 @@ function graficosProduccionDiaria(hallazgos: any[], granjas: any[]): string {
         ${chartCard(5, "Consumo Acumulado", lineTrendSVG(bulAcumPts, "#0EA5E9"), "bultos acumulados")}
       </div>
       ${chartCard(6, "Consumo por Ave (kg acumulado)", lineTrendSVG(consAvePts, "#8B5CF6", " kg"), `sobre ${_fmtAnx(avesBultos)} aves`)}` : ""}
+  </div>`;
+}
+
+// ─── GRÁFICOS DE TENDENCIA POR BLOQUE (Informe General) ───────────────────────
+// Reutilizan consolidarProduccionDiaria + lineTrendSVG + chartCard para integrar el
+// gráfico de línea de tendencia dentro de los bloques "Indicadores de Mortalidad" y
+// "Inventario de Alimento" (sin envoltorio de sección, sin cálculo nuevo).
+function graficosMortalidadTendencia(hallazgos: any[]): string {
+  const { mortSemana, avesMort } = consolidarProduccionDiaria(hallazgos);
+  if (!mortSemana.length) return "";
+  const lbl = (i: number) => `Sem ${i + 1}`;
+  const mortSemPts = mortSemana.map((v, i) => ({ label: lbl(i), value: v }));
+  let acc = 0; const mortAcumPts = mortSemana.map((v, i) => ({ label: lbl(i), value: (acc += v) }));
+  acc = 0; const pctAcumPts = mortSemana.map((v, i) => { acc += v; return { label: lbl(i), value: avesMort > 0 ? (acc / avesMort) * 100 : 0 }; });
+  return `<div style="page-break-inside:avoid;margin-top:10px">
+    <div style="font-size:12px;font-weight:700;color:#EF4444;margin:2px 0 8px">Gráfico de Tendencia · Mortalidad</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:10px">
+      ${chartCard(1, "Mortalidad Semanal", lineTrendSVG(mortSemPts, "#EF4444"), "aves por semana")}
+      ${chartCard(2, "Mortalidad Acumulada", lineTrendSVG(mortAcumPts, "#F97316"), "aves acumuladas")}
+    </div>
+    ${chartCard(3, "% Mortalidad Acumulada", lineTrendSVG(pctAcumPts, "#EF4444", "%"), `sobre ${_fmtAnx(avesMort)} aves iniciales`)}
+  </div>`;
+}
+
+function graficosConsumoTendencia(hallazgos: any[]): string {
+  const { bultosSemana, feedKgSemana, avesBultos } = consolidarProduccionDiaria(hallazgos);
+  if (!bultosSemana.length) return "";
+  const lbl = (i: number) => `Sem ${i + 1}`;
+  const bulSemPts = bultosSemana.map((v, i) => ({ label: lbl(i), value: v }));
+  let ab = 0; const bulAcumPts = bultosSemana.map((v, i) => ({ label: lbl(i), value: (ab += v) }));
+  let af = 0; const consAvePts = feedKgSemana.map((v, i) => { af += v; return { label: lbl(i), value: avesBultos > 0 ? af / avesBultos : 0 }; });
+  return `<div style="page-break-inside:avoid;margin-top:10px">
+    <div style="font-size:12px;font-weight:700;color:#4A7AFF;margin:2px 0 8px">Gráfico de Tendencia · Consumo de Alimento</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:10px">
+      ${chartCard(4, "Consumo Semanal", lineTrendSVG(bulSemPts, "#4A7AFF"), "bultos por semana")}
+      ${chartCard(5, "Consumo Acumulado", lineTrendSVG(bulAcumPts, "#0EA5E9"), "bultos acumulados")}
+    </div>
+    ${chartCard(6, "Consumo por Ave (kg acumulado)", lineTrendSVG(consAvePts, "#8B5CF6", " kg"), `sobre ${_fmtAnx(avesBultos)} aves`)}
   </div>`;
 }
 
@@ -1847,51 +1921,37 @@ ${portada(`Informe General de Auditoría N° ${num}`, "Evaluación Integral · E
 <div class="section">
   <div class="section-title">Estructura del Informe</div>
   ${[
-    "I.    Marco Metodológico y Legal",
-    "II.   Resumen Ejecutivo y Tablero Visual (10 gráficos)",
-    "III.  Evaluación de Riesgos",
-    "IV.   Hallazgos Identificados",
-    "V.    Gestión KPI · Planes de Acción",
-    "VI.   Ficha Técnica y Análisis por Granja",
-    "VII.  Consolidado de Resultados (alimento · mortalidad · KPI)",
-    "VIII. Conclusiones y Recomendaciones",
-    "IX.   Evidencias Fotográficas y Firma",
+    "I.    Ficha Técnica de la Granja",
+    "II.   Marco Legal",
+    "III.  Avance de la Granja Evaluada",
+    "IV.   Gestión de Planes de Acción KPI",
+    "V.    Indicadores de Mortalidad",
+    "VI.   Inventario de Alimento",
+    "VII.  Análisis Técnico",
+    "VIII. Bitácora y Registro de Colaboradores",
+    "IX.   Conclusiones y Recomendaciones",
+    "X.    Firmas y Certificación",
   ].map(s=>`<div style="padding:5px 0;font-size:12px;color:#475569;border-bottom:1px dotted #e2e8f0">${s}</div>`).join("")}
 </div>
 
-<!-- I. MARCO METODOLÓGICO Y LEGAL -->
-<div class="divider">I — Marco Metodológico y Legal</div>
-${seccionMetodologia(kpis, hallazgos, granjas)}
+<!-- I. FICHA TÉCNICA DE LA GRANJA -->
+<div class="divider">I — Ficha Técnica de la Granja</div>
+${seccionFichaTecnica(granjas)}
+
+<!-- II. MARCO LEGAL -->
+<div class="divider">II — Marco Legal</div>
 ${seccionMarcoLegal(marcoLegal)}
 
-<!-- II. RESUMEN EJECUTIVO Y TABLERO VISUAL -->
-<div class="divider">II — Resumen Ejecutivo y Tablero Visual</div>
-${seccionResumen(kpis, hallazgos)}
-${seccionDashboardCompleto(kpis, hallazgos, granjas)}
-
-<!-- III. EVALUACIÓN DE RIESGOS -->
-<div class="divider">III — Evaluación de Riesgos</div>
-${seccionRiesgos(hallazgos)}
-
-<!-- IV. HALLAZGOS COMPLETOS -->
-<div class="divider">IV — Hallazgos Identificados</div>
-${seccionHallazgos(hallazgos, granjas, 20)}
-
-<!-- V. KPIs DETALLADOS -->
-<div class="divider">V — Gestión KPI · Planes de Acción</div>
-${seccionKPIs(kpis, granjas, hallazgos)}
-
-<!-- VI. FICHA TÉCNICA Y ANÁLISIS POR GRANJA -->
-<div class="divider">VI — Ficha Técnica y Análisis por Granja</div>
-${seccionFichaTecnica(granjas)}
+<!-- III. AVANCE DE LA GRANJA EVALUADA -->
+<div class="divider">III — Avance de la Granja Evaluada</div>
 <div class="section">
-  <div class="section-title">Avance por Granja Evaluada</div>
+  <div class="section-title">Avance de la Granja Evaluada</div>
   ${granjas.filter(g=>kpis.some(k=>k.granjaId===g.id)).slice(0,10).map(g=>{
     const kg   = kpis.filter(k=>k.granjaId===g.id);
     const hg   = hallazgos.filter(h=>h.granjaId===g.id);
     const av   = porcentaje(kg);
     const col  = av>=70?"#22C55E":av>=40?"#F97316":"#EF4444";
-    return `<div style="margin-bottom:10px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc">
+    return `<div style="margin-bottom:10px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;page-break-inside:avoid">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <div><strong style="font-size:12px">${g.nombre}</strong>
           <span style="font-size:10px;color:#64748b;margin-left:8px">${g.tipoOperativo||""} · ${g.region||""}</span>
@@ -1910,14 +1970,33 @@ ${seccionFichaTecnica(granjas)}
   }).join("")}
 </div>
 
-<!-- VII. CONSOLIDADO DE RESULTADOS -->
-<div class="divider">VII — Consolidado de Resultados</div>
-${seccionConsolidado(kpis, granjas, mortalidad)}
-${seccionMortalidad(mortalidad, granjas, hallazgos)}
-${seccionFortalezas(kpis, hallazgos)}
+<!-- IV. GESTIÓN DE PLANES DE ACCIÓN KPI (hallazgo · descripción · categoría · auditor · seguimiento · observación · plan · fotos) -->
+<div class="divider">IV — Gestión de Planes de Acción KPI</div>
+${seccionKPIs(kpis, granjas, hallazgos, evidenciasPorHallazgo, true)}
 
-<!-- VIII. CONCLUSIONES -->
-<div class="divider">VIII — Conclusiones y Recomendaciones</div>
+<!-- V. INDICADORES DE MORTALIDAD (bloque técnico único: indicadores + registro diario + resumen + gráfico + %) -->
+<div class="divider">V — Indicadores de Mortalidad</div>
+${seccionMortalidad(mortalidad, granjas, hallazgos)}
+${seccionMortalidadDiaria(hallazgos, granjas, "detalle")}
+${graficosMortalidadTendencia(hallazgos)}
+
+<!-- VI. INVENTARIO DE ALIMENTO (bloque técnico único: inventario + consumo diario + indicadores + gráfico) -->
+<div class="divider">VI — Inventario de Alimento</div>
+${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
+${seccionBultosConsumidos(hallazgos, granjas, "detalle")}
+${graficosConsumoTendencia(hallazgos)}
+
+<!-- VII. ANÁLISIS TÉCNICO -->
+<div class="divider">VII — Análisis Técnico</div>
+${seccionResumenesEjecutivos(hallazgos, granjas, "completo")}
+
+<!-- VIII. BITÁCORA Y REGISTRO DE COLABORADORES -->
+<div class="divider">VIII — Bitácora y Registro de Colaboradores</div>
+${seccionBitacora(hallazgos, granjas, "detalle")}
+${seccionColaboradores(hallazgos, granjas, "detalle")}
+
+<!-- IX. CONCLUSIONES Y RECOMENDACIONES -->
+<div class="divider">IX — Conclusiones y Recomendaciones</div>
 <div class="section">
   <div class="section-title">Conclusiones Generales</div>
   <div style="font-size:13px;line-height:1.8;color:#475569">
@@ -1928,7 +2007,7 @@ ${seccionFortalezas(kpis, hallazgos)}
 
     <p style="margin-top:8px"><strong>Hallazgos:</strong> Se identificaron
     <strong>${hallazgos.length}</strong> hallazgos en <strong>${granjas.filter(g=>hallazgos.some(h=>h.granjaId===g.id)).length}</strong>
-    granjas evaluadas. El <strong>${Math.round(hallazgos.filter(h=>h.estado==="ABIERTO").length/hallazgos.length*100)}%</strong>
+    granjas evaluadas. El <strong>${hallazgos.length ? Math.round(hallazgos.filter(h=>h.estado==="ABIERTO").length/hallazgos.length*100) : 0}%</strong>
     permanece en estado abierto, requiriendo atención prioritaria.</p>
 
     <div style="margin-top:12px;padding:10px 14px;background:#fff;border:1px solid #e2e8f0;border-radius:6px">
@@ -1944,23 +2023,9 @@ ${seccionFortalezas(kpis, hallazgos)}
   </div>
 </div>
 
-${seccionAnexosTecnicos(hallazgos, granjas, "detalle")}
-
-${seccionBitacora(hallazgos, granjas, "detalle")}
-
-${seccionColaboradores(hallazgos, granjas, "detalle")}
-
-${seccionMortalidadDiaria(hallazgos, granjas, "detalle")}
-
-${seccionBultosConsumidos(hallazgos, granjas, "detalle")}
-
-${seccionResumenesEjecutivos(hallazgos, granjas, "completo")}
-
-<!-- IX. EVIDENCIAS Y FIRMA -->
-<div class="divider">IX — Evidencias Fotográficas y Firma</div>
-${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
-
-${seccionFirma(auditor, "Auditor Interno", datos)}
+<!-- X. FIRMAS -->
+<div class="divider">X — Firmas y Certificación</div>
+${seccionFirma(auditor, "Auditor Interno", datos, true)}
 ${footer()}
 </div></body></html>`;
 }
