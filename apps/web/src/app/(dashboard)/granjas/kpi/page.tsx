@@ -947,7 +947,7 @@ function footer(): string {
 // ─── SECCIÓN INDICADORES DE MORTALIDAD ────────────────────────────────────────
 // Trazabilidad (lotes) + Mortalidad por Conteo de Picos (de los anexos del hallazgo,
 // con el % respecto al conteo de picos en letra grande y el reporte de detalle).
-function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: any[], hallazgos: any[] = [], ocultarConteoPicos = false): string {
+function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: any[], hallazgos: any[] = [], ocultarConteoPicos = false, ocultarConciliacion = false): string {
   const fmt = (n: number) => n.toLocaleString("es-CO", { maximumFractionDigits: 2 });
 
   // Bloque 1 — Trazabilidad (aves ingresadas/actuales/muertes): RETIRADO por solicitud
@@ -1020,7 +1020,7 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
     <div style="margin-top:18px;border-top:1px solid #e2e8f0;padding-top:14px;page-break-inside:avoid">
       ${headline}
       ${conteoPicos}
-      ${hayConcil ? `
+      ${(hayConcil && !ocultarConciliacion) ? `
       <div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:12px 0 2px">Conciliación de saldo de aves</div>
       <table><tbody>
         <tr><td>Reporte acta conteo de picos (Σ Reporte conteo)</td><td style="text-align:right;font-weight:700">${fmt(conteo)}</td></tr>
@@ -1734,6 +1734,14 @@ function generarModelo1(
   const difBultosKg = difBultos * (dKgN ? dKg / dKgN : 40);
   const hayInv = dIng > 0 || dSal > 0 || dFis > 0;
 
+  // Resumen semanal de mortalidad (semana 1..6): cantidad y % sobre aves recibidas.
+  const { mortSemana, avesMort } = consolidarProduccionDiaria(hallazgos);
+  const semRows = mortSemana.slice(0, 6).map((v, i) => `<tr><td>Semana ${i + 1}</td><td style="text-align:right">${_fmtAnx(v)}</td><td style="text-align:right">${avesMort > 0 ? ((v / avesMort) * 100).toFixed(2) : "0.00"}%</td></tr>`).join("");
+  const semTotal = mortSemana.slice(0, 6).reduce((s, v) => s + v, 0);
+  const semanalTabla = mortSemana.length ? `<div class="section"><div class="section-title">Resumen Semanal de Mortalidad</div>
+    <table><thead><tr><th>Semana</th><th style="text-align:right">Cantidad</th><th style="text-align:right">% Mortalidad</th></tr></thead>
+    <tbody>${semRows}<tr style="font-weight:700;background:#f8fafc"><td>Total</td><td style="text-align:right">${_fmtAnx(semTotal)}</td><td style="text-align:right">${avesMort > 0 ? ((semTotal / avesMort) * 100).toFixed(2) : "0.00"}%</td></tr></tbody></table></div>` : "";
+
   const extraMeta = [
     { label: "Técnico Veterinario", value: datos?.tecnicoVeterinario || "" },
     { label: "Administrador de Granja", value: datos?.administrador || "" },
@@ -1765,7 +1773,8 @@ ${seccionFortalezas(kpis, hallazgos)}
 ${seccionRecomendaciones(kpis, hallazgos)}
 
 <div class="divider">Capítulo IV — Soportes y Seguimiento</div>
-${seccionMortalidad(mortalidad, granjas, hallazgos, true)}
+${seccionMortalidad(mortalidad, granjas, hallazgos, true, true)}
+${semanalTabla}
 ${seccionPaneles(hallazgos, granjas, "Mortalidad · Resumen Ejecutivo", (a) => resumenMortalidadDiaria(a.registroMortalidadDiaria))}
 ${graficosMortalidadTendencia(hallazgos)}
 <div class="section">
