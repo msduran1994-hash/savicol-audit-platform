@@ -2287,14 +2287,30 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
       }
     };
 
-    // Coloca un elemento; si es más alto que una página, recurre a sus hijos de bloque
+    // Un elemento es "hoja" (se coloca ENTERO, nunca se parte en hijos): tablas, filas,
+    // imágenes, gráficos SVG/canvas, tarjetas KPI/chart/firma/metric y cualquier contenedor
+    // flex/grid (partirlo rompería su maquetación en columnas). El resto (secciones y
+    // bloques por hallazgo) sí se recorre para rellenar la hoja.
+    const esHoja = (el: HTMLElement): boolean => {
+      const tag = el.tagName;
+      if (tag === "TABLE" || tag === "TR" || tag === "IMG" || tag === "SVG" || tag === "CANVAS") return true;
+      const cls = typeof el.className === "string" ? el.className : "";
+      if (/\b(kpi-item|kpi-card|chart-box|firma-box|firma-section|metric)\b/.test(cls)) return true;
+      const disp = getComputedStyle(el).display;
+      if (disp.includes("flex") || disp.includes("grid")) return true;
+      return false;
+    };
+
+    // Coloca un elemento. Si NO es hoja y no cabe entero en lo que queda de la hoja (o es más
+    // alto que una página completa), se recorre a sus hijos: los primeros rellenan el hueco
+    // actual y sólo lo que no cupo pasa a la siguiente hoja — así se reducen los espacios en
+    // blanco SIN partir tablas, gráficos ni fotos (que se colocan enteros). Hasta 4 niveles:
+    // página → sección → bloque por hallazgo → sub-bloque → tabla.
     const colocarElemento = async (el: HTMLElement, prof: number): Promise<void> => {
       const hmmAprox = el.offsetHeight * mmPerPx;
+      const restante = pageH - mBottom - y;
       const hijos = Array.from(el.children).filter((c): c is HTMLElement => c instanceof HTMLElement && c.offsetHeight > 0);
-      // Recursión de hasta DOS niveles: sección → bloques por hallazgo → tabla/panel. Así
-      // los bloques altos (tabla + panel) se colocan por partes ENTERAS en vez de cortarse,
-      // reduciendo también los espacios en blanco. Cada bloque se centra por su ancho real.
-      if (hmmAprox > usableH && prof < 2 && hijos.length > 1) {
+      if (!esHoja(el) && hijos.length > 1 && prof < 4 && (hmmAprox > usableH || (hmmAprox > restante && !pageVacia))) {
         for (const hijo of hijos) await colocarElemento(hijo, prof + 1);
         return;
       }
@@ -2306,8 +2322,8 @@ async function htmlToPDFBase64(html: string): Promise<{ b64: string; filename: s
       : [root];
     for (const bloque of bloques) {
       const esDivider = typeof bloque.className === "string" && bloque.className.includes("divider");
-      // Evita divisores huérfanos: si queda poco espacio, empújalo con su sección
-      if (esDivider && !pageVacia && (pageH - mBottom - y) < 48) nuevaPagina();
+      // Evita divisores huérfanos: si queda poco espacio (menos que divisor + título), empújalo con su sección
+      if (esDivider && !pageVacia && (pageH - mBottom - y) < 36) nuevaPagina();
       await colocarElemento(bloque, 0);
     }
 
