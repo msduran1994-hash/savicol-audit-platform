@@ -1049,7 +1049,7 @@ function seccionEvidencias(hallazgos: any[], granjas: any[], evidenciasPorHallaz
     return `<div style="margin-bottom:16px;page-break-inside:avoid">
       <div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:2px">${h.titulo?.slice(0, 70) || "Hallazgo"}</div>
       <div style="font-size:9px;color:#64748b;margin-bottom:6px">${g?.nombre || "—"} · ${fmtFechaCorta(h.fechaVisita)} · ${evs.length} foto(s)</div>
-      ${evidenciasGridHTML(evs.map((ev: any) => ({ src: ev.url, titulo: ev.nombre || undefined, pie: ev.categoria || undefined })))}
+      ${evidenciasGridHTML(evs.map((ev: any) => ({ src: ev.url, titulo: ev.nombre || undefined, pie: ev.categoria || undefined })), { maxH: 360, maxHUna: 520 })}
     </div>`;
   }).join("");
   return `<div class="section"><div class="section-title">Evidencias Fotográficas</div>${bloques}</div>`;

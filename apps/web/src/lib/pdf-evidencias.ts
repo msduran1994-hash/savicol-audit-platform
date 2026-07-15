@@ -20,13 +20,13 @@ export interface FotoPDF {
   pie?: string;     // pie de foto: fecha, ubicación o descripción
 }
 
-export function evidenciasGridHTML(fotos: FotoPDF[], opts?: { max?: number }): string {
+export function evidenciasGridHTML(fotos: FotoPDF[], opts?: { max?: number; maxH?: number; maxHUna?: number }): string {
   const items = fotos.filter(f => f && f.src).slice(0, opts?.max ?? 24);
   if (items.length === 0) return "";
 
   const una   = items.length === 1;
   const cellW = una ? "100%" : "calc(50% - 7px)";
-  const maxH  = una ? 360 : 240;
+  const maxH  = una ? (opts?.maxHUna ?? 360) : (opts?.maxH ?? 240);
 
   const cell = (f: FotoPDF) => `
     <div style="flex:0 0 ${cellW};max-width:${cellW};page-break-inside:avoid;margin-bottom:12px">
