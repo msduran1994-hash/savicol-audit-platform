@@ -21,6 +21,12 @@ export class SettingsController {
     return this.svc.findAll("public");
   }
 
+  /** Conteos públicos (granjas, hallazgos, KPIs) para la portada. Sin autenticación. */
+  @Get("public-stats")
+  publicStats() {
+    return this.svc.publicStats();
+  }
+
   // ── Endpoints autenticados ──
   @Get()
   @UseGuards(JwtAuthGuard)

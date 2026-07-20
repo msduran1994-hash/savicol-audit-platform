@@ -38,6 +38,16 @@ const DEFAULT_SETTINGS: Array<{ key: string; value: string; type: string; catego
 export class SettingsService {
   constructor(private prisma: PrismaService) {}
 
+  /** Conteos públicos para la portada/landing (sin autenticación): granjas, hallazgos, KPIs. */
+  async publicStats() {
+    const [granjas, hallazgos, kpis] = await Promise.all([
+      this.prisma.granja.count().catch(() => 0),
+      this.prisma.hallazgo.count().catch(() => 0),
+      this.prisma.kPI.count().catch(() => 0),
+    ]);
+    return { granjas, hallazgos, kpis };
+  }
+
   /**
    * Devuelve TODOS los settings.
    * Si scope='public' filtra solo los marcados isPublic (para uso sin auth).
