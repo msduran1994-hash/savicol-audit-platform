@@ -181,6 +181,8 @@ export type DatosGenerales = {
   tecnicoVeterinario?: string;
   lote?: string;
   edadLote?: string;
+  // Fortalezas Identificadas (manuales, sólo Informe Ejecutivo · efímeras en el formulario).
+  fortalezas?: { fortaleza: string; observacion: string; foto?: string }[];
 };
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
@@ -861,6 +863,8 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
           ${fotos.length ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:700;color:#0D1526;margin-bottom:4px">Evidencia Fotográfica (${fotos.length})</div>${evidenciasGridHTML(fotos.map((ev:any)=>({src:ev.url, titulo:ev.nombre||undefined, pie:ev.categoria||undefined})))}</div>` : ""}
         </div>`;
       }
+      // Ejecutivo: evidencias fotográficas del hallazgo, integradas bajo el plan (grandes).
+      const fotosK = k.hallazgoId ? (evidenciasPorHallazgo?.[k.hallazgoId] || []) : [];
       return `<div class="kpi-item">
         <div class="kpi-item-header">
           <div class="kpi-item-title">${k.accion}</div>
@@ -879,6 +883,7 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
           <div class="plan-box-title">Plan de Acción</div>
           <div class="plan-box-text">${k.planAccionVeterinario}</div>
         </div>` : ""}
+        ${fotosK.length ? `<div style="margin-top:8px;page-break-inside:avoid"><div style="font-size:10px;font-weight:700;color:#0D1526;margin-bottom:4px">Evidencia Fotográfica (${fotosK.length})</div>${evidenciasGridHTML(fotosK.map((ev:any)=>({src:ev.url, titulo:ev.categoria||undefined, pie:ev.nombre||undefined})), { maxH:360, maxHUna:520 })}</div>` : ""}
       </div>`;
     }).join("")}
   </div>`;
@@ -1577,7 +1582,7 @@ function seccionMetodologia(kpis: any[], hallazgos: any[], granjas: any[]): stri
   const nG = granjas.length, nH = hallazgos.length, nK = kpis.length;
   const rango = _rangoFechas([...hallazgos, ...kpis]);
   const bloque = (t: string, c: string) =>
-    `<div style="margin-bottom:11px;page-break-inside:avoid"><div style="font-size:12px;font-weight:800;color:#0D1526;margin-bottom:3px">${t}</div><div style="font-size:13px;line-height:1.65;color:#475569;text-align:justify">${c}</div></div>`;
+    `<div style="margin-bottom:11px;page-break-inside:avoid"><div style="font-size:14px;font-weight:800;color:#0D1526;margin-bottom:4px">${t}</div><div style="font-size:14px;line-height:1.7;color:#475569;text-align:justify">${c}</div></div>`;
   return `<div class="section"><div class="section-title">Marco Metodológico de la Auditoría</div>
     ${bloque("1. Introducción", `El presente informe consolida los resultados de la auditoría interna de cumplimiento KPI ejecutada por el área de ${EMPRESA.area} de ${EMPRESA.nombre} (NIT ${EMPRESA.nit}). El ejercicio se orientó a verificar el estado de los planes de acción derivados de los hallazgos de auditoría en las granjas avícolas evaluadas y a valorar el nivel de exposición al riesgo asociado.`)}
     ${bloque("2. Objetivos", `Verificar el grado de avance y cierre de los ${nK} plan(es) de acción registrados; evaluar la severidad y el estado de los ${nH} hallazgo(s) identificados; y entregar a la Gerencia una visión objetiva del nivel de cumplimiento y de los riesgos residuales que requieren atención prioritaria.`)}
@@ -1675,6 +1680,32 @@ function seccionFortalezas(kpis: any[], hallazgos: any[]): string {
     <ul style="font-size:13px;line-height:1.8;color:#334155;padding-left:18px;margin:0">${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`;
 }
 
+// Fortalezas Identificadas (MANUAL · sólo Informe Ejecutivo) — se muestra únicamente si hay datos.
+function seccionFortalezasManual(fortalezas?: { fortaleza: string; observacion: string; foto?: string }[]): string {
+  const items = (fortalezas || []).filter(f => (f.fortaleza || "").trim() || (f.observacion || "").trim() || (f.foto || "").trim());
+  if (!items.length) return "";
+  const bloques = items.map((f, i) => `<div style="margin-bottom:14px;page-break-inside:avoid">
+    <div style="font-size:14px;font-weight:700;color:#0D1526">${i + 1}. ${f.fortaleza?.trim() || "Fortaleza"}</div>
+    ${f.observacion?.trim() ? `<div style="font-size:14px;color:#475569;margin-top:3px;text-align:justify"><strong>Observación:</strong> ${f.observacion.trim()}</div>` : ""}
+    ${f.foto ? evidenciasGridHTML([{ src: f.foto }], { maxHUna: 420 }) : ""}
+  </div>`).join("");
+  return `<div class="section"><div class="section-title">Fortalezas Identificadas</div>${bloques}</div>`;
+}
+
+// Conclusiones ejecutivas (auto, prosa) — Informe Ejecutivo.
+function seccionConclusionesEjec(kpis: any[], hallazgos: any[]): string {
+  const total = hallazgos.length;
+  const eLow = (h: any) => (h.estado || "").toString().toLowerCase();
+  const abiertos = hallazgos.filter(h => eLow(h).includes("abierto")).length;
+  const cerrados = hallazgos.filter(h => eLow(h).includes("cerrad")).length;
+  const avance = kpis.length ? Math.round(kpis.reduce((s, k) => s + (Number(k.porcentajeAvance) || 0), 0) / kpis.length) : 0;
+  const granjasN = new Set(hallazgos.map(h => h.granjaId).filter(Boolean)).size;
+  return `<div class="section"><div class="section-title">Conclusiones</div>
+    <div style="font-size:14px;line-height:1.8;color:#475569;text-align:justify">
+      <p>La auditoría evaluó <strong>${total}</strong> hallazgo(s) en <strong>${granjasN}</strong> granja(s), de los cuales <strong>${abiertos}</strong> permanece(n) abierto(s) y <strong>${cerrados}</strong> cerrado(s). Los planes de acción KPI registran un avance global del <strong>${avance}%</strong>. Se recomienda dar continuidad al seguimiento de los hallazgos abiertos y a la ejecución de los planes comprometidos para consolidar el control interno en las granjas del alcance.</p>
+    </div></div>`;
+}
+
 // Recomendaciones
 function seccionRecomendaciones(kpis: any[], hallazgos: any[]): string {
   const noIni = kpis.filter(k => k.estado === "NO_INICIADO").length;
@@ -1701,7 +1732,7 @@ function resumenCorporativoParrafo(kpis: any[], hallazgos: any[]): string {
   const granjasN = new Set(hallazgos.map(h => h.granjaId).filter(Boolean)).size;
   const avance = kpis.length ? Math.round(kpis.reduce((s, k) => s + (Number(k.porcentajeAvance) || 0), 0) / kpis.length) : 0;
   const compl = kpis.filter(k => /complet/i.test(k.estado || "")).length;
-  return `<div style="font-size:12px;line-height:1.6;color:#334155;text-align:justify;margin-bottom:10px;page-break-inside:avoid">
+  return `<div style="font-size:14px;line-height:1.7;color:#334155;text-align:justify;margin-bottom:10px;page-break-inside:avoid">
     <strong>Resumen corporativo.</strong> La presente auditoría identificó <strong>${total}</strong> hallazgo(s) en <strong>${granjasN}</strong> granja(s)${criticos || altos ? ` (${criticos} crítico(s), ${altos} alto(s))` : ""}. Al corte, ${abiertos} permanece(n) abierto(s), ${enPlan} en plan de acción y ${cerrados} cerrado(s). Los ${kpis.length} plan(es) de acción KPI registran un avance global del <strong>${avance}%</strong> (${compl} completado(s)). ${criticos > 0 ? "Se requiere atención prioritaria sobre los hallazgos críticos identificados." : "No se registran hallazgos de criticidad máxima pendientes."}</div>`;
 }
 
@@ -1765,6 +1796,10 @@ function generarModelo1(
 <style>${CSS_BASE}
 .divider{text-align:center;padding:12px;margin-top:6px;background:linear-gradient(90deg,transparent,#e2e8f0,transparent);
   font-size:11px;color:#475569;font-weight:700;letter-spacing:.08em;text-transform:uppercase;page-break-inside:avoid;page-break-after:avoid}
+/* Legibilidad: contenido principal a 14px y mayor separación título/contenido. Las TABLAS y
+   los pies de foto mantienen su tamaño para no aumentar el número de páginas. */
+.page p, .page li{font-size:14px}
+.page .section-title{font-size:16px;margin-bottom:14px}
 </style></head><body><div class="page">
 ${portada(`Informe Ejecutivo de Auditoría N° ${num}`, "Control Interno y Cumplimiento KPI", kpis, hallazgos, auditor, granjas[0]?.nombre, datos, false, extraMeta)}
 
@@ -1774,13 +1809,12 @@ ${seccionMetodologia(kpis, hallazgos, granjas)}
 <div class="divider">Capítulo II — Características Generales</div>
 ${seccionMarcoLegal(marcoLegal)}
 ${seccionHallazgos(hallazgos, granjas, 20, resumenCorporativoParrafo(kpis, hallazgos))}
-${seccionKPIs(kpis, granjas, hallazgos)}
-${seccionRiesgos(hallazgos)}
-${seccionEvidencias(hallazgos, granjas, evidenciasPorHallazgo)}
+${seccionKPIs(kpis, granjas, hallazgos, evidenciasPorHallazgo)}
 
 <div class="divider">Capítulo III — Consideraciones</div>
-${seccionFortalezas(kpis, hallazgos)}
+${seccionFortalezasManual(datos?.fortalezas)}
 ${seccionRecomendaciones(kpis, hallazgos)}
+${seccionConclusionesEjec(kpis, hallazgos)}
 
 <div class="divider">Capítulo IV — Soportes y Seguimiento</div>
 ${seccionMortalidad(mortalidad, granjas, hallazgos, true, true)}
@@ -2616,12 +2650,27 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
   });
   const setD = (k: keyof DatosGenerales, v: string) => setDatos(p => ({ ...p, [k]: v }));
 
+  // Fortalezas Identificadas (manuales, sólo Informe Ejecutivo · efímeras, sólo para el PDF).
+  type Fortaleza = { fortaleza: string; observacion: string; foto?: string };
+  const [fortalezas, setFortalezas] = useState<Fortaleza[]>([]);
+  const addFortaleza  = () => setFortalezas(p => [...p, { fortaleza: "", observacion: "" }]);
+  const editFortaleza = (i: number, patch: Partial<Fortaleza>) => setFortalezas(p => p.map((f, j) => j === i ? { ...f, ...patch } : f));
+  const delFortaleza  = (i: number) => setFortalezas(p => p.filter((_, j) => j !== i));
+  const fotoFortaleza = (i: number, file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => editFortaleza(i, { foto: String(reader.result || "") });
+    reader.readAsDataURL(file);
+  };
+  const fortalezasLimpias = () => fortalezas.filter(f => f.fortaleza.trim() || f.observacion.trim() || f.foto);
+
   const INP_STYLE = "w-full px-3 py-2 bg-[#0A111F] border border-[#1E2D4A] rounded-lg text-xs text-white placeholder-[#475569] focus:outline-none focus:border-[#4A7AFF] transition-colors";
   const FLD = "text-[10px] text-[#94A3B8] mb-1 block";
 
   const modelos = Object.entries(MODELOS_INFO) as [ModeloInforme, typeof MODELOS_INFO[ModeloInforme]][];
   const modelosOrdenados = modelos.filter(([k]) => modelosSel.has(k)).map(([k]) => k);
   const incluyeGeneral = modelosSel.has("5-general");
+  const incluyeEjecutivo = modelosSel.has("1-ejecutivo");
   const toggleModelo = (key: ModeloInforme) => setModelosSel(prev => {
     const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n;
   });
@@ -2649,7 +2698,7 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
     if (!modelosSel.size) { setEnviado("Selecciona al menos un modelo de informe."); return; }
     setGenerando(true); setEnviado(null);
     try {
-      await onGenerar(modelosOrdenados, datos, marcoLegal || undefined);
+      await onGenerar(modelosOrdenados, { ...datos, fortalezas: fortalezasLimpias() }, marcoLegal || undefined);
       onClose();
     } catch(e: any) {
       setEnviado("✗ No se pudo generar el informe: " + (e?.message ?? "desconocido"));
@@ -2662,7 +2711,7 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
     if (!modelosSel.size) { setEnviado("Selecciona al menos un modelo de informe."); return; }
     setEnviando(true); setEnviado(null);
     try {
-      await onEnviar(modelosOrdenados, datos, descripcionCorreo, marcoLegal || undefined);
+      await onEnviar(modelosOrdenados, { ...datos, fortalezas: fortalezasLimpias() }, descripcionCorreo, marcoLegal || undefined);
       onClose();
     } catch(e: any) {
       setEnviado("✗ No se pudo generar el informe: " + (e?.message ?? "desconocido"));
@@ -2810,6 +2859,37 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
               <p className="text-[9px] text-[#475569] mt-1 px-1">
                 Se incluye textualmente en la sección "Marco Legal Aplicable" del Informe General. Si se deja vacío, el informe lo indica.
               </p>
+            </div>
+          )}
+
+          {/* Fortalezas Identificadas — manual, sólo Informe Ejecutivo */}
+          {incluyeEjecutivo && (
+            <div>
+              <span className="text-xs text-[#94A3B8] font-semibold mb-2 block">
+                Fortalezas Identificadas <span className="text-[#475569] font-normal">(opcional · Informe Ejecutivo)</span>
+              </span>
+              <div className="space-y-2">
+                {fortalezas.map((f, i) => (
+                  <div key={i} className="border border-[#1E2D4A] rounded-lg p-2.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-[#64748B]">Fortaleza {i + 1}</span>
+                      <button type="button" onClick={() => delFortaleza(i)} className="text-[#94A3B8] hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <input value={f.fortaleza} onChange={e => editFortaleza(i, { fortaleza: e.target.value })} className={INP_STYLE} placeholder="Fortaleza identificada" />
+                    <textarea value={f.observacion} onChange={e => editFortaleza(i, { observacion: e.target.value })} rows={2} className={INP_STYLE + " resize-none"} placeholder="Observación" />
+                    <div className="flex items-center gap-2">
+                      <label className="text-[10px] text-[#4A7AFF] cursor-pointer hover:underline flex items-center gap-1">
+                        <ImagePlus className="w-3.5 h-3.5" /> {f.foto ? "Cambiar foto" : "Agregar foto (opcional)"}
+                        <input type="file" accept="image/*" className="hidden" onChange={e => fotoFortaleza(i, e.target.files?.[0])} />
+                      </label>
+                      {f.foto && <img src={f.foto} alt="" className="h-8 w-8 object-cover rounded border border-[#1E2D4A]" />}
+                      {f.foto && <button type="button" onClick={() => editFortaleza(i, { foto: undefined })} className="text-[9px] text-[#94A3B8] hover:text-red-400">Quitar</button>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={addFortaleza} className="mt-2 px-3 py-1.5 rounded text-[11px] bg-[#1A2540] text-white flex items-center gap-1 hover:bg-[#22304d]"><Plus className="w-3 h-3" /> Agregar fortaleza</button>
+              <p className="text-[9px] text-[#475569] mt-1 px-1">Aparecen en "Fortalezas Identificadas" del Informe Ejecutivo (antes de Conclusiones). Sólo si registras al menos una.</p>
             </div>
           )}
 
