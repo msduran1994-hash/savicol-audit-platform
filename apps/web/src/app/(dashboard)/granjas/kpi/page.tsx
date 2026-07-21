@@ -875,6 +875,7 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
           Responsable: <strong>${k.responsable||"—"}</strong>
           ${h ? ` · Hallazgo: ${h.titulo}` : ""}
         </div>
+        ${h?.descripcion ? `<div class="hallazgo-desc">${h.descripcion}</div>` : ""}
         ${seguResp ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Seguimiento:</strong> ${seguResp}</div>` : ""}
         ${seguAudNombre ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Auditor de seguimiento:</strong> ${seguAudNombre}</div>` : ""}
         ${seguAud  ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Auditor:</strong> ${seguAud}</div>` : ""}
@@ -887,7 +888,7 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
       ${fotosK.length ? `<div style="margin:2px 0 12px">
         <div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:5px">Evidencia Fotográfica (${fotosK.length})</div>
         ${fotosK.map((ev:any)=>`<div style="page-break-inside:avoid;margin-bottom:8px;text-align:center">
-          <img src="${ev.url}" style="max-width:100%;max-height:540px;width:auto;height:auto;border-radius:6px;border:1px solid #e2e8f0;display:inline-block"/>
+          <img src="${ev.url}" style="max-width:100%;max-height:400px;width:auto;height:auto;border-radius:6px;border:1px solid #e2e8f0;display:inline-block"/>
           ${(ev.categoria||ev.nombre)?`<div style="font-size:12px;color:#64748b;margin-top:4px">${[ev.categoria,ev.nombre].filter(Boolean).join(" · ")}</div>`:""}
         </div>`).join("")}
       </div>` : ""}`;
@@ -1808,8 +1809,9 @@ function generarModelo1(
 .page .section-title{font-size:16px !important;margin-bottom:14px}
 .page .kpi-item-title{font-size:15px !important}
 .page .kpi-meta{font-size:13px !important}
+.page .hallazgo-desc{font-size:14px !important;color:#334155;line-height:1.55;text-align:justify;margin:4px 0 6px}
 .page .plan-box-title{font-size:12px !important}
-.page .plan-box-text{font-size:14px !important;line-height:1.6}
+.page .plan-box-text{font-size:15px !important;line-height:1.6}
 </style></head><body><div class="page">
 ${portada(`Informe Ejecutivo de Auditoría N° ${num}`, "Control Interno y Cumplimiento KPI", kpis, hallazgos, auditor, granjas[0]?.nombre, datos, false, extraMeta)}
 
