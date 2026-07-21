@@ -863,8 +863,18 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
           ${fotos.length ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:700;color:#0D1526;margin-bottom:4px">Evidencia Fotográfica (${fotos.length})</div>${evidenciasGridHTML(fotos.map((ev:any)=>({src:ev.url, titulo:ev.nombre||undefined, pie:ev.categoria||undefined})))}</div>` : ""}
         </div>`;
       }
-      // Ejecutivo: evidencias fotográficas del hallazgo, integradas bajo el plan (grandes).
+      // Ejecutivo: evidencias del hallazgo bajo el plan, en 2 COLUMNAS (filas de 2) para
+      // ocupar menos hojas; cada fila (page-break-inside:avoid) no se corta entre páginas.
       const fotosK = k.hallazgoId ? (evidenciasPorHallazgo?.[k.hallazgoId] || []) : [];
+      let fotosHTML = "";
+      if (fotosK.length) {
+        const filasFoto: string[] = [];
+        for (let i = 0; i < fotosK.length; i += 2) {
+          const par = fotosK.slice(i, i + 2);
+          filasFoto.push(`<div style="display:flex;gap:10px;page-break-inside:avoid;margin-bottom:8px">${par.map((ev: any) => `<div style="flex:1;min-width:0;text-align:center"><img src="${ev.url}" style="max-width:100%;max-height:300px;width:auto;height:auto;border-radius:6px;border:1px solid #e2e8f0;display:inline-block"/>${(ev.categoria || ev.nombre) ? `<div style="font-size:11px;color:#64748b;margin-top:3px">${[ev.categoria, ev.nombre].filter(Boolean).join(" · ")}</div>` : ""}</div>`).join("")}${par.length === 1 ? `<div style="flex:1"></div>` : ""}</div>`);
+        }
+        fotosHTML = `<div style="margin:2px 0 12px"><div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:5px">Evidencia Fotográfica (${fotosK.length})</div>${filasFoto.join("")}</div>`;
+      }
       return `<div class="kpi-item">
         <div class="kpi-item-header">
           <div class="kpi-item-title">${k.accion}</div>
@@ -885,13 +895,7 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
           <div class="plan-box-text">${k.planAccionVeterinario}</div>
         </div>` : ""}
       </div>
-      ${fotosK.length ? `<div style="margin:2px 0 12px">
-        <div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:5px">Evidencia Fotográfica (${fotosK.length})</div>
-        ${fotosK.map((ev:any)=>`<div style="page-break-inside:avoid;margin-bottom:8px;text-align:center">
-          <img src="${ev.url}" style="max-width:100%;max-height:400px;width:auto;height:auto;border-radius:6px;border:1px solid #e2e8f0;display:inline-block"/>
-          ${(ev.categoria||ev.nombre)?`<div style="font-size:12px;color:#64748b;margin-top:4px">${[ev.categoria,ev.nombre].filter(Boolean).join(" · ")}</div>`:""}
-        </div>`).join("")}
-      </div>` : ""}`;
+      ${fotosHTML}`;
     }).join("")}
   </div>`;
 }
