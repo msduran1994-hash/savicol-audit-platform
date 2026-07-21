@@ -883,8 +883,14 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
           <div class="plan-box-title">Plan de Acción</div>
           <div class="plan-box-text">${k.planAccionVeterinario}</div>
         </div>` : ""}
-        ${fotosK.length ? `<div style="margin-top:8px;page-break-inside:avoid"><div style="font-size:10px;font-weight:700;color:#0D1526;margin-bottom:4px">Evidencia Fotográfica (${fotosK.length})</div>${evidenciasGridHTML(fotosK.map((ev:any)=>({src:ev.url, titulo:ev.categoria||undefined, pie:ev.nombre||undefined})), { maxH:360, maxHUna:520 })}</div>` : ""}
-      </div>`;
+      </div>
+      ${fotosK.length ? `<div style="margin:2px 0 12px">
+        <div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:5px">Evidencia Fotográfica (${fotosK.length})</div>
+        ${fotosK.map((ev:any)=>`<div style="page-break-inside:avoid;margin-bottom:8px;text-align:center">
+          <img src="${ev.url}" style="max-width:100%;max-height:540px;width:auto;height:auto;border-radius:6px;border:1px solid #e2e8f0;display:inline-block"/>
+          ${(ev.categoria||ev.nombre)?`<div style="font-size:12px;color:#64748b;margin-top:4px">${[ev.categoria,ev.nombre].filter(Boolean).join(" · ")}</div>`:""}
+        </div>`).join("")}
+      </div>` : ""}`;
     }).join("")}
   </div>`;
 }
@@ -1796,10 +1802,14 @@ function generarModelo1(
 <style>${CSS_BASE}
 .divider{text-align:center;padding:12px;margin-top:6px;background:linear-gradient(90deg,transparent,#e2e8f0,transparent);
   font-size:11px;color:#475569;font-weight:700;letter-spacing:.08em;text-transform:uppercase;page-break-inside:avoid;page-break-after:avoid}
-/* Legibilidad: contenido principal a 14px y mayor separación título/contenido. Las TABLAS y
-   los pies de foto mantienen su tamaño para no aumentar el número de páginas. */
-.page p, .page li{font-size:14px}
-.page .section-title{font-size:16px;margin-bottom:14px}
+/* Legibilidad: contenido principal a 14px y mayor separación título/contenido. Las TABLAS
+   mantienen su tamaño para no aumentar el número de páginas. */
+.page p, .page li{font-size:14px !important}
+.page .section-title{font-size:16px !important;margin-bottom:14px}
+.page .kpi-item-title{font-size:15px !important}
+.page .kpi-meta{font-size:13px !important}
+.page .plan-box-title{font-size:12px !important}
+.page .plan-box-text{font-size:14px !important;line-height:1.6}
 </style></head><body><div class="page">
 ${portada(`Informe Ejecutivo de Auditoría N° ${num}`, "Control Interno y Cumplimiento KPI", kpis, hallazgos, auditor, granjas[0]?.nombre, datos, false, extraMeta)}
 
