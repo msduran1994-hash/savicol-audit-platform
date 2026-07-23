@@ -168,7 +168,7 @@ export const PRELIMINARES_BASE: { concepto: string; objetivo: string }[] = [
   { concepto: "Temperatura ambiente (°C)",    objetivo: "28 – 30 °C" },
   { concepto: "Humedad relativa (%)",         objetivo: "60 – 70 %" },
   { concepto: "Funcionamiento ventiladores",  objetivo: "Óptimo" },
-  { concepto: "Funcionamiento extractores",   objetivo: "Óptimo" },
+  { concepto: "Funcionamiento criadoras",     objetivo: "Óptimo" },
   { concepto: "Bebederos listos",             objetivo: "Sí" },
   { concepto: "Comederos listos",             objetivo: "Sí" },
   { concepto: "Calidad de la cama",           objetivo: "Buena" },
@@ -322,8 +322,10 @@ export const ENCACETAMIENTO_SECCIONES: { seccion: string; preguntas: string[] }[
       "¿Los bebederos están instalados y funcionando?",
       "¿Los comederos están disponibles y correctamente distribuidos?",
       "¿Los sistemas de ventilación funcionan correctamente?",
-      "¿Los extractores están operativos?",
+      "¿Las criadoras están operativas?",
       "¿Existe disponibilidad inmediata de agua potable?",
+      "¿Los termómetros se encuentran calibrados y operativos?",
+      "¿La ubicación y cantidad de termómetros es adecuada para el galpón?",
     ],
   },
   {
@@ -334,6 +336,8 @@ export const ENCACETAMIENTO_SECCIONES: { seccion: string; preguntas: string[] }[
       "¿La temperatura del vehículo fue adecuada durante el transporte?",
       "¿El descargue se realizó bajo condiciones controladas?",
       "¿El estado general del pollito fue satisfactorio al ingreso?",
+      "¿La instalación de gas fue verificada antes de la recepción del pollito?",
+      "¿Se cumplió el tiempo establecido de calefacción previo a la recepción?",
     ],
   },
 ];
@@ -393,6 +397,10 @@ export interface MuestreoInfo {
   genero?: "" | "Macho" | "Hembra";
   capacidad?: number;     // capacidad del galpón (aves)
   avesActuales?: number;  // cantidad actual de aves
+  // Encasetamiento (opcionales, informativos) — asociados al lote
+  cantidadIngreso?: number;      // cantidad de ingreso de aves
+  fechaDespoblamiento?: string;  // fecha del último despoblamiento (para el vacío sanitario)
+  reutilizacionCama?: number;    // cantidad de reutilización (usos de la cama)
 }
 
 export interface ChecklistData {

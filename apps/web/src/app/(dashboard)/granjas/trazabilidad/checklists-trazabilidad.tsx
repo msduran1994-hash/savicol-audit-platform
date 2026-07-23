@@ -441,6 +441,13 @@ function MuestreosTab({ data, setData, tipo }: {
 }) {
   const muestreos = data.muestreos ?? [];
   const info = data.muestreoInfo ?? {};
+  // Vacío sanitario (días) = fecha de visita (encasetamiento) − fecha del último despoblamiento.
+  const diasVacio = (() => {
+    const fd = info.fechaDespoblamiento;
+    if (!fd || !data.fechaVisita) return null;
+    const diff = Math.round((new Date(data.fechaVisita + "T00:00:00").getTime() - new Date(fd + "T00:00:00").getTime()) / 86400000);
+    return diff >= 0 ? diff : null;
+  })();
   const esTodos = data.galpon === GALPON_TODOS;
   // Galpón por defecto de cada pesaje: el del checklist si es específico; vacío si es "Todos"
   const dgDefault = data.galpon && !esTodos ? data.galpon : "";
@@ -503,6 +510,24 @@ function MuestreosTab({ data, setData, tipo }: {
             <label className={LBL}>Cantidad actual de aves</label>
             <input type="number" min={0} value={numv(info.avesActuales ?? 0)} onChange={e => setInfo({ avesActuales: parseInt(e.target.value) || 0 })} placeholder="aves" className={IN}/>
           </div>
+          {tipo === "encacetamiento" && <>
+            <div>
+              <label className={LBL}>Cantidad de ingreso de aves</label>
+              <input type="number" min={0} value={numv(info.cantidadIngreso ?? 0)} onChange={e => setInfo({ cantidadIngreso: parseInt(e.target.value) || 0 })} placeholder="aves" className={IN}/>
+            </div>
+            <div>
+              <label className={LBL}>Fecha último despoblamiento</label>
+              <input type="date" value={info.fechaDespoblamiento ?? ""} onChange={e => setInfo({ fechaDespoblamiento: e.target.value })} className={IN}/>
+            </div>
+            <div>
+              <label className={LBL}>Vacío sanitario (días)</label>
+              <input readOnly value={diasVacio != null ? String(diasVacio) : "—"} className={cn(IN, "opacity-70")} title="Se calcula desde la fecha del último despoblamiento"/>
+            </div>
+            <div>
+              <label className={LBL}>Reutilización de cama (usos)</label>
+              <input type="number" min={0} value={numv(info.reutilizacionCama ?? 0)} onChange={e => setInfo({ reutilizacionCama: parseInt(e.target.value) || 0 })} placeholder="usos" className={IN}/>
+            </div>
+          </>}
         </div>
       </div>
 
@@ -709,6 +734,14 @@ async function generarPDFChecklistPro(tipo: ChecklistTipo, data: ChecklistData, 
   if (tipo === "encacetamiento") {
     info.push(`Técnico Veterinario: ${data.tecnicoVeterinario || "—"}`);
     info.push(`Responsable de Recepción: ${data.responsableRecepcion || "—"}`);
+    const mi = data.muestreoInfo ?? {};
+    const dv = (mi.fechaDespoblamiento && data.fechaVisita)
+      ? Math.round((new Date(data.fechaVisita + "T00:00:00").getTime() - new Date(mi.fechaDespoblamiento + "T00:00:00").getTime()) / 86400000)
+      : null;
+    info.push(`Ingreso de aves: ${mi.cantidadIngreso ? mi.cantidadIngreso.toLocaleString("es-CO") : "—"}`);
+    info.push(`Vacío sanitario: ${dv != null && dv >= 0 ? dv + " día(s)" : "—"}`);
+    info.push(`Últ. despoblamiento: ${mi.fechaDespoblamiento || "—"}`);
+    info.push(`Reutilización de cama: ${mi.reutilizacionCama ? mi.reutilizacionCama + " uso(s)" : "—"}`);
   } else {
     info.push(`Día evaluado: ${data.diaEvaluado || "—"}`);
   }
