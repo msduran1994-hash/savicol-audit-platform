@@ -397,10 +397,6 @@ export interface MuestreoInfo {
   genero?: "" | "Macho" | "Hembra";
   capacidad?: number;     // capacidad del galpón (aves)
   avesActuales?: number;  // cantidad actual de aves
-  // Encasetamiento (opcionales, informativos) — asociados al lote
-  cantidadIngreso?: number;      // cantidad de ingreso de aves
-  fechaDespoblamiento?: string;  // fecha del último despoblamiento (para el vacío sanitario)
-  reutilizacionCama?: number;    // cantidad de reutilización (usos de la cama)
 }
 
 export interface ChecklistData {
@@ -414,6 +410,9 @@ export interface ChecklistData {
   // Campos específicos
   tecnicoVeterinario?: string;     // encacetamiento
   responsableRecepcion?: string;   // encacetamiento
+  cantidadIngreso?: number;        // encacetamiento — cantidad de ingreso de aves
+  fechaDespoblamiento?: string;    // encacetamiento — fecha del último despoblamiento (vacío sanitario)
+  reutilizacionCama?: number;      // encacetamiento — reutilización de la cama (usos)
   diaEvaluado?: string;            // trazabilidad7
   // Preguntas (15)
   preguntas: PreguntaChk[];
