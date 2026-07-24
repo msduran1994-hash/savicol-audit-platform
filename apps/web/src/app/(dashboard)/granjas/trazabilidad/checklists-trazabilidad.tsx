@@ -1,11 +1,11 @@
 "use client";
 import { useState, useMemo, useRef, useEffect } from "react";
 import {
-  useChecklists, useCreateChecklist, useUpdateChecklist, useDeleteChecklist,
+  useChecklists, useCreateChecklist, useUpdateChecklist, useDeleteChecklist, useLotes,
   checklistVacio, calcularCumplimiento, semaforo90, CHECKLIST_META, GALPONES, DIAS,
   comprimirImagen,
   type ChecklistData, type ChecklistItem, type ChecklistTipo, type PreguntaChk,
-  type Muestreo,
+  type Muestreo, type LoteItem,
 } from "@/hooks/useLotes";
 import { useGranjas } from "@/hooks/useGranjas";
 import { useAuthStore } from "@/store/auth.store";
@@ -168,6 +168,9 @@ function ChecklistModal({ tipo, item, granjas, usuario, onClose, onCreate, onUpd
 }) {
   const meta = CHECKLIST_META[tipo];
   const esEdicion = !!item;
+  // Registros oficiales de Lotes para los indicadores de mortalidad del PDF (Trazabilidad 7 Días).
+  // react-query comparte la caché por clave, por lo que no genera una consulta adicional.
+  const lotesQ = useLotes();
   const [data, setData] = useState<ChecklistData>(() => {
     const base = item ? { ...item.data, preguntas: item.data.preguntas.map(p => ({ ...p })) } : checklistVacio(tipo, "", usuario);
     // Registros previos: renombra "extractores"->"criadoras" (conserva la respuesta) e inserta las
@@ -223,9 +226,11 @@ function ChecklistModal({ tipo, item, granjas, usuario, onClose, onCreate, onUpd
   async function handlePDF() {
     setGenerandoPDF(true);
     try {
+      // Indicadores de mortalidad en tiempo real desde el módulo Lotes (solo Trazabilidad 7 Días).
+      const mort = tipo === "trazabilidad7" ? calcMortCheck(data, lotesQ.data ?? []) : null;
       // Enriquece el PDF con redacción profesional; si no hay respuesta, usa las calculadas
       const ia = await obtenerSeccionesIA(tipo, data, cumplimientoGlobal);
-      await generarPDFChecklistPro(tipo, data, cumplimientoGlobal, ia ?? undefined);
+      await generarPDFChecklistPro(tipo, data, cumplimientoGlobal, ia ?? undefined, mort);
     } finally {
       setGenerandoPDF(false);
     }
@@ -689,7 +694,49 @@ async function obtenerSeccionesIA(tipo: ChecklistTipo, data: ChecklistData, cump
 }
 
 
-async function generarPDFChecklistPro(tipo: ChecklistTipo, data: ChecklistData, cumplimientoGlobal: number, ia?: SeccionesIA) {
+// ─── Indicadores de Mortalidad (desde el módulo Lotes) — Checklist Trazabilidad 7 Días ───
+// % sobre aves recibidas (ingreso). Nivel 1 = galpón/lote del checklist; Nivel 2 = toda la granja.
+interface MortNivel { muertes: number; ingreso: number; actuales: number; pct: number; nLotes: number }
+interface MortCheck { galpon: MortNivel | null; granja: MortNivel | null; resumen: string }
+// Umbral de mortalidad: verde <4%, amarillo 4–8%, rojo ≥8%.
+function semColorMort(pct: number): string { return pct >= 8 ? "#DC2626" : pct >= 4 ? "#D97706" : "#16A34A"; }
+function semLabelMort(pct: number): string { return pct >= 8 ? "Crítico" : pct >= 4 ? "Elevado" : "Óptimo"; }
+function calcMortNivel(lotes: LoteItem[]): MortNivel | null {
+  const rel = lotes.filter(l => (l.data.avesIngreso || 0) > 0);
+  if (!rel.length) return null;
+  const ingreso = rel.reduce((s, l) => s + (l.data.avesIngreso || 0), 0);
+  const actuales = rel.reduce((s, l) => s + (l.data.avesActuales || 0), 0);
+  const muertes = Math.max(0, ingreso - actuales);
+  return { muertes, ingreso, actuales, pct: ingreso > 0 ? (muertes / ingreso) * 100 : 0, nLotes: rel.length };
+}
+function resumenMortalidad(pct: number | null): string {
+  if (pct == null) return "No se dispone de registros de mortalidad para interpretar el comportamiento del lote en el período evaluado.";
+  const nivel  = pct >= 8 ? "crítico" : pct >= 4 ? "elevado" : "dentro de parámetros aceptables";
+  const riesgo = pct >= 8 ? "alto" : pct >= 4 ? "moderado" : "bajo";
+  const causas = pct >= 8
+    ? "posibles procesos infecciosos, estrés térmico, deficiencias en la calidad del pollito de un día o fallas en el manejo durante la recepción"
+    : pct >= 4 ? "desviaciones en las condiciones ambientales, de bioseguridad o de manejo temprano del lote"
+    : "un manejo adecuado de las condiciones de recepción y alistamiento";
+  const reco = pct >= 8
+    ? "Se requiere intervención inmediata: necropsias diagnósticas, revisión sanitaria y ambiental del galpón y refuerzo de los protocolos de manejo."
+    : pct >= 4 ? "Se recomienda seguimiento estrecho, verificación de temperatura/ventilación y revisión de los protocolos de bioseguridad."
+    : "Se recomienda mantener el manejo actual y continuar el monitoreo diario de la mortalidad.";
+  return `La mortalidad acumulada del ${pct.toFixed(2)}% se clasifica como ${nivel}, con un riesgo productivo ${riesgo}. La tendencia observada es consistente con ${causas}. ${reco}`;
+}
+function calcMortCheck(data: ChecklistData, lotes: LoteItem[]): MortCheck | null {
+  const dela = lotes.filter(l => l.data.granjaId === data.granjaId);
+  if (!dela.length) return null; // sin registros para la granja
+  const loteN = (data.lote || "").trim().toLowerCase();
+  const galponLotes = dela.filter(l =>
+    (loteN ? (l.data.codigo || "").trim().toLowerCase() === loteN : true) &&
+    (data.galpon && data.galpon !== GALPON_TODOS ? l.data.galponPrincipal === data.galpon : true)
+  );
+  const galpon = galponLotes.length ? calcMortNivel(galponLotes) : null;
+  const granja = calcMortNivel(dela);
+  return { galpon, granja, resumen: resumenMortalidad(galpon?.pct ?? granja?.pct ?? null) };
+}
+
+async function generarPDFChecklistPro(tipo: ChecklistTipo, data: ChecklistData, cumplimientoGlobal: number, ia?: SeccionesIA, mort?: MortCheck | null) {
   const { default: jsPDF } = await import("jspdf");
   const meta = CHECKLIST_META[tipo];
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
@@ -845,6 +892,55 @@ async function generarPDFChecklistPro(tipo: ChecklistTipo, data: ChecklistData, 
   const conclusiones = ia?.conclusiones?.trim() || conclusionesCalc;
   const planTexto = (data.planAccion?.trim() ? data.planAccion + "\n\n" : "") + (ia?.planAccion?.trim() || planCalc);
 
+  // ─── Indicadores de Mortalidad (solo Trazabilidad 7 Días) · se dibuja justo antes de las Conclusiones ───
+  const renderMortalidad = () => {
+    need(22);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); setText("#0D1526");
+    doc.text("Indicadores de Mortalidad", M, y); y += 2;
+    setFill("#10B981"); doc.rect(M, y, 26, 0.7, "F"); y += 6;
+
+    if (!mort || (!mort.galpon && !mort.granja)) {
+      doc.setFont("helvetica", "italic"); doc.setFontSize(9); setText("#64748B");
+      doc.text("Sin registros de mortalidad disponibles para el período seleccionado.", M, y);
+      y += 8;
+      return;
+    }
+
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); setText("#94A3B8");
+    doc.text("Fuente: módulo Lotes · porcentaje calculado sobre aves recibidas (ingreso).", M, y); y += 6;
+
+    const filaNivel = (etiqueta: string, n: MortNivel) => {
+      need(12);
+      // Etiqueta del nivel
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); setText("#0D1526");
+      doc.text(etiqueta, M, y);
+      // Semáforo (se mide con su propia fuente)
+      const label = semLabelMort(n.pct);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
+      const pw = doc.getTextWidth(label) + 8;
+      const px = M + CW - pw;
+      setFill(semColorMort(n.pct)); doc.roundedRect(px, y - 3.6, pw, 5.4, 1.2, 1.2, "F");
+      setText("#FFFFFF"); doc.text(label, px + pw / 2, y + 0.3, { align: "center" });
+      y += 5.6;
+      // Detalle numérico
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); setText("#334155");
+      doc.text(`Mortalidad ${n.pct.toFixed(2)}%  ·  ${n.muertes.toLocaleString("es")} de ${n.ingreso.toLocaleString("es")} aves recibidas`, M + 4, y);
+      y += 7;
+    };
+
+    if (mort.galpon) {
+      const sub = (data.galpon && data.galpon !== GALPON_TODOS) ? `Galpón ${data.galpon}` : (data.lote ? `Lote ${data.lote}` : "Lote evaluado");
+      filaNivel(`Nivel 1 · ${sub}`, mort.galpon);
+    }
+    if (mort.granja) filaNivel(`Nivel 2 · Consolidado Granja${mort.granja.nLotes > 1 ? ` (${mort.granja.nLotes} lotes)` : ""}`, mort.granja);
+    y += 1;
+
+    // Resumen técnico automático
+    doc.setFont("helvetica", "italic"); doc.setFontSize(8.5); setText("#475569");
+    doc.splitTextToSize(mort.resumen, CW).forEach((ln: string) => { need(5); doc.text(ln, M, y); y += 4.4; });
+    y += 5;
+  };
+
   const bloques: { titulo: string; texto: string }[] = [
     { titulo: "Objetivo del Checklist", texto: meta.objetivo },
     { titulo: "Enfoque de la Auditoría", texto: meta.enfoque },
@@ -856,6 +952,8 @@ async function generarPDFChecklistPro(tipo: ChecklistTipo, data: ChecklistData, 
     bloques.splice(3, 0, { titulo: "Observación General", texto: data.observacionGeneral });
   }
   bloques.forEach(b => {
+    // Indicadores de Mortalidad se ubican inmediatamente antes de las Conclusiones (solo Trazabilidad 7 Días)
+    if (tipo === "trazabilidad7" && b.titulo === "Conclusiones") renderMortalidad();
     need(16);
     doc.setFont("helvetica", "bold"); doc.setFontSize(11); setText("#0D1526");
     doc.text(b.titulo, M, y); y += 2;
