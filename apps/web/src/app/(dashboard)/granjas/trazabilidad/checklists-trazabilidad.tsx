@@ -696,9 +696,11 @@ async function obtenerSeccionesIA(tipo: ChecklistTipo, data: ChecklistData, cump
 
 
 // ─── Indicadores de Mortalidad (desde el módulo Lotes) — Checklist Trazabilidad 7 Días ───
-// % sobre aves recibidas (ingreso). Nivel 1 = galpón/lote del checklist; Nivel 2 = toda la granja.
+// % sobre aves recibidas (ingreso). Nivel 1 = galpón seleccionado (o desglose por galpón si es
+// "TODOS"); Nivel 2 = consolidado de toda la granja.
 interface MortNivel { muertes: number; ingreso: number; actuales: number; pct: number; nLotes: number }
-interface MortCheck { galpon: MortNivel | null; granja: MortNivel | null; resumen: string }
+interface MortGalpon { galpon: string; nivel: MortNivel }
+interface MortCheck { galpon: MortNivel | null; porGalpon: MortGalpon[]; granja: MortNivel | null; resumen: string }
 // Umbral de mortalidad: verde <4%, amarillo 4–8%, rojo ≥8%.
 function semColorMort(pct: number): string { return pct >= 8 ? "#DC2626" : pct >= 4 ? "#D97706" : "#16A34A"; }
 function semLabelMort(pct: number): string { return pct >= 8 ? "Crítico" : pct >= 4 ? "Elevado" : "Óptimo"; }
@@ -724,20 +726,42 @@ function resumenMortalidad(pct: number | null): string {
     : "Se recomienda mantener el manejo actual y continuar el monitoreo diario de la mortalidad.";
   return `La mortalidad acumulada del ${pct.toFixed(2)}% se clasifica como ${nivel}, con un riesgo productivo ${riesgo}. La tendencia observada es consistente con ${causas}. ${reco}`;
 }
+// Desglose por galpón: cada lote se atribuye a todos sus galpones (principal + evaluados), igual que
+// el dashboard por galpón del Informe Ejecutivo (la mortalidad se registra a nivel de lote). Ordenado.
+function desglosePorGalpon(lotes: LoteItem[]): MortGalpon[] {
+  const map = new Map<string, LoteItem[]>();
+  for (const l of lotes) {
+    for (const g of galponesDeLote(l)) {
+      const key = g.trim();
+      if (!key) continue;
+      (map.get(key) ?? map.set(key, []).get(key)!).push(l);
+    }
+  }
+  const out: MortGalpon[] = [];
+  map.forEach((ls, galpon) => { const nivel = calcMortNivel(ls); if (nivel) out.push({ galpon, nivel }); });
+  out.sort((a, b) => {
+    const na = parseInt(a.galpon, 10), nb = parseInt(b.galpon, 10);
+    return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.galpon.localeCompare(b.galpon);
+  });
+  return out;
+}
 function calcMortCheck(data: ChecklistData, lotes: LoteItem[]): MortCheck | null {
   const dela = lotes.filter(l => l.data.granjaId === data.granjaId);
   if (!dela.length) return null; // sin registros para la granja
-  const loteN = (data.lote || "").trim().toLowerCase();
   const galponSel = (data.galpon || "").trim().toLowerCase();
   const filtraGalpon = !!galponSel && galponSel !== GALPON_TODOS.toLowerCase();
-  // Nivel 1 = galpón seleccionado, ya sea el galpón principal del lote o uno de los galpones evaluados (secundarios).
-  const galponLotes = dela.filter(l =>
-    (loteN ? (l.data.codigo || "").trim().toLowerCase() === loteN : true) &&
-    (filtraGalpon ? galponesDeLote(l).some(g => g.trim().toLowerCase() === galponSel) : true)
-  );
-  const galpon = galponLotes.length ? calcMortNivel(galponLotes) : null;
+  let galpon: MortNivel | null = null;
+  let porGalpon: MortGalpon[] = [];
+  if (filtraGalpon) {
+    // Nivel 1 = galpón seleccionado (coincide como galpón principal del lote o como galpón evaluado/secundario).
+    const galponLotes = dela.filter(l => galponesDeLote(l).some(g => g.trim().toLowerCase() === galponSel));
+    galpon = galponLotes.length ? calcMortNivel(galponLotes) : null;
+  } else {
+    // "TODOS" → desglose por galpón de toda la granja.
+    porGalpon = desglosePorGalpon(dela);
+  }
   const granja = calcMortNivel(dela);
-  return { galpon, granja, resumen: resumenMortalidad(galpon?.pct ?? granja?.pct ?? null) };
+  return { galpon, porGalpon, granja, resumen: resumenMortalidad(galpon?.pct ?? granja?.pct ?? null) };
 }
 
 async function generarPDFChecklistPro(tipo: ChecklistTipo, data: ChecklistData, cumplimientoGlobal: number, ia?: SeccionesIA, mort?: MortCheck | null) {
@@ -932,9 +956,33 @@ async function generarPDFChecklistPro(tipo: ChecklistTipo, data: ChecklistData, 
       y += 7;
     };
 
+    // Fila compacta (una sola línea) para el desglose por galpón.
+    const filaGalpon = (g: MortGalpon) => {
+      need(7);
+      const n = g.nivel;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9); setText("#0D1526");
+      doc.text(`Galpón ${g.galpon}`, M + 4, y);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); setText("#334155");
+      doc.text(`${n.pct.toFixed(2)}%  ·  ${n.muertes.toLocaleString("es")} de ${n.ingreso.toLocaleString("es")} aves`, M + 34, y);
+      const label = semLabelMort(n.pct);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.5);
+      const pw = doc.getTextWidth(label) + 8;
+      const px = M + CW - pw;
+      setFill(semColorMort(n.pct)); doc.roundedRect(px, y - 3.6, pw, 5.4, 1.2, 1.2, "F");
+      setText("#FFFFFF"); doc.text(label, px + pw / 2, y + 0.3, { align: "center" });
+      y += 6;
+    };
+
     if (mort.galpon) {
       const sub = (data.galpon && data.galpon !== GALPON_TODOS) ? `Galpón ${data.galpon}` : (data.lote ? `Lote ${data.lote}` : "Lote evaluado");
       filaNivel(`Nivel 1 · ${sub}`, mort.galpon);
+    } else if (mort.porGalpon.length) {
+      // "TODOS": desglose por galpón (una línea por galpón).
+      need(9);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); setText("#0D1526");
+      doc.text("Nivel 1 · Resultado por galpón", M, y); y += 5.5;
+      mort.porGalpon.forEach(filaGalpon);
+      y += 1.5;
     }
     if (mort.granja) filaNivel(`Nivel 2 · Consolidado Granja${mort.granja.nLotes > 1 ? ` (${mort.granja.nLotes} lotes)` : ""}`, mort.granja);
     y += 1;
