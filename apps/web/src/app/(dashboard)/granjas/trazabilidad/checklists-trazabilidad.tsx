@@ -7,6 +7,7 @@ import {
   type ChecklistData, type ChecklistItem, type ChecklistTipo, type PreguntaChk,
   type Muestreo, type LoteItem,
 } from "@/hooks/useLotes";
+import { galponesDeLote } from "@/lib/trazabilidad-metrics";
 import { useGranjas } from "@/hooks/useGranjas";
 import { useAuthStore } from "@/store/auth.store";
 import {
@@ -727,9 +728,12 @@ function calcMortCheck(data: ChecklistData, lotes: LoteItem[]): MortCheck | null
   const dela = lotes.filter(l => l.data.granjaId === data.granjaId);
   if (!dela.length) return null; // sin registros para la granja
   const loteN = (data.lote || "").trim().toLowerCase();
+  const galponSel = (data.galpon || "").trim().toLowerCase();
+  const filtraGalpon = !!galponSel && galponSel !== GALPON_TODOS.toLowerCase();
+  // Nivel 1 = galpón seleccionado, ya sea el galpón principal del lote o uno de los galpones evaluados (secundarios).
   const galponLotes = dela.filter(l =>
     (loteN ? (l.data.codigo || "").trim().toLowerCase() === loteN : true) &&
-    (data.galpon && data.galpon !== GALPON_TODOS ? l.data.galponPrincipal === data.galpon : true)
+    (filtraGalpon ? galponesDeLote(l).some(g => g.trim().toLowerCase() === galponSel) : true)
   );
   const galpon = galponLotes.length ? calcMortNivel(galponLotes) : null;
   const granja = calcMortNivel(dela);
