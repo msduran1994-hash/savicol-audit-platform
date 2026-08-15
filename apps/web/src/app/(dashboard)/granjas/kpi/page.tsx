@@ -12,7 +12,7 @@ import {
   parseAnexos, anexosTienenDatos, difConteoPicos, totalRecepcion, totalInvBultos,
   pesoTotalIngreso, subtotalBloque, cantidadBloque, totalGeneralBultos, num as anexNum,
   faltanteConciliacion, recepcionResumenTieneDatos, pctMortalidad, avesRecibidasTotal, totalMortalidadAves,
-  calcMortalidadDiaria, calcBultosConsumidos, registroMortalidadTieneDatos,
+  calcMortalidadDiaria, calcBultosConsumidos, registroMortalidadTieneDatos, mortalidadPorGalpon,
   totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalInventarioBultosSolo, totalInventarioLonas, totalBultosConsumidos, totalKgConsumidos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
   type ResumenEjecutivo,
@@ -1398,14 +1398,21 @@ function seccionMortalidadDiaria(hallazgos: any[], granjas: any[], modo: "resume
   const bloques = con.map(({ h, a }) => {
     const g = granjas.find(gr => gr.id === h.granjaId);
     const c = calcMortalidadDiaria(a.registroMortalidadDiaria);
+    const meta = a.registroMortalidadDiaria;
+    const metaTxt = [meta.loteCodigo ? `lote ${meta.loteCodigo}` : "", meta.fechaEncasetamiento ? `encas. ${meta.fechaEncasetamiento}` : ""].filter(Boolean).join(" · ");
+    // Desglose por galpón (trazabilidad): solo si hay más de un galpón registrado.
+    const porGalpon = mortalidadPorGalpon(meta);
+    const galponTabla = porGalpon.length > 1 ? `<div style="font-size:11px;font-weight:700;color:#0D1526;margin:8px 0 3px">Mortalidad por Galpón</div>
+      <table><thead><tr><th>Galpón</th><th>Aves ing.</th><th>Mortalidad</th><th>% Acum.</th><th>Saldo</th></tr></thead>
+      <tbody>${porGalpon.map(pg => `<tr><td>Galpón ${pg.galpon}</td>${R(pg.aves)}${R(pg.total)}<td style="text-align:right;font-weight:700">${pctTxt(pg.pct)}</td>${R(pg.saldo)}</tr>`).join("")}</tbody></table>` : "";
     const tablas = c.semanas.map(s => `<div style="font-size:11px;font-weight:700;color:#EF4444;margin:8px 0 3px">Semana ${s.semana} · total ${_fmtAnx(s.totalSemanal)} · % semanal ${pctTxt(s.pctSemanal)}</div>
       <table><thead><tr><th>Día</th><th>Mortalidad</th><th>Acumulado</th><th>% Acum.</th><th>Saldo aves</th></tr></thead>
       <tbody>${s.dias.map(d => `<tr><td>Día ${d.diaGlobal}</td>${R(d.mortalidad)}${R(d.totalAcumulado)}<td style="text-align:right">${pctTxt(d.pctAcumulado)}</td>${R(d.saldo)}</tr>`).join("")}</tbody></table>`).join("");
     const nivel = c.pctAcumuladoFinal === null ? "" : c.pctAcumuladoFinal >= 8 ? "crítica" : c.pctAcumuladoFinal >= 4 ? "elevada" : "dentro de parámetros aceptables";
     const interp = c.pctAcumuladoFinal === null ? "" : `<p style="font-size:11px;margin-top:6px"><strong>Interpretación:</strong> mortalidad acumulada de <strong>${pctTxt(c.pctAcumuladoFinal)}</strong> sobre ${_fmtAnx(c.aves)} aves iniciales (${nivel}); saldo estimado de <strong>${_fmtAnx(c.saldoFinal)}</strong> aves.</p>`;
     return `<div style="page-break-inside:avoid;margin-bottom:16px;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
-      <div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:6px">${h.titulo?.slice(0, 70) || "Hallazgo"} <span style="font-weight:400;color:#64748b">· ${g?.nombre || "—"} · ${_fmtAnx(c.aves)} aves iniciales</span></div>
-      ${tablas}${interp}</div>`;
+      <div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:6px">${h.titulo?.slice(0, 70) || "Hallazgo"} <span style="font-weight:400;color:#64748b">· ${g?.nombre || "—"} · ${_fmtAnx(c.aves)} aves iniciales${metaTxt ? " · " + metaTxt : ""}</span></div>
+      ${galponTabla}${tablas}${interp}</div>`;
   }).join("");
   return `<div class="section"><div class="section-title">Registro Mortalidad Diaria</div>${bloques}</div>`;
 }

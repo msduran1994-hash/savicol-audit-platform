@@ -4,18 +4,19 @@
 // dinámicas (agregar/editar/eliminar filas) y cálculos automáticos en vivo.
 // ═══════════════════════════════════════════════════════════════════════════════
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, AlertTriangle } from "lucide-react";
 import {
-  AnexosTecnicos, TotalBultosBloque,
+  AnexosTecnicos, TotalBultosBloque, type GalponMortalidad,
   difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
   subtotalBloque, cantidadBloque, totalGeneralBultos,
   totalReporteConteo, totalReporteFisico, faltanteConciliacion, totalMortalidadAves, difConteoMortalidad,
   totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalInventarioBultosSolo, totalInventarioLonas, totalBultosConsumidos, totalKgConsumidos,
-  pctMortalidad, avesRecibidasTotal, num,
+  pctMortalidad, avesRecibidasTotal, num, consolidarGalpones,
   calcMortalidadDiaria, calcBultosConsumidos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
 } from "@/lib/anexos-tecnicos";
 import { ResumenEjecutivoPanel } from "./resumen-ejecutivo-panel";
+import { useLotes } from "@/hooks/useLotes";
 
 const TABS = [
   { key: "actaConteoPicos",  label: "Acta Conteo de Picos" },
@@ -36,8 +37,13 @@ const fmt = (n: number) => n.toLocaleString("es-CO", { maximumFractionDigits: 2 
 
 type Col = { key: string; label: string; type?: "text" | "number" | "date"; calc?: (r: any) => number };
 
-export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnicos; onChange: (a: AnexosTecnicos) => void }) {
+export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGranjaId }: {
+  value: AnexosTecnicos; onChange: (a: AnexosTecnicos) => void;
+  granjas?: { id: string; nombre: string }[]; defaultGranjaId?: string;
+}) {
   const [tab, setTab] = useState<TabKey>("actaConteoPicos");
+  const [galponActivo, setGalponActivo] = useState(0);
+  const lotesQ = useLotes();
   const set = (patch: Partial<AnexosTecnicos>) => onChange({ ...value, ...patch });
 
   // ── Tablas simples (4 pestañas) ─────────────────────────────────────────────
@@ -105,10 +111,42 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
   const res = value.recepcionAvesResumen;
   const setRes = (patch: Partial<typeof res>) => set({ recepcionAvesResumen: { ...res, ...patch } });
 
-  // ── Pestañas 6 y 7: registros semanales (mortalidad diaria / bultos consumidos) ──
-  const md: any = value.registroMortalidadDiaria;
-  const setMD = (patch: any) => set({ registroMortalidadDiaria: { ...md, ...patch } });
-  const setMDDia = (w: number, d: number, v: string) => setMD({ semanas: md.semanas.map((sem: any[], wi: number) => wi === w ? sem.map((c, di) => di === d ? v : c) : sem) });
+  // ── Pestaña 6: Mortalidad Diaria (trazable por lote/galpón, enlazada al módulo Lotes) ──
+  const md = value.registroMortalidadDiaria;
+  const lotesData = lotesQ.data ?? [];
+  const granjaMortSel = md.granjaId ?? defaultGranjaId ?? "";
+  // Galpones efectivos: usa el detalle por galpón; si es un registro antiguo (serie plana con datos),
+  // lo envuelve como un único galpón "General" (sin pérdida; al primer cambio se persiste ya por galpón).
+  const galponesEf: GalponMortalidad[] = (md.galpones && md.galpones.length)
+    ? md.galpones
+    : ((num(md.avesIniciales) > 0 || (md.semanas || []).some(w => w.length > 0))
+        ? [{ galpon: "General", avesIngresadas: num(md.avesIniciales), semanas: md.semanas }]
+        : []);
+  const setMortMeta = (patch: Partial<typeof md>) => set({ registroMortalidadDiaria: { ...md, ...patch } });
+  // Al guardar galpones se recalcula el consolidado (avesIniciales/semanas) que consumen los informes.
+  const setGalpones = (gs: GalponMortalidad[]) => set({ registroMortalidadDiaria: { ...md, ...consolidarGalpones(gs), galpones: gs } });
+  const editGalpon = (gi: number, patch: any) => setGalpones(galponesEf.map((g, i) => i === gi ? { ...g, ...patch } : g));
+  const setGalponDia = (gi: number, w: number, d: number, v: string) => editGalpon(gi, { semanas: galponesEf[gi].semanas.map((sem, wi) => wi === w ? sem.map((c, di) => di === d ? v : c) : sem) });
+  // Carga galpones + aves ingresadas del lote desde el módulo Lotes (solo lectura); preserva la mortalidad ya capturada por galpón.
+  const cargarGalponesDesdeLotes = (granjaId: string, loteCodigo: string) => {
+    const recs = lotesData.filter(l => l.data.granjaId === granjaId && (l.data.codigo || "").trim().toLowerCase() === loteCodigo.trim().toLowerCase());
+    const fecha = recs.map(r => r.data.fechaIngreso).filter(Boolean).sort()[0] || md.fechaEncasetamiento || "";
+    const prev = new Map(galponesEf.map(g => [g.galpon, g] as const));
+    const nuevos: GalponMortalidad[] = recs.map(r => {
+      const gp = String(r.data.galponPrincipal || "").trim() || "—";
+      const ex = prev.get(gp);
+      return { galpon: gp, avesIngresadas: ex && num(ex.avesIngresadas) > 0 ? ex.avesIngresadas : num(r.data.avesIngreso), semanas: ex?.semanas ?? [] };
+    });
+    set({ registroMortalidadDiaria: { ...md, granjaId, loteCodigo, fechaEncasetamiento: fecha, ...consolidarGalpones(nuevos), galpones: nuevos } });
+  };
+  // Fecha real del registro = fecha de encasetamiento + (día − 1); Día 1 = día de encasetamiento.
+  const fechaDia = (diaGlobal: number): string => {
+    const f = md.fechaEncasetamiento; if (!f) return "—";
+    const base = new Date(f + "T00:00:00"); if (isNaN(base.getTime())) return "—";
+    base.setDate(base.getDate() + diaGlobal - 1);
+    return base.toLocaleDateString("es-CO", { day: "2-digit", month: "2-digit", year: "numeric" });
+  };
+  // ── Pestaña 7: Bultos Consumidos ──
   const bc: any = value.registroBultosConsumidos;
   const setBC = (patch: any) => set({ registroBultosConsumidos: { ...bc, ...patch } });
   const setBCDia = (w: number, d: number, v: string) => setBC({ semanas: bc.semanas.map((sem: any[], wi: number) => wi === w ? sem.map((c, di) => di === d ? v : c) : sem) });
@@ -128,55 +166,127 @@ export function AnexosTecnicosEditor({ value, onChange }: { value: AnexosTecnico
   }
 
   function MortalidadDiariaTab() {
-    const calc = calcMortalidadDiaria(md);
-    const recibidas = avesRecibidasTotal(value);
+    const calc = calcMortalidadDiaria(md);                         // consolidado (todos los galpones)
+    const lotesDeGranja = [...new Set(lotesData.filter(l => l.data.granjaId === granjaMortSel).map(l => (l.data.codigo || "").trim()).filter(Boolean))];
+    const gi = Math.min(galponActivo, Math.max(0, galponesEf.length - 1));
+    const gAct = galponesEf[gi];
+    const gCalc = gAct ? calcMortalidadDiaria({ avesIniciales: num(gAct.avesIngresadas), semanas: gAct.semanas }) : null;
+    const avesLote = gAct ? num(lotesData.find(l => l.data.granjaId === granjaMortSel && (l.data.codigo || "").trim().toLowerCase() === (md.loteCodigo || "").trim().toLowerCase() && String(l.data.galponPrincipal || "").trim() === gAct.galpon)?.data.avesIngreso) : 0;
+    const faltaCabecera = !granjaMortSel || !md.loteCodigo;
     return (
       <div className="space-y-3">
-        <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] text-[#94A3B8] shrink-0">Aves iniciales (encasetadas)</span>
-            <input type="number" step="any" value={md.avesIniciales || ""} onChange={e => setMD({ avesIniciales: e.target.value })} placeholder={recibidas > 0 ? String(recibidas) : "Ej: 20000"} className={INP + " max-w-[160px]"} />
-            {recibidas > 0 && <button type="button" onClick={() => setMD({ avesIniciales: recibidas })} className="px-2 py-1 rounded text-[10px] bg-[#1A2540] text-[#4A7AFF] hover:bg-[#22304d]">Usar aves recibidas ({fmt(recibidas)})</button>}
-          </div>
-          {num(md.avesIniciales) <= 0 && <p className="text-[10px] text-amber-400 mt-1.5">Ingresa las aves iniciales para calcular % y saldo de aves.</p>}
+        {/* Cabecera / enlace al módulo Lotes */}
+        <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <label className="block"><span className="text-[10px] text-[#94A3B8]">Granja</span>
+            <select value={granjaMortSel} onChange={e => setMortMeta({ granjaId: e.target.value, loteCodigo: "" })} className={INP}>
+              <option value="">Seleccionar…</option>
+              {granjas.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+            </select></label>
+          <label className="block"><span className="text-[10px] text-[#94A3B8]">Lote</span>
+            <select value={md.loteCodigo ?? ""} onChange={e => { if (e.target.value) { cargarGalponesDesdeLotes(granjaMortSel, e.target.value); setGalponActivo(0); } else setMortMeta({ loteCodigo: "" }); }} disabled={!granjaMortSel} className={INP}>
+              <option value="">{granjaMortSel ? (lotesDeGranja.length ? "Seleccionar…" : "Sin lotes en Lotes") : "Elige granja"}</option>
+              {lotesDeGranja.map(c => <option key={c} value={c}>{c}</option>)}
+            </select></label>
+          <label className="block"><span className="text-[10px] text-[#94A3B8]">Fecha de encasetamiento</span>
+            <input type="date" value={md.fechaEncasetamiento ?? ""} onChange={e => setMortMeta({ fechaEncasetamiento: e.target.value })} className={INP} /></label>
         </div>
-        {md.semanas.length === 0 && <p className="text-[11px] text-[#475569]">Sin semanas. Usa "Agregar semana".</p>}
-        {calc.semanas.map(sem => SemanaCard(sem.semana, `Semana ${sem.semana}`,
-          () => setMD({ semanas: md.semanas.filter((_: any, wi: number) => wi !== sem.semana - 1) }),
-          <div className="overflow-x-auto rounded border border-[#1E2D4A]">
-            <table className="w-full text-xs">
-              <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
-                <th className="px-2 py-1 text-left">Día</th><th className="px-2 py-1 text-left">Mortalidad</th>
-                <th className="px-2 py-1 text-left">Acumulado</th><th className="px-2 py-1 text-left">% Acum.</th><th className="px-2 py-1 text-left">Saldo aves</th>
-              </tr></thead>
-              <tbody>
-                {sem.dias.map(d => (
-                  <tr key={d.dia} className="border-t border-[#1E2D4A]">
-                    <td className="px-2 py-1 text-[#94A3B8]">Día {d.diaGlobal}</td>
-                    <td className="px-2 py-1"><input type="number" step="any" value={md.semanas[sem.semana - 1][d.dia - 1] ?? ""} onChange={e => setMDDia(sem.semana - 1, d.dia - 1, e.target.value)} className={INP} /></td>
-                    <td className="px-2 py-1 text-[#22C55E] font-semibold">{fmt(d.totalAcumulado)}</td>
-                    <td className="px-2 py-1">{d.pctAcumulado === null ? "—" : d.pctAcumulado.toFixed(2) + "%"}</td>
-                    <td className="px-2 py-1">{calc.aves > 0 ? fmt(d.saldo) : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot><tr className="border-t border-[#2A3F6A] bg-[#0A111F]">
-                <td className="px-2 py-1 text-right font-semibold text-[#94A3B8]">Total semana</td>
-                <td className="px-2 py-1 font-bold text-[#22C55E]">{fmt(sem.totalSemanal)}</td>
-                <td className="px-2 py-1"></td>
-                <td className="px-2 py-1 font-bold" colSpan={2}>% semanal: {sem.pctSemanal === null ? "—" : sem.pctSemanal.toFixed(2) + "%"}</td>
-              </tr></tfoot>
-            </table>
-          </div>
-        ))}
-        <button type="button" onClick={() => setMD({ semanas: [...md.semanas, nuevaSemana()] })} className="px-3 py-1.5 rounded-lg text-xs bg-[#1A2540] text-white flex items-center gap-1.5 hover:bg-[#22304d]"><Plus className="w-3.5 h-3.5" />Agregar semana</button>
-        {calc.semanas.length > 0 && (
-          <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 grid grid-cols-3 gap-2 text-center">
-            <div><div className="text-[10px] text-[#94A3B8]">Mortalidad total</div><div className="text-sm font-bold text-[#EF4444]">{fmt(calc.totalGeneral)}</div></div>
-            <div><div className="text-[10px] text-[#94A3B8]">% acumulado</div><div className="text-sm font-bold text-[#F97316]">{calc.pctAcumuladoFinal === null ? "—" : calc.pctAcumuladoFinal.toFixed(2) + "%"}</div></div>
-            <div><div className="text-[10px] text-[#94A3B8]">Saldo final</div><div className="text-sm font-bold text-[#22C55E]">{calc.aves > 0 ? fmt(calc.saldoFinal) : "—"}</div></div>
+        {faltaCabecera && <p className="text-[10px] text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Selecciona Granja y Lote para cargar los galpones y las aves ingresadas desde el módulo Lotes.</p>}
+
+        {/* Selector de galpón (pills) + agregar galpón manual */}
+        {(galponesEf.length > 0 || !faltaCabecera) && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {galponesEf.map((g, i) => {
+              const c = calcMortalidadDiaria({ avesIniciales: num(g.avesIngresadas), semanas: g.semanas });
+              const activo = i === gi;
+              return (
+                <button key={i} type="button" onClick={() => setGalponActivo(i)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] border ${activo ? "bg-[#1A2540] border-[#4A7AFF] text-white" : "bg-[#0A111F] border-[#1E2D4A] text-[#94A3B8] hover:border-[#2A3F6A]"}`}>
+                  Galpón {g.galpon} {c.pctAcumuladoFinal !== null && <span className={c.pctAcumuladoFinal >= 8 ? "text-[#EF4444]" : c.pctAcumuladoFinal >= 4 ? "text-[#F59E0B]" : "text-[#22C55E]"}>· {c.pctAcumuladoFinal.toFixed(1)}%</span>}
+                </button>
+              );
+            })}
+            <button type="button" onClick={() => { const gs = [...galponesEf, { galpon: String(galponesEf.length + 1), avesIngresadas: 0, semanas: [] }]; setGalpones(gs); setGalponActivo(gs.length - 1); }}
+              className="px-2 py-1 rounded-lg text-[11px] bg-[#0A111F] border border-dashed border-[#2A3F6A] text-[#4A7AFF] hover:bg-[#131c30] flex items-center gap-1"><Plus className="w-3 h-3" />Galpón</button>
           </div>
         )}
+
+        {/* Panel del galpón activo */}
+        {gAct && gCalc && (
+          <div className="rounded-lg border border-[#1E2D4A] p-3 space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] text-[#94A3B8] shrink-0">Galpón</span>
+              <input value={gAct.galpon} onChange={e => editGalpon(gi, { galpon: e.target.value })} className={INP + " max-w-[90px]"} />
+              <span className="text-[11px] text-[#94A3B8] shrink-0 ml-2">Aves ingresadas</span>
+              <input type="number" step="any" value={gAct.avesIngresadas || ""} onChange={e => editGalpon(gi, { avesIngresadas: num(e.target.value) })} placeholder={avesLote > 0 ? String(avesLote) : "Ej: 7500"} className={INP + " max-w-[130px]"} />
+              {avesLote > 0 && num(gAct.avesIngresadas) !== avesLote && <button type="button" onClick={() => editGalpon(gi, { avesIngresadas: avesLote })} className="px-2 py-1 rounded text-[10px] bg-[#1A2540] text-[#4A7AFF] hover:bg-[#22304d]">Usar Lotes ({fmt(avesLote)})</button>}
+              {galponesEf.length > 1 && <button type="button" onClick={() => { setGalpones(galponesEf.filter((_, i) => i !== gi)); setGalponActivo(0); }} className="ml-auto text-[#94A3B8] hover:text-red-400"><Trash2 className="w-4 h-4" /></button>}
+            </div>
+            {num(gAct.avesIngresadas) <= 0 && <p className="text-[10px] text-amber-400">Ingresa las aves de este galpón para calcular % y saldo.</p>}
+
+            {gAct.semanas.length === 0 && <p className="text-[11px] text-[#475569]">Sin semanas. Usa "Agregar semana".</p>}
+            {gCalc.semanas.map(sem => SemanaCard(`${gi}-${sem.semana}`, `Semana ${sem.semana}`,
+              () => editGalpon(gi, { semanas: gAct.semanas.filter((_, wi) => wi !== sem.semana - 1) }),
+              <div className="overflow-x-auto rounded border border-[#1E2D4A]">
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
+                    <th className="px-2 py-1 text-left">Día</th><th className="px-2 py-1 text-left">Fecha</th><th className="px-2 py-1 text-left">Mortalidad</th>
+                    <th className="px-2 py-1 text-left">Acum.</th><th className="px-2 py-1 text-left">% diario</th><th className="px-2 py-1 text-left">% Acum.</th><th className="px-2 py-1 text-left">Saldo</th>
+                  </tr></thead>
+                  <tbody>
+                    {sem.dias.map(d => {
+                      const excede = gCalc.aves > 0 && d.saldo < 0;
+                      const pctDia = gCalc.aves > 0 ? (d.mortalidad / gCalc.aves) * 100 : null;
+                      return (
+                        <tr key={d.dia} className={`border-t border-[#1E2D4A] ${excede ? "bg-[#EF4444]/10" : ""}`}>
+                          <td className="px-2 py-1 text-[#94A3B8] whitespace-nowrap">Día {d.diaGlobal}</td>
+                          <td className="px-2 py-1 text-[#64748B] whitespace-nowrap">{fechaDia(d.diaGlobal)}</td>
+                          <td className="px-2 py-1"><input type="number" step="any" value={gAct.semanas[sem.semana - 1][d.dia - 1] ?? ""} onChange={e => setGalponDia(gi, sem.semana - 1, d.dia - 1, e.target.value)} className={INP + (excede ? " border-[#EF4444]" : "")} /></td>
+                          <td className="px-2 py-1 text-[#22C55E] font-semibold">{fmt(d.totalAcumulado)}</td>
+                          <td className="px-2 py-1">{pctDia === null ? "—" : pctDia.toFixed(2) + "%"}</td>
+                          <td className="px-2 py-1">{d.pctAcumulado === null ? "—" : d.pctAcumulado.toFixed(2) + "%"}</td>
+                          <td className={`px-2 py-1 ${excede ? "text-[#EF4444] font-semibold" : ""}`}>{gCalc.aves > 0 ? fmt(d.saldo) : "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot><tr className="border-t border-[#2A3F6A] bg-[#0A111F]">
+                    <td className="px-2 py-1 text-right font-semibold text-[#94A3B8]" colSpan={2}>Total semana</td>
+                    <td className="px-2 py-1 font-bold text-[#22C55E]">{fmt(sem.totalSemanal)}</td>
+                    <td className="px-2 py-1 font-bold" colSpan={4}>% semanal: {sem.pctSemanal === null ? "—" : sem.pctSemanal.toFixed(2) + "%"}</td>
+                  </tr></tfoot>
+                </table>
+              </div>
+            ))}
+            {gCalc.semanas.some(s => s.dias.some(d => gCalc.aves > 0 && d.saldo < 0)) && (
+              <p className="text-[10px] text-[#EF4444] flex items-center gap-1"><AlertTriangle className="w-3 h-3" />La mortalidad supera el saldo disponible (saldo negativo). Revisa los valores marcados en rojo.</p>
+            )}
+            <button type="button" onClick={() => editGalpon(gi, { semanas: [...gAct.semanas, nuevaSemana()] })} className="px-3 py-1.5 rounded-lg text-xs bg-[#1A2540] text-white flex items-center gap-1.5 hover:bg-[#22304d]"><Plus className="w-3.5 h-3.5" />Agregar semana</button>
+          </div>
+        )}
+
+        {/* Consolidado + desglose por galpón */}
+        {galponesEf.length > 0 && (
+          <>
+            <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 grid grid-cols-3 gap-2 text-center">
+              <div><div className="text-[10px] text-[#94A3B8]">Mortalidad total (granja)</div><div className="text-sm font-bold text-[#EF4444]">{fmt(calc.totalGeneral)}</div></div>
+              <div><div className="text-[10px] text-[#94A3B8]">% acumulado</div><div className="text-sm font-bold text-[#F97316]">{calc.pctAcumuladoFinal === null ? "—" : calc.pctAcumuladoFinal.toFixed(2) + "%"}</div></div>
+              <div><div className="text-[10px] text-[#94A3B8]">Saldo final</div><div className="text-sm font-bold text-[#22C55E]">{calc.aves > 0 ? fmt(calc.saldoFinal) : "—"}</div></div>
+            </div>
+            {galponesEf.length > 1 && (
+              <div className="overflow-x-auto rounded-lg border border-[#1E2D4A]">
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-[#0A111F] text-[#94A3B8]"><th className="px-2 py-1 text-left">Galpón</th><th className="px-2 py-1 text-left">Aves</th><th className="px-2 py-1 text-left">Mortalidad</th><th className="px-2 py-1 text-left">% Acum.</th><th className="px-2 py-1 text-left">Saldo</th></tr></thead>
+                  <tbody>
+                    {galponesEf.map((g, i) => { const c = calcMortalidadDiaria({ avesIniciales: num(g.avesIngresadas), semanas: g.semanas }); return (
+                      <tr key={i} className="border-t border-[#1E2D4A]"><td className="px-2 py-1 text-white">Galpón {g.galpon}</td><td className="px-2 py-1 text-[#94A3B8]">{fmt(c.aves)}</td><td className="px-2 py-1 text-[#EF4444] font-semibold">{fmt(c.totalGeneral)}</td><td className="px-2 py-1">{c.pctAcumuladoFinal === null ? "—" : c.pctAcumuladoFinal.toFixed(2) + "%"}</td><td className="px-2 py-1">{c.aves > 0 ? fmt(c.saldoFinal) : "—"}</td></tr>
+                    ); })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+        <p className="text-[10px] text-[#64748B] flex items-center gap-1"><AlertTriangle className="w-3 h-3 text-amber-400" />Los registros no se bloquean; verifica antes de modificar días ya guardados, pues afecta la trazabilidad histórica.</p>
         <ResumenEjecutivoPanel resumen={safeResumen(() => resumenMortalidadDiaria(md))} />
       </div>
     );

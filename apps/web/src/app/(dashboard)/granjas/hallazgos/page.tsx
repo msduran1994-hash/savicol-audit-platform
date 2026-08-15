@@ -385,7 +385,7 @@ function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
             {anexosOpen && (
               <div className="px-4 pb-4 border-t border-[#1E2D4A] pt-3">
                 <p className="text-[10px] text-[#475569] mb-3">Documenta controles operativos e inventarios relacionados con el hallazgo. Todo es opcional y se guarda junto con el hallazgo.</p>
-                <AnexosTecnicosEditor value={anexos} onChange={setAnexos} />
+                <AnexosTecnicosEditor value={anexos} onChange={setAnexos} granjas={granjas} defaultGranjaId={form.granjaId} />
               </div>
             )}
           </div>
