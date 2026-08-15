@@ -1904,6 +1904,18 @@ function generarModelo1(
   const difBultosKg = difBultos * (dKgN ? dKg / dKgN : 40);
   const hayInv = dIng > 0 || dSal > 0 || dFis > 0;
 
+  // Prioriza los planes cuyo hallazgo tiene anexos con datos (mortalidad/alimento) para que sus
+  // gráficas inline queden dentro del tope de planes mostrados (los demás conservan su orden).
+  const kpiTieneGrafica = (k: any): boolean => {
+    const h = k.hallazgoId ? hallazgos.find((hh: any) => hh.id === k.hallazgoId) : null;
+    if (!h) return false;
+    const a = parseAnexos(h.anexosTecnicos);
+    return registroMortalidadTieneDatos(a.registroMortalidadDiaria) ||
+      a.registroBultosConsumidos.semanas.some((w: any[]) => w.length) || totalIngresoUnidades(a) > 0 || totalInventarioBultos(a) > 0;
+  };
+  const kpisConGrafica = new Set(kpis.filter(kpiTieneGrafica).map((k: any) => k.id));
+  const kpisOrdenados = [...kpis].sort((a: any, b: any) => (kpisConGrafica.has(b.id) ? 1 : 0) - (kpisConGrafica.has(a.id) ? 1 : 0));
+
   // Resumen semanal de mortalidad (semana 1..6): cantidad y % sobre aves recibidas.
   const { mortSemana, avesMort } = consolidarProduccionDiaria(hallazgos);
   const semRows = mortSemana.slice(0, 6).map((v, i) => `<tr><td>Semana ${i + 1}</td><td style="text-align:right">${_fmtAnx(v)}</td><td style="text-align:right">${avesMort > 0 ? ((v / avesMort) * 100).toFixed(2) : "0.00"}%</td></tr>`).join("");
@@ -1942,7 +1954,7 @@ ${seccionMetodologia(kpis, hallazgos, granjas)}
 
 <div class="divider">Capítulo II — Características Generales</div>
 ${seccionHallazgos(hallazgos, granjas, 20, resumenCorporativoParrafo(kpis, hallazgos))}
-${seccionKPIs(kpis, granjas, hallazgos, evidenciasPorHallazgo)}
+${seccionKPIs(kpisOrdenados, granjas, hallazgos, evidenciasPorHallazgo)}
 
 <div class="divider">Capítulo III — Consideraciones</div>
 ${seccionFortalezasManual(datos?.fortalezas)}
