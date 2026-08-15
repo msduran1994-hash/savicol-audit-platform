@@ -885,17 +885,22 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
       const fotosSeguimientoHTML = bloqueFotos(fotosSeguimiento, "Evidencia Fotográfica del Seguimiento", false);
       // "Auditor y seguimiento" al mismo tamaño que el Hallazgo (14px), con la fecha del seguimiento resaltada.
       const SEGUI = "font-size:14px;color:#334155;line-height:1.5;margin-bottom:3px";
+      // Conciso y SIN duplicados: el título es el Hallazgo y su descripción se muestra UNA sola vez.
+      // La acción del plan suele autocompletarse del hallazgo, por eso se omite para no repetir el texto.
+      const tituloItem = h?.titulo || k.accion;
+      const descItem = h?.descripcion?.trim()
+        ? h.descripcion
+        : (k.accion && k.accion.trim() !== tituloItem.trim() ? k.accion : "");
       return `<div class="kpi-item">
         <div class="kpi-item-header">
-          <div class="kpi-item-title">${k.accion}</div>
+          <div class="kpi-item-title">${tituloItem}</div>
           <span class="badge ${clsBadge(k.estado)}">${displayEstado(k.estado)}</span>
         </div>
         <div class="kpi-meta">
           Granja: <strong>${g?.nombre||"—"}</strong> ·
           Responsable: <strong>${k.responsable||"—"}</strong>
-          ${h ? ` · Hallazgo: ${h.titulo}` : ""}
         </div>
-        ${h?.descripcion ? `<div class="hallazgo-desc">${h.descripcion}</div>` : ""}
+        ${descItem ? `<div class="hallazgo-desc">${descItem}</div>` : ""}
         ${k.fechaSeguimiento ? `<div style="${SEGUI}"><strong>Fecha de seguimiento:</strong> <span style="background:#FEF3C7;color:#92400E;font-weight:700;padding:1px 6px;border-radius:4px">${fmtFechaCorta(k.fechaSeguimiento)}</span></div>` : ""}
         ${seguResp ? `<div style="${SEGUI}"><strong>Seguimiento:</strong> ${seguResp}</div>` : ""}
         ${seguAudNombre ? `<div style="${SEGUI}"><strong>Auditor de seguimiento:</strong> ${seguAudNombre}</div>` : ""}
