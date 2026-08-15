@@ -913,10 +913,8 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
           <div class="plan-box-title">Plan de Acción</div>
           <div class="plan-box-text">${k.planAccionVeterinario}</div>
         </div>` : ""}
-        ${ha ? bloqueMortalidadHallazgo(ha) : ""}
-        ${ha ? bloqueConsumoHallazgo(ha) : ""}
       </div>
-      ${fotosHTML}${fotosSeguimientoHTML}`;
+      ${ha ? bloqueMortalidadHallazgo(ha) : ""}${ha ? bloqueConsumoHallazgo(ha) : ""}${fotosHTML}${fotosSeguimientoHTML}`;
     }).join("")}
   </div>`;
 }
@@ -1477,36 +1475,26 @@ function bloqueConsumoHallazgo(a: any): string {
       <div style="flex:1;min-width:0">${pts.length ? lineTrendSVG(pts, "#4A7AFF") : "<p style='font-size:10px;color:#94a3b8;padding:8px'>Sin consumo diario registrado</p>"}</div>
       ${donutSVG(desvPct, donutColor, "% desviación")}
     </div>`;
-  // Tabla 1 — Recepción de alimento (anexo Ingreso de Bultos)
-  const tablaRecep = `<div style="font-size:11px;font-weight:700;color:#0D1526;margin:8px 0 2px">Recepción de alimento</div>
-    <table><thead><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Bultos</th><th style="text-align:right">Kg/bulto</th><th style="text-align:right">Peso total (Kg)</th></tr></thead><tbody>
-    ${recRows.length ? recRows.map((r: any) => `<tr><td>${r.fecha || "—"}</td><td>${r.concepto || "—"}</td><td style="text-align:right">${_fmtAnx(anexNum(r.unidades))}</td><td style="text-align:right">${_fmtAnx(anexNum(r.cantidadKg))}</td><td style="text-align:right">${_fmtAnx(anexNum(r.unidades) * anexNum(r.cantidadKg))}</td></tr>`).join("") : `<tr><td colspan="5" style="color:#94a3b8">Sin registros de recepción.</td></tr>`}
-    <tr style="font-weight:700;background:#f8fafc"><td colspan="2">Total recepción</td><td style="text-align:right">${_fmtAnx(recep)}</td><td></td><td style="text-align:right">${_fmtAnx(recepKg)}</td></tr>
-    </tbody></table>`;
-  // Tabla 2 — Inventario físico (anexo Inventario Bultos)
-  const invBultosSolo = invRows.reduce((s: number, r: any) => s + anexNum(r.bultos), 0);
-  const invLonas = invRows.reduce((s: number, r: any) => s + anexNum(r.lonas), 0);
-  const tablaInv = `<div style="font-size:11px;font-weight:700;color:#0D1526;margin:8px 0 2px">Inventario físico</div>
-    <table><thead><tr><th>Galpón</th><th style="text-align:right">Bultos</th><th style="text-align:right">Lonas</th><th style="text-align:right">Total</th></tr></thead><tbody>
-    ${invRows.length ? invRows.map((r: any) => `<tr><td>${r.galpon || "—"}</td><td style="text-align:right">${_fmtAnx(anexNum(r.bultos))}</td><td style="text-align:right">${_fmtAnx(anexNum(r.lonas))}</td><td style="text-align:right">${_fmtAnx(anexNum(r.bultos) + anexNum(r.lonas))}</td></tr>`).join("") : `<tr><td colspan="4" style="color:#94a3b8">Sin registros de inventario físico.</td></tr>`}
-    <tr style="font-weight:700;background:#f8fafc"><td>Total inventario físico</td><td style="text-align:right">${_fmtAnx(invBultosSolo)}</td><td style="text-align:right">${_fmtAnx(invLonas)}</td><td style="text-align:right">${_fmtAnx(inv)}</td></tr>
-    </tbody></table>`;
-  // Diferencia entre las DOS tablas (Recepción − Inventario físico) + explicación del resultado.
+  // Resumen de los anexos de alimento (confirma el resultado de cada anexo, sin el detalle fila por fila).
   const difTablas = recep - inv;
   const difPct = recep > 0 ? difTablas / recep * 100 : 0;
   const cuadra = salidas > 0 && Math.abs(difTablas - salidas) < Math.max(1, recep * 0.02);
   const color = Math.abs(difTablas) < 1 ? "#22C55E" : "#F97316";
+  const resumen = `<table style="margin-top:6px"><thead><tr><th>Anexo de alimento</th><th style="text-align:right">Resultado</th></tr></thead><tbody>
+    <tr><td>Recepción de alimento (${recRows.length} registro${recRows.length === 1 ? "" : "s"})</td><td style="text-align:right;font-weight:700">${_fmtAnx(recep)} bultos · ${_fmtAnx(recepKg)} Kg</td></tr>
+    <tr><td>Inventario físico (${invRows.length} registro${invRows.length === 1 ? "" : "s"})</td><td style="text-align:right">${_fmtAnx(inv)} bultos</td></tr>
+    ${salidas > 0 ? `<tr><td>Consumo registrado (salidas)</td><td style="text-align:right">${_fmtAnx(salidas)} bultos</td></tr>` : ""}
+    <tr style="font-weight:700;background:#f8fafc"><td>Diferencia (Recepción − Inventario físico)</td><td style="text-align:right;color:${color}">${_fmtAnx(difTablas)} bultos (${difPct.toFixed(1)}%)</td></tr>
+  </tbody></table>`;
   const explicacion = recep > 0
-    ? `De los <strong>${_fmtAnx(recep)}</strong> bulto(s) recibidos, el inventario físico contabiliza <strong>${_fmtAnx(inv)}</strong>, con una diferencia de <strong>${_fmtAnx(difTablas)}</strong> bulto(s) (${difPct.toFixed(1)}% de la recepción), que corresponde al alimento consumido o despachado del inventario. ${salidas > 0 ? `Contrastada con el consumo registrado de ${_fmtAnx(salidas)} bulto(s), ${cuadra ? "la trazabilidad es conforme" : `se observa un descuadre de ${_fmtAnx(difTablas - salidas)} bulto(s) que requiere validación`}.` : "No se registró el consumo diario para contrastar la diferencia."}`
+    ? `La diferencia de ${_fmtAnx(difTablas)} bulto(s) (${difPct.toFixed(1)}% de la recepción) corresponde al alimento consumido o despachado del inventario. ${salidas > 0 ? `Contrastada con el consumo registrado de ${_fmtAnx(salidas)} bulto(s), ${cuadra ? "la trazabilidad es conforme" : `se observa un descuadre de ${_fmtAnx(difTablas - salidas)} bulto(s) que requiere validación`}.` : "No se registró el consumo diario para contrastar la diferencia."}`
     : `Sin recepción registrada para calcular la diferencia con el inventario físico.`;
-  const difBloque = `<div style="margin-top:6px;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid ${color};border-radius:6px;page-break-inside:avoid">
-    <div style="font-size:12px;font-weight:800;color:#0D1526">Diferencia (Recepción − Inventario físico): <span style="color:${color}">${_fmtAnx(difTablas)} bultos</span></div>
-    <p style="font-size:12px;color:#334155;line-height:1.5;margin-top:3px">${explicacion}</p></div>`;
   return `<div style="margin-top:8px;border-top:1px dashed #e2e8f0;padding-top:6px;page-break-inside:avoid">
     <div style="font-size:11px;font-weight:700;color:#4A7AFF;margin-bottom:3px">Consumo de alimento · tendencia y trazabilidad de bultos</div>
     ${chart}
     <p style="font-size:12px;color:#334155;line-height:1.5;margin-top:4px">${parrafoConsumo(cb)}</p>
-    ${tablaRecep}${tablaInv}${difBloque}</div>`;
+    ${resumen}
+    <p style="font-size:12px;color:#334155;line-height:1.5;margin-top:4px">${explicacion}</p></div>`;
 }
 
 // ─── SECCIÓN REGISTRO MORTALIDAD DIARIA (resumen / detalle) ───────────────────
