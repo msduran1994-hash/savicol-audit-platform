@@ -899,6 +899,7 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
         <div class="kpi-meta">
           Granja: <strong>${g?.nombre||"—"}</strong> ·
           Responsable: <strong>${k.responsable||"—"}</strong>
+          ${h?.fechaVisita ? ` · Fecha de hallazgo: <strong>${fmtFechaCorta(h.fechaVisita)}</strong>` : ""}
         </div>
         ${descItem ? `<div class="hallazgo-desc">${descItem}</div>` : ""}
         ${k.fechaSeguimiento ? `<div style="${SEGUI}"><strong>Fecha de seguimiento:</strong> <span style="background:#FEF3C7;color:#92400E;font-weight:700;padding:1px 6px;border-radius:4px">${fmtFechaCorta(k.fechaSeguimiento)}</span></div>` : ""}
@@ -978,7 +979,7 @@ function footer(): string {
 // ─── SECCIÓN INDICADORES DE MORTALIDAD ────────────────────────────────────────
 // Trazabilidad (lotes) + Mortalidad por Conteo de Picos (de los anexos del hallazgo,
 // con el % respecto al conteo de picos en letra grande y el reporte de detalle).
-function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: any[], hallazgos: any[] = [], ocultarConteoPicos = false, ocultarConciliacion = false): string {
+function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: any[], hallazgos: any[] = [], ocultarConteoPicos = false, ocultarConciliacion = false, ocultarPromedio = false): string {
   const fmt = (n: number) => n.toLocaleString("es-CO", { maximumFractionDigits: 2 });
 
   // Bloque 1 — Trazabilidad (aves ingresadas/actuales/muertes): RETIRADO por solicitud
@@ -1022,7 +1023,13 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
         <tbody>${a.actaConteoPicos.map(r => `<tr><td>${r.fechaConteo || "—"}</td><td style="text-align:right">${fmt(anexNum(r.reporteConteo))}</td><td style="text-align:right">${fmt(anexNum(r.reporteFisico))}</td><td style="text-align:right;font-weight:700;color:${difConteoPicos(r) !== 0 ? "#EF4444" : "#22C55E"}">${fmt(difConteoPicos(r))}</td></tr>`).join("")}</tbody></table></div>`;
     }).join("");
 
-    const headline = pctNueva != null ? `
+    const detalleHallazgoHTML = filasMort ? `<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin-bottom:2px">Detalle por hallazgo</div>
+      <table><thead><tr><th>Hallazgo</th><th>Granja</th><th>Auditor</th><th style="text-align:right">Recibidas</th><th style="text-align:right">Saldo</th><th style="text-align:right">Mortalidad</th><th style="text-align:right">%</th></tr></thead><tbody>${filasMort}</tbody></table>` : "";
+    const notaFormula = `<p style="font-size:9px;color:#94a3b8;margin-top:4px">% Mortalidad = Total mortalidad de aves (Σ mortalidad diaria) ÷ aves recibidas.</p>`;
+    // ocultarPromedio (Informe Ejecutivo): SIN el promedio general del alcance; solo el detalle por hallazgo.
+    const headline = ocultarPromedio
+      ? (detalleHallazgoHTML ? `<div style="font-size:13px;font-weight:800;color:#0D1526;margin-bottom:8px">% Mortalidad por Hallazgo</div>${detalleHallazgoHTML}${notaFormula}` : "")
+      : (pctNueva != null ? `
       <div style="font-size:13px;font-weight:800;color:#0D1526;margin-bottom:10px">% Mortalidad</div>
       <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:16px 20px;margin-bottom:12px">
         <div style="text-align:center;min-width:150px">
@@ -1033,10 +1040,9 @@ function seccionMortalidad(mortalidad: MortalidadResumen | undefined, granjas: a
           ${[{ l: "Aves recibidas", v: fmt(aves) }, { l: "Reporte saldo", v: fmt(repSaldo) }, { l: "Mortalidad", v: fmt(mortNueva) }].map(k => `<div style="text-align:center"><div style="font-size:20px;font-weight:800;color:#0D1526">${k.v}</div><div style="font-size:10px;color:#64748b;text-transform:uppercase">${k.l}</div></div>`).join("")}
         </div>
       </div>
-      ${filasMort ? `<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin-bottom:2px">Detalle por hallazgo</div>
-      <table><thead><tr><th>Hallazgo</th><th>Granja</th><th>Auditor</th><th style="text-align:right">Recibidas</th><th style="text-align:right">Saldo</th><th style="text-align:right">Mortalidad</th><th style="text-align:right">%</th></tr></thead><tbody>${filasMort}</tbody></table>` : ""}
+      ${detalleHallazgoHTML}
       <div style="font-size:11px;color:#334155;margin-top:6px"><strong>Interpretación técnica:</strong> mortalidad del ${pctNueva.toFixed(2)}%, ${pctNueva >= 8 ? "crítica — requiere atención inmediata" : pctNueva >= 4 ? "elevada — requiere seguimiento y plan de acción" : "dentro de parámetros aceptables"}.</div>
-      <p style="font-size:9px;color:#94a3b8;margin-top:4px">% Mortalidad = Total mortalidad de aves (Σ mortalidad diaria) ÷ aves recibidas.</p>` : "";
+      ${notaFormula}` : "");
 
     const conteoPicos = (conteo > 0 && !ocultarConteoPicos) ? `
       <div style="font-size:12px;font-weight:700;color:#0D1526;margin:14px 0 6px">Mortalidad por conteo de picos (detalle)</div>
@@ -1620,11 +1626,6 @@ function seccionMetodologia(kpis: any[], hallazgos: any[], granjas: any[]): stri
   return `<div class="section"><div class="section-title">Marco Metodológico de la Auditoría</div>
     ${bloque("1. Introducción", `El presente informe consolida los resultados de la auditoría interna de cumplimiento KPI ejecutada por el área de ${EMPRESA.area} de ${EMPRESA.nombre} (NIT ${EMPRESA.nit}). El ejercicio se orientó a verificar el estado de los planes de acción derivados de los hallazgos de auditoría en las granjas avícolas evaluadas y a valorar el nivel de exposición al riesgo asociado.`)}
     ${bloque("2. Objetivos", `Verificar el grado de avance y cierre de los ${nK} plan(es) de acción registrados; evaluar la severidad y el estado de los ${nH} hallazgo(s) identificados; y entregar a la Gerencia una visión objetiva del nivel de cumplimiento y de los riesgos residuales que requieren atención prioritaria.`)}
-    ${bloque("3. Alcance", `La revisión comprende ${nG} granja(s) avícola(s), ${nH} hallazgo(s) y ${nK} plan(es) de acción KPI, correspondientes a ${rango}. Se incluyen exclusivamente los registros filtrados en el sistema de auditoría al momento de generar este documento.`)}
-    ${bloque("4. Enfoque", `El enfoque es basado en riesgos: se prioriza el análisis de los hallazgos según su criticidad y tipo de riesgo (Operativo, Reputacional, Financiero, Legal y de Contagio), concentrando el esfuerzo de verificación en las áreas de mayor exposición.`)}
-    ${bloque("5. Métodos", `Revisión documental de los registros, verificación de las evidencias fotográficas cargadas por los responsables, seguimiento del porcentaje de avance de cada plan y contraste con las fechas de compromiso y cumplimiento registradas.`)}
-    ${bloque("6. Procedimientos", `Recolección de los registros del sistema; validación del estado de cada hallazgo y plan; revisión de las evidencias asociadas; cálculo de los indicadores de cumplimiento; y consolidación de resultados para su presentación a la Gerencia.`)}
-    ${bloque("7. Técnicas", `Inspección de evidencias, análisis comparativo de indicadores, revisión de la trazabilidad hallazgo–plan–evidencia y evaluación cualitativa del riesgo residual conforme a la clasificación institucional.`)}
   </div>`;
 }
 
@@ -1846,7 +1847,6 @@ ${portada(`Informe Ejecutivo de Auditoría N° ${num}`, "Control Interno y Cumpl
 ${seccionMetodologia(kpis, hallazgos, granjas)}
 
 <div class="divider">Capítulo II — Características Generales</div>
-${seccionMarcoLegal(marcoLegal)}
 ${seccionHallazgos(hallazgos, granjas, 20, resumenCorporativoParrafo(kpis, hallazgos))}
 ${seccionKPIs(kpis, granjas, hallazgos, evidenciasPorHallazgo)}
 
@@ -1856,7 +1856,7 @@ ${seccionRecomendaciones(kpis, hallazgos)}
 ${seccionConclusionesEjec(kpis, hallazgos)}
 
 <div class="divider">Capítulo IV — Soportes y Seguimiento</div>
-${seccionMortalidad(mortalidad, granjas, hallazgos, true, true)}
+${seccionMortalidad(mortalidad, granjas, hallazgos, true, true, true)}
 ${semanalTabla}
 ${seccionPaneles(hallazgos, granjas, "Mortalidad · Resumen Ejecutivo", (a) => resumenMortalidadDiaria(a.registroMortalidadDiaria))}
 ${graficosMortalidadTendencia(hallazgos)}
@@ -3366,15 +3366,10 @@ export default function KPIPage() {
             // Un PDF por cada modelo seleccionado.
             for (const modelo of modelosSel) {
               if (modelo === "1-ejecutivo") {
-                // Informe Ejecutivo: un PDF por granja/lote del alcance (portada y lote propios).
-                const lista = granjasFiltradas.length ? granjasFiltradas : [null as any];
-                for (const g of lista) {
-                  const kG = g ? filtered.filter((k: any) => k.granjaId === g.id) : filtered;
-                  const hG = g ? hallazgosFiltrados.filter((h: any) => h.granjaId === g.id) : hallazgosFiltrados;
-                  const html = htmlDeModelo(modelo, kG, hG, g ? [g] : granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidadKPI, datos);
-                  const { b64 } = await htmlToPDFBase64(html, "portrait");
-                  descargarPDFBase64(b64, `Informe-Ejecutivo-${(g?.nombre || "General").replace(/\s+/g, "-")}-${fecha}.pdf`);
-                }
+                // Informe Ejecutivo: UN solo PDF con todo el alcance (una sola descarga → un solo diálogo de guardado).
+                const html = htmlDeModelo(modelo, filtered, hallazgosFiltrados, granjasFiltradas, auditorNombre, evidenciasMap, marcoLegal, mortalidadKPI, datos);
+                const { b64 } = await htmlToPDFBase64(html, "portrait");
+                descargarPDFBase64(b64, `Informe-Ejecutivo-${fecha}.pdf`);
                 continue;
               }
               const esH = modelo === "6-hallazgos";
