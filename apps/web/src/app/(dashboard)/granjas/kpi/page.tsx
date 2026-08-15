@@ -891,6 +891,8 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
       const descItem = h?.descripcion?.trim()
         ? h.descripcion
         : (k.accion && k.accion.trim() !== tituloItem.trim() ? k.accion : "");
+      // Anexos del hallazgo → gráficas de mortalidad y consumo JUNTO al hallazgo/seguimiento (trazabilidad organizada).
+      const ha = h ? parseAnexos(h.anexosTecnicos) : null;
       return `<div class="kpi-item">
         <div class="kpi-item-header">
           <div class="kpi-item-title">${tituloItem}</div>
@@ -911,6 +913,8 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
           <div class="plan-box-title">Plan de Acción</div>
           <div class="plan-box-text">${k.planAccionVeterinario}</div>
         </div>` : ""}
+        ${ha ? bloqueMortalidadHallazgo(ha) : ""}
+        ${ha ? bloqueConsumoHallazgo(ha) : ""}
       </div>
       ${fotosHTML}${fotosSeguimientoHTML}`;
     }).join("")}
@@ -1402,74 +1406,94 @@ function graficosConsumoTendencia(hallazgos: any[]): string {
   </div>`;
 }
 
-// Barras verticales compactas (una barra por punto) — para las gráficas por hallazgo.
-function barrasVertSVG(puntos: { label: string; value: number }[], color: string, sufijo = ""): string {
-  if (!puntos.length) return "<p style='font-size:10px;color:#94a3b8;text-align:center'>Sin datos</p>";
-  const W = 520, H = 150, padL = 28, padB = 22, padT = 16, padR = 10, plotW = W - padL - padR, plotH = H - padB - padT;
-  const maxV = Math.max(1, ...puntos.map(p => p.value));
-  const gap = plotW / puntos.length, bw = Math.min(48, gap * 0.6);
-  const bars = puntos.map((p, i) => {
-    const x = padL + i * gap + (gap - bw) / 2, h = (p.value / maxV) * plotH, y = padT + plotH - h;
-    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" rx="2" fill="${color}"/>
-      <text x="${(x + bw / 2).toFixed(1)}" y="${(y - 3).toFixed(1)}" text-anchor="middle" font-size="8" fill="#0D1526">${_fmtAnx(p.value)}${sufijo}</text>
-      <text x="${(x + bw / 2).toFixed(1)}" y="${H - padB + 12}" text-anchor="middle" font-size="8" fill="#64748b">${p.label}</text>`;
-  }).join("");
-  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto"><line x1="${padL}" y1="${(padT + plotH).toFixed(1)}" x2="${W - padR}" y2="${(padT + plotH).toFixed(1)}" stroke="#e2e8f0"/>${bars}</svg>`;
+// Anillo (donut) que indica un porcentaje.
+function donutSVG(pct: number | null, color: string, label: string): string {
+  const p = Math.max(0, Math.min(100, pct ?? 0));
+  const r = 32, cx = 44, cy = 44, circ = 2 * Math.PI * r, dash = (p / 100) * circ;
+  return `<svg width="88" height="88" viewBox="0 0 88 88" style="flex-shrink:0">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#e2e8f0" stroke-width="9"/>
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${dash.toFixed(1)} ${(circ - dash).toFixed(1)}" transform="rotate(-90 ${cx} ${cy})"/>
+    <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="15" font-weight="800" fill="${color}">${pct != null ? p.toFixed(1) + "%" : "—"}</text>
+    <text x="${cx}" y="${cy + 16}" text-anchor="middle" font-size="7" fill="#64748b">${label}</text>
+  </svg>`;
 }
 
-// Gráficas de Mortalidad POR HALLAZGO (barras de mortalidad semanal desde los anexos de cada hallazgo).
-function graficasMortalidadPorHallazgo(hallazgos: any[], granjas: any[]): string {
-  const items = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) })).filter(x => registroMortalidadTieneDatos(x.a.registroMortalidadDiaria));
-  if (!items.length) return "";
-  const bloques = items.map(({ h, a }) => {
-    const g = granjas.find(gr => gr.id === h.granjaId);
-    const c = calcMortalidadDiaria(a.registroMortalidadDiaria);
-    const pts = c.semanas.map(s => ({ label: `Sem ${s.semana}`, value: s.totalSemanal }));
-    const sub = `Total ${_fmtAnx(c.totalGeneral)} aves · ${c.pctAcumuladoFinal != null ? c.pctAcumuladoFinal.toFixed(2) + "% acum." : "—"} · saldo ${_fmtAnx(c.saldoFinal)}`;
-    return `<div style="page-break-inside:avoid;margin-bottom:12px;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
-      <div style="font-size:12px;font-weight:700;color:#0D1526">${h.titulo?.slice(0, 60) || "Hallazgo"} <span style="font-weight:400;color:#64748b">· ${g?.nombre || "—"}</span></div>
-      <div style="font-size:10px;color:#94a3b8;margin-bottom:4px">Mortalidad semanal (aves) · ${sub}</div>
-      ${barrasVertSVG(pts, "#EF4444")}</div>`;
-  }).join("");
-  return `<div class="section"><div class="section-title">Gráficas de Mortalidad por Hallazgo</div>${bloques}</div>`;
+// Tendencia simple de una serie (primer vs último valor no nulo, umbral 10%).
+function tendenciaTxt(vals: number[]): string {
+  const v = vals.filter(x => x > 0);
+  if (v.length < 2) return "estable";
+  const a = v[0], b = v[v.length - 1], chg = a > 0 ? (b - a) / a : 0;
+  return chg > 0.1 ? "ascendente" : chg < -0.1 ? "descendente" : "estable";
 }
 
-// Consumo de Alimento POR HALLAZGO: barras de consumo semanal + tabla de conciliación de bultos
-// (Recepción / Salidas / Inventario físico → diferencia) + preguntas específicas de trazabilidad.
-function graficasConsumoPorHallazgo(hallazgos: any[], granjas: any[]): string {
-  const items = hallazgos.map(h => ({ h, a: parseAnexos(h.anexosTecnicos) }))
-    .filter(x => x.a.registroBultosConsumidos.semanas.some((w: any[]) => w.length) || totalIngresoUnidades(x.a) > 0 || totalInventarioBultos(x.a) > 0);
-  if (!items.length) return "";
-  const bloques = items.map(({ h, a }) => {
-    const g = granjas.find(gr => gr.id === h.granjaId);
-    const cb = calcBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a));
-    const pts = cb.semanas.map(s => ({ label: `Sem ${s.semana}`, value: s.totalBultos }));
-    const grafico = pts.length ? `<div style="font-size:10px;color:#94a3b8;margin-bottom:2px">Consumo semanal (bultos) · total ${_fmtAnx(cb.totalBultos)}</div>${barrasVertSVG(pts, "#4A7AFF")}` : "";
-    // Conciliación de bultos: Recepción − Salidas − Inventario físico
-    const ingreso = totalIngresoUnidades(a), ingresoKg = totalIngresoKg(a);
-    const salidas = totalBultosConsumidos(a);
-    const inv = totalInventarioBultos(a);
-    const dif = ingreso - salidas - inv;
-    const difOk = Math.abs(dif) < 1;
-    const tabla = `<table style="margin-top:6px"><thead><tr><th>Concepto</th><th style="text-align:right">Bultos</th><th style="text-align:right">Kg (aprox.)</th></tr></thead><tbody>
-      <tr><td>Recepción (Ingreso de bultos)</td><td style="text-align:right;font-weight:700">${_fmtAnx(ingreso)}</td><td style="text-align:right">${_fmtAnx(ingresoKg)}</td></tr>
-      <tr><td>Salidas (Bultos consumidos)</td><td style="text-align:right">${_fmtAnx(salidas)}</td><td style="text-align:right">${_fmtAnx(cb.totalKg)}</td></tr>
-      <tr><td>Inventario físico (restante)</td><td style="text-align:right">${_fmtAnx(inv)}</td><td style="text-align:right">—</td></tr>
-      <tr style="font-weight:700;background:#f8fafc"><td>Diferencia (Ingreso − Salidas − Inventario físico)</td><td style="text-align:right;color:${difOk ? "#22C55E" : "#EF4444"}">${_fmtAnx(dif)}</td><td style="text-align:right">—</td></tr>
+// Párrafo corto y profesional con el resultado de la gráfica de mortalidad.
+function parrafoMortalidad(c: any): string {
+  const vals: number[] = c.semanas.map((s: any) => s.totalSemanal);
+  if (!vals.length) return "";
+  const pico = vals.indexOf(Math.max(...vals)), pct = c.pctAcumuladoFinal;
+  const nivel = pct == null ? "" : pct >= 8 ? ", en nivel crítico" : pct >= 4 ? ", en nivel elevado" : ", dentro de parámetros aceptables";
+  return `La mortalidad semanal muestra una tendencia ${tendenciaTxt(vals)}, con su valor más alto en la semana ${pico + 1} (${_fmtAnx(vals[pico])} aves). La mortalidad acumulada alcanza ${pct != null ? pct.toFixed(2) + "%" : "—"} (${_fmtAnx(c.totalGeneral)} aves)${nivel}, con un saldo estimado de ${_fmtAnx(c.saldoFinal)} aves.`;
+}
+
+// Párrafo corto y profesional con el resultado de la gráfica de consumo + conciliación de bultos.
+function parrafoConsumo(cb: any, ingreso: number, salidas: number, inv: number): string {
+  const vals: number[] = cb.semanas.map((s: any) => s.totalBultos);
+  const dif = ingreso - salidas - inv;
+  const tend = vals.length ? `una tendencia ${tendenciaTxt(vals)}` : "un registro parcial";
+  return `El consumo de alimento presenta ${tend}, con un total de ${_fmtAnx(cb.totalBultos)} bulto(s). Frente a una recepción de ${_fmtAnx(ingreso)} bulto(s), la conciliación arroja una diferencia de ${_fmtAnx(dif)} bulto(s) ${Math.abs(dif) < 1 ? "— balance conforme" : "— requiere validación de trazabilidad"}.`;
+}
+
+// Bloque INLINE de mortalidad de un hallazgo: tendencia lineal semanal + anillo de % + párrafo corto.
+function bloqueMortalidadHallazgo(a: any): string {
+  if (!registroMortalidadTieneDatos(a.registroMortalidadDiaria)) return "";
+  const c = calcMortalidadDiaria(a.registroMortalidadDiaria);
+  const pts = c.semanas.map((s: any) => ({ label: `Sem ${s.semana}`, value: s.totalSemanal }));
+  const pct = c.pctAcumuladoFinal, color = (pct ?? 0) >= 8 ? "#EF4444" : (pct ?? 0) >= 4 ? "#F97316" : "#22C55E";
+  return `<div style="margin-top:8px;border-top:1px dashed #e2e8f0;padding-top:6px;page-break-inside:avoid">
+    <div style="font-size:11px;font-weight:700;color:#EF4444;margin-bottom:3px">Mortalidad · tendencia semanal</div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="flex:1;min-width:0">${lineTrendSVG(pts, "#EF4444")}</div>
+      ${donutSVG(pct, color, "% mortalidad")}
+    </div>
+    <p style="font-size:12px;color:#334155;line-height:1.5;margin-top:4px">${parrafoMortalidad(c)}</p>
+  </div>`;
+}
+
+// Bloque INLINE de consumo de un hallazgo: tendencia lineal + anillo de % de desviación + párrafo +
+// conciliación de bultos (Recepción/Salidas/Inventario) + preguntas de trazabilidad.
+function bloqueConsumoHallazgo(a: any): string {
+  const tieneFeed = a.registroBultosConsumidos.semanas.some((w: any[]) => w.length) || totalIngresoUnidades(a) > 0 || totalInventarioBultos(a) > 0;
+  if (!tieneFeed) return "";
+  const cb = calcBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a));
+  const pts = cb.semanas.map((s: any) => ({ label: `Sem ${s.semana}`, value: s.totalBultos }));
+  const ingreso = totalIngresoUnidades(a), ingresoKg = totalIngresoKg(a);
+  const salidas = totalBultosConsumidos(a), inv = totalInventarioBultos(a);
+  const dif = ingreso - salidas - inv, difOk = Math.abs(dif) < 1;
+  const desvPct = ingreso > 0 ? Math.abs(dif) / ingreso * 100 : 0;
+  const donutColor = desvPct < 2 ? "#22C55E" : desvPct < 8 ? "#F97316" : "#EF4444";
+  const chart = `<div style="display:flex;align-items:center;gap:12px">
+      <div style="flex:1;min-width:0">${pts.length ? lineTrendSVG(pts, "#4A7AFF") : "<p style='font-size:10px;color:#94a3b8;padding:8px'>Sin consumo diario registrado</p>"}</div>
+      ${donutSVG(desvPct, donutColor, "desviación")}
+    </div>`;
+  const tabla = `<table style="margin-top:6px"><thead><tr><th>Concepto</th><th style="text-align:right">Bultos</th><th style="text-align:right">Kg (aprox.)</th></tr></thead><tbody>
+    <tr><td>Recepción (Ingreso de bultos)</td><td style="text-align:right;font-weight:700">${_fmtAnx(ingreso)}</td><td style="text-align:right">${_fmtAnx(ingresoKg)}</td></tr>
+    <tr><td>Salidas (Bultos consumidos)</td><td style="text-align:right">${_fmtAnx(salidas)}</td><td style="text-align:right">${_fmtAnx(cb.totalKg)}</td></tr>
+    <tr><td>Inventario físico (restante)</td><td style="text-align:right">${_fmtAnx(inv)}</td><td style="text-align:right">—</td></tr>
+    <tr style="font-weight:700;background:#f8fafc"><td>Diferencia (Ingreso − Salidas − Inventario físico)</td><td style="text-align:right;color:${difOk ? "#22C55E" : "#EF4444"}">${_fmtAnx(dif)}</td><td style="text-align:right">—</td></tr>
+  </tbody></table>`;
+  const q = (p: string, ok: boolean, det: string) => `<tr><td>${p}</td><td style="text-align:center;font-weight:700;color:${ok ? "#22C55E" : "#EF4444"}">${ok ? "Sí" : "No"}</td><td style="color:#64748b">${det}</td></tr>`;
+  const preguntas = `<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 2px">Validación de trazabilidad</div>
+    <table><thead><tr><th>Pregunta</th><th style="text-align:center">Cumple</th><th>Detalle</th></tr></thead><tbody>
+    ${q("¿Se registró la recepción de alimento?", ingreso > 0, `${_fmtAnx(ingreso)} bultos`)}
+    ${q("¿Se registraron las salidas / consumo?", salidas > 0, `${_fmtAnx(salidas)} bultos`)}
+    ${q("¿Se registró el inventario físico?", inv > 0, `${_fmtAnx(inv)} bultos`)}
+    ${q("¿El balance cuadra (Ingreso = Salidas + Inventario)?", difOk, `diferencia ${_fmtAnx(dif)} bultos`)}
     </tbody></table>`;
-    const q = (p: string, ok: boolean, det: string) => `<tr><td>${p}</td><td style="text-align:center;font-weight:700;color:${ok ? "#22C55E" : "#EF4444"}">${ok ? "Sí" : "No"}</td><td style="color:#64748b">${det}</td></tr>`;
-    const preguntas = `<div style="font-size:11px;font-weight:700;color:#4A7AFF;margin:8px 0 2px">Validación de trazabilidad</div>
-      <table><thead><tr><th>Pregunta</th><th style="text-align:center">Cumple</th><th>Detalle</th></tr></thead><tbody>
-      ${q("¿Se registró la recepción de alimento?", ingreso > 0, `${_fmtAnx(ingreso)} bultos`)}
-      ${q("¿Se registraron las salidas / consumo?", salidas > 0, `${_fmtAnx(salidas)} bultos`)}
-      ${q("¿Se registró el inventario físico?", inv > 0, `${_fmtAnx(inv)} bultos`)}
-      ${q("¿El balance cuadra (Ingreso = Salidas + Inventario)?", difOk, `diferencia ${_fmtAnx(dif)} bultos`)}
-      </tbody></table>`;
-    return `<div style="page-break-inside:avoid;margin-bottom:14px;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
-      <div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:4px">${h.titulo?.slice(0, 60) || "Hallazgo"} <span style="font-weight:400;color:#64748b">· ${g?.nombre || "—"}</span></div>
-      ${grafico}${tabla}${preguntas}</div>`;
-  }).join("");
-  return `<div class="section"><div class="section-title">Consumo de Alimento por Hallazgo · Validación de Bultos</div>${bloques}</div>`;
+  return `<div style="margin-top:8px;border-top:1px dashed #e2e8f0;padding-top:6px;page-break-inside:avoid">
+    <div style="font-size:11px;font-weight:700;color:#4A7AFF;margin-bottom:3px">Consumo de alimento · tendencia y conciliación de bultos</div>
+    ${chart}
+    <p style="font-size:12px;color:#334155;line-height:1.5;margin-top:4px">${parrafoConsumo(cb, ingreso, salidas, inv)}</p>
+    ${tabla}${preguntas}</div>`;
 }
 
 // ─── SECCIÓN REGISTRO MORTALIDAD DIARIA (resumen / detalle) ───────────────────
@@ -1928,10 +1952,8 @@ ${seccionConclusionesEjec(kpis, hallazgos)}
 <div class="divider">Capítulo IV — Soportes y Seguimiento</div>
 ${seccionMortalidad(mortalidad, granjas, hallazgos, true, true, true)}
 ${semanalTabla}
-${seccionPaneles(hallazgos, granjas, "Mortalidad · Resumen Ejecutivo", (a) => resumenMortalidadDiaria(a.registroMortalidadDiaria))}
-${graficasMortalidadPorHallazgo(hallazgos, granjas)}
 <div class="section">
-  <div class="section-title">Inventario de Alimento · Conciliación de Bultos</div>
+  <div class="section-title">Inventario de Alimento · Conciliación de Bultos (consolidado)</div>
   ${hayInv ? `<table><thead><tr><th>Concepto</th><th style="text-align:right">Bultos</th></tr></thead><tbody>
     <tr><td>Recepción (Ingreso de bultos)</td><td style="text-align:right;font-weight:700">${_fmtAnx(dIng)}</td></tr>
     <tr><td>Salidas (Bultos consumidos)</td><td style="text-align:right">${_fmtAnx(dSal)}</td></tr>
@@ -1939,8 +1961,6 @@ ${graficasMortalidadPorHallazgo(hallazgos, granjas)}
     <tr style="font-weight:700;background:#f8fafc"><td>Diferencia (Ingreso − Salidas − Inventario físico)</td><td style="text-align:right;color:${Math.abs(difBultos) >= 1 ? "#F97316" : "#22C55E"}">${_fmtAnx(difBultos)} bultos · ${_fmtAnx(difBultosKg)} Kg</td></tr>
   </tbody></table>` : `<p style="font-size:11px;color:#94a3b8">Sin registros de inventario de alimento en el alcance.</p>`}
 </div>
-${seccionPaneles(hallazgos, granjas, "Consumo de Alimento · Resumen Ejecutivo", (a) => resumenBultosConsumidos(a.registroBultosConsumidos, a.registroMortalidadDiaria, avesRecibidasTotal(a)))}
-${graficasConsumoPorHallazgo(hallazgos, granjas)}
 ${seccionBitacora(hallazgos, granjas, "compacto")}
 ${seccionColaboradores(hallazgos, granjas, "compacto")}
 ${seccionFirma(auditor, "Auditor Interno", datos, false, true)}
