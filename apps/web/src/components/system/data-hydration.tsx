@@ -160,6 +160,7 @@ function useHydrateGranjas() {
       fechaCompromiso:    toDateOnly(k.fechaCompromiso),
       fechaCumplimiento:  k.fechaCumplimiento  ? toDateOnly(k.fechaCumplimiento)  : undefined,
       fechaProximaVisita: k.fechaProximaVisita ? toDateOnly(k.fechaProximaVisita) : undefined,
+      fechaSeguimiento:   k.fechaSeguimiento   ? toDateOnly(k.fechaSeguimiento)   : undefined,
     }));
     setKPIs(mapped as any);
   }, [kpisQ.data, setKPIs]);

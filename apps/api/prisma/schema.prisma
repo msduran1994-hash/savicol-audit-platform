@@ -256,6 +256,7 @@ model EvidenciaHallazgo {
   nombre     String
   url        String
   size       Int
+  categoria  String?  // clasificación opcional (p. ej. "Seguimiento" para las fotos del seguimiento)
   uploadedAt DateTime @default(now())
   uploadedBy String
 
@@ -278,6 +279,7 @@ model KPI {
   estado                String    @default("NO_INICIADO")
   responsable           String
   porcentajeAvance      Int       @default(0)
+  fechaSeguimiento      DateTime? // fecha en que se realizó el seguimiento del hallazgo
   isDemo                Boolean   @default(false)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt

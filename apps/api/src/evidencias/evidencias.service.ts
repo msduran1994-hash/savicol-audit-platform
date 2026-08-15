@@ -62,6 +62,7 @@ export class EvidenciasService {
         nombre: dto.nombre,
         url: dto.url,
         size: dto.size,
+        categoria: dto.categoria,
         uploadedBy: userId,
       },
     });

@@ -100,6 +100,7 @@ export interface KPI {
   estado: EstadoKPI;
   responsable: string;
   porcentajeAvance: number;
+  fechaSeguimiento?: string;
   evidencias?: string[];
   createdAt: string;
   updatedAt: string;

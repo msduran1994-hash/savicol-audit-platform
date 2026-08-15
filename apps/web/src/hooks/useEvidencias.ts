@@ -23,6 +23,7 @@ export interface EvidenciaHallazgoPayload {
   nombre: string;
   url: string;
   size: number;
+  categoria?: string;
 }
 export interface EvidenciaRutaPayload {
   acompanamientoId: string;

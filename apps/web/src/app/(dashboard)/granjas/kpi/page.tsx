@@ -836,7 +836,9 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
       const seguAud  = seguPartsK.find((p:string)=>p.startsWith("AUD:"))?.slice(4) || "";
       const seguAudNombre = seguPartsK.find((p:string)=>p.startsWith("AUDNOM:"))?.slice(7) || "";
       if (detallado) {
-        const fotos = (k.hallazgoId ? (evidenciasPorHallazgo?.[k.hallazgoId] || []) : []);
+        const fotosAll = (k.hallazgoId ? (evidenciasPorHallazgo?.[k.hallazgoId] || []) : []);
+        const fotosHall = fotosAll.filter((ev:any) => (ev.categoria||"") !== "Seguimiento");
+        const fotosSeg  = fotosAll.filter((ev:any) => ev.categoria === "Seguimiento");
         const categoria = h?.categoria || (h?.tiposRiesgo?.join(", ")) || "";
         const auditorNom = seguAudNombre || h?.auditorNombre || "";
         return `<div class="kpi-item" style="page-break-inside:avoid">
@@ -856,25 +858,33 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
             <span style="font-size:10px;font-weight:700">${pct}%</span>
           </div>
           ${auditorNom ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Auditor:</strong> ${auditorNom}</div>` : ""}
+          ${k.fechaSeguimiento ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Fecha de seguimiento:</strong> <span style="background:#FEF3C7;color:#92400E;font-weight:700;padding:1px 5px;border-radius:3px">${fmtFechaCorta(k.fechaSeguimiento)}</span></div>` : ""}
           ${seguResp ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Seguimiento:</strong> ${seguResp}</div>` : ""}
           ${seguAud ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Observación del Seguimiento:</strong> ${seguAud}</div>` : ""}
           ${k.planAccionVeterinario && k.planAccionVeterinario !== "—" ? `
           <div class="plan-box"><div class="plan-box-title">Plan de Acción</div><div class="plan-box-text">${k.planAccionVeterinario}</div></div>` : ""}
-          ${fotos.length ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:700;color:#0D1526;margin-bottom:4px">Evidencia Fotográfica (${fotos.length})</div>${evidenciasGridHTML(fotos.map((ev:any)=>({src:ev.url, titulo:ev.nombre||undefined, pie:ev.categoria||undefined})))}</div>` : ""}
+          ${fotosHall.length ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:700;color:#0D1526;margin-bottom:4px">Evidencia Fotográfica del Hallazgo (${fotosHall.length})</div>${evidenciasGridHTML(fotosHall.map((ev:any)=>({src:ev.url, titulo:ev.nombre||undefined})))}</div>` : ""}
+          ${fotosSeg.length ? `<div style="margin-top:8px"><div style="font-size:10px;font-weight:700;color:#0D1526;margin-bottom:4px">Evidencia Fotográfica del Seguimiento (${fotosSeg.length})</div>${evidenciasGridHTML(fotosSeg.map((ev:any)=>({src:ev.url, titulo:ev.nombre||undefined})))}</div>` : ""}
         </div>`;
       }
-      // Ejecutivo: evidencias del hallazgo bajo el plan, en 2 COLUMNAS (filas de 2) para
-      // ocupar menos hojas; cada fila (page-break-inside:avoid) no se corta entre páginas.
-      const fotosK = k.hallazgoId ? (evidenciasPorHallazgo?.[k.hallazgoId] || []) : [];
-      let fotosHTML = "";
-      if (fotosK.length) {
-        const filasFoto: string[] = [];
-        for (let i = 0; i < fotosK.length; i += 2) {
-          const par = fotosK.slice(i, i + 2);
-          filasFoto.push(`<div style="display:flex;gap:10px;page-break-inside:avoid;margin-bottom:8px">${par.map((ev: any) => `<div style="flex:1;min-width:0;text-align:center"><img src="${ev.url}" style="max-width:100%;max-height:300px;width:auto;height:auto;border-radius:6px;border:1px solid #e2e8f0;display:inline-block"/>${(ev.categoria || ev.nombre) ? `<div style="font-size:11px;color:#64748b;margin-top:3px">${[ev.categoria, ev.nombre].filter(Boolean).join(" · ")}</div>` : ""}</div>`).join("")}${par.length === 1 ? `<div style="flex:1"></div>` : ""}</div>`);
+      // Ejecutivo: evidencias en 2 COLUMNAS (filas de 2) para ocupar menos hojas; cada fila
+      // (page-break-inside:avoid) no se corta entre páginas. Se separan las del Hallazgo y las del Seguimiento.
+      const todasFotos = k.hallazgoId ? (evidenciasPorHallazgo?.[k.hallazgoId] || []) : [];
+      const fotosHallazgo    = todasFotos.filter((ev: any) => (ev.categoria || "") !== "Seguimiento");
+      const fotosSeguimiento = todasFotos.filter((ev: any) => ev.categoria === "Seguimiento");
+      const bloqueFotos = (fotos: any[], titulo: string, mostrarCat: boolean) => {
+        if (!fotos.length) return "";
+        const filas: string[] = [];
+        for (let i = 0; i < fotos.length; i += 2) {
+          const par = fotos.slice(i, i + 2);
+          filas.push(`<div style="display:flex;gap:10px;page-break-inside:avoid;margin-bottom:8px">${par.map((ev: any) => { const pie = mostrarCat ? [ev.categoria, ev.nombre].filter(Boolean).join(" · ") : (ev.nombre || ""); return `<div style="flex:1;min-width:0;text-align:center"><img src="${ev.url}" style="max-width:100%;max-height:300px;width:auto;height:auto;border-radius:6px;border:1px solid #e2e8f0;display:inline-block"/>${pie ? `<div style="font-size:11px;color:#64748b;margin-top:3px">${pie}</div>` : ""}</div>`; }).join("")}${par.length === 1 ? `<div style="flex:1"></div>` : ""}</div>`);
         }
-        fotosHTML = `<div style="margin:2px 0 12px"><div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:5px">Evidencia Fotográfica (${fotosK.length})</div>${filasFoto.join("")}</div>`;
-      }
+        return `<div style="margin:2px 0 12px"><div style="font-size:12px;font-weight:700;color:#0D1526;margin-bottom:5px">${titulo} (${fotos.length})</div>${filas.join("")}</div>`;
+      };
+      const fotosHTML            = bloqueFotos(fotosHallazgo,    "Evidencia Fotográfica del Hallazgo",    true);
+      const fotosSeguimientoHTML = bloqueFotos(fotosSeguimiento, "Evidencia Fotográfica del Seguimiento", false);
+      // "Auditor y seguimiento" al mismo tamaño que el Hallazgo (14px), con la fecha del seguimiento resaltada.
+      const SEGUI = "font-size:14px;color:#334155;line-height:1.5;margin-bottom:3px";
       return `<div class="kpi-item">
         <div class="kpi-item-header">
           <div class="kpi-item-title">${k.accion}</div>
@@ -886,16 +896,17 @@ function seccionKPIs(kpis: any[], granjas: any[], hallazgos: any[], evidenciasPo
           ${h ? ` · Hallazgo: ${h.titulo}` : ""}
         </div>
         ${h?.descripcion ? `<div class="hallazgo-desc">${h.descripcion}</div>` : ""}
-        ${seguResp ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Seguimiento:</strong> ${seguResp}</div>` : ""}
-        ${seguAudNombre ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Auditor de seguimiento:</strong> ${seguAudNombre}</div>` : ""}
-        ${seguAud  ? `<div style="font-size:10px;color:#475569;margin-bottom:3px"><strong>Auditor:</strong> ${seguAud}</div>` : ""}
+        ${k.fechaSeguimiento ? `<div style="${SEGUI}"><strong>Fecha de seguimiento:</strong> <span style="background:#FEF3C7;color:#92400E;font-weight:700;padding:1px 6px;border-radius:4px">${fmtFechaCorta(k.fechaSeguimiento)}</span></div>` : ""}
+        ${seguResp ? `<div style="${SEGUI}"><strong>Seguimiento:</strong> ${seguResp}</div>` : ""}
+        ${seguAudNombre ? `<div style="${SEGUI}"><strong>Auditor de seguimiento:</strong> ${seguAudNombre}</div>` : ""}
+        ${seguAud  ? `<div style="${SEGUI}"><strong>Observación del seguimiento:</strong> ${seguAud}</div>` : ""}
         ${k.planAccionVeterinario && k.planAccionVeterinario !== "—" ? `
         <div class="plan-box">
           <div class="plan-box-title">Plan de Acción</div>
           <div class="plan-box-text">${k.planAccionVeterinario}</div>
         </div>` : ""}
       </div>
-      ${fotosHTML}`;
+      ${fotosHTML}${fotosSeguimientoHTML}`;
     }).join("")}
   </div>`;
 }
@@ -2648,7 +2659,7 @@ async function htmlToPDFBase64(html: string, orientation: "portrait" | "landscap
 // ─── Modal selector de modelos de informe ─────────────────────────────────────
 function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsList, resultadosCount, onClose, onGenerar, onEnviar }: {
   granjas:    any[];
-  filtrosActivos?: { fEstado: string; fGranjas: string[]; fAuditor: string; fTipoRiesgo: string; fFechaHallazgo: string };
+  filtrosActivos?: { fEstado: string; fGranjas: string[]; fAuditor: string; fTipoRiesgo: string; fDesde: string; fHasta: string };
   granjasList?:    any[];
   auditorsList?:   any[];
   resultadosCount?: number;
@@ -2713,7 +2724,8 @@ function SelectorInformeModal({ granjas, filtrosActivos, granjasList, auditorsLi
     }
     if (f.fTipoRiesgo)    arr.push({ label: "Tipo de Riesgo", valor: f.fTipoRiesgo });
     if (f.fEstado)        arr.push({ label: "Estado", valor: f.fEstado });
-    if (f.fFechaHallazgo) arr.push({ label: "Fecha Hallazgo", valor: f.fFechaHallazgo });
+    if (f.fDesde) arr.push({ label: "Fecha desde", valor: f.fDesde });
+    if (f.fHasta) arr.push({ label: "Fecha hasta", valor: f.fHasta });
     return arr;
   })();
 
@@ -2997,7 +3009,8 @@ export default function KPIPage() {
   const [granjaMenuOpen, setGranjaMenuOpen] = useState(false);
   const [fAuditor,       setFAuditor]       = useState("");
   const [fTipoRiesgo,    setFTipoRiesgo]    = useState("");
-  const [fFechaHallazgo, setFFechaHallazgo] = useState("");
+  const [fDesde,         setFDesde]         = useState("");   // rango de Fecha Hallazgo — vacío = sin filtrar
+  const [fHasta,         setFHasta]         = useState("");
 
   const alertsQ      = useKpiAlerts();
   const sendReminders = useSendKpiReminders();
@@ -3021,14 +3034,18 @@ export default function KPIPage() {
       const riesgos: string[] = Array.isArray(h.tiposRiesgo) ? h.tiposRiesgo : [];
       return riesgos.includes(fTipoRiesgo);
     });
-    if (fFechaHallazgo) list = list.filter(k => {
+    if (fDesde || fHasta) list = list.filter(k => {
       const h = k.hallazgoId ? hallazgos.find(h => h.id === k.hallazgoId) : null;
-      return h?.fechaVisita?.startsWith(fFechaHallazgo);
+      const f = (h?.fechaVisita || "").slice(0, 10);
+      if (!f) return false;
+      if (fDesde && f < fDesde) return false;
+      if (fHasta && f > fHasta) return false;
+      return true;
     });
     return list;
-  }, [kpis, hallazgos, fEstado, fGranjas, fAuditor, fTipoRiesgo, fFechaHallazgo]);
+  }, [kpis, hallazgos, fEstado, fGranjas, fAuditor, fTipoRiesgo, fDesde, fHasta]);
 
-  const hayFiltros = !!(fEstado || fGranjas.length || fAuditor || fTipoRiesgo || fFechaHallazgo);
+  const hayFiltros = !!(fEstado || fGranjas.length || fAuditor || fTipoRiesgo || fDesde || fHasta);
 
   // ── Indicadores ───────────────────────────────────────────────────────────
   const total       = kpis.length;
@@ -3040,7 +3057,7 @@ export default function KPIPage() {
 
   const SEL = "px-3 py-1.5 bg-[#0D1526] border border-[#1E2D4A] rounded-lg text-xs text-white focus:outline-none hover:border-[#2A3F6A] transition-colors cursor-pointer";
 
-  const filtrosActivos = { fEstado, fGranjas, fAuditor, fTipoRiesgo, fFechaHallazgo };
+  const filtrosActivos = { fEstado, fGranjas, fAuditor, fTipoRiesgo, fDesde, fHasta };
 
   return (
     <div className="flex flex-col min-h-full">
@@ -3120,7 +3137,7 @@ export default function KPIPage() {
             <span className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wider">Filtros</span>
             {hayFiltros && (
               <button
-                onClick={() => { setFEstado(""); setFGranjas([]); setFAuditor(""); setFTipoRiesgo(""); setFFechaHallazgo(""); }}
+                onClick={() => { setFEstado(""); setFGranjas([]); setFAuditor(""); setFTipoRiesgo(""); setFDesde(""); setFHasta(""); }}
                 className="ml-auto flex items-center gap-1 text-[10px] text-[#64748B] hover:text-white px-2 py-0.5 rounded border border-[#1E2D4A] hover:border-[#4A7AFF] transition-colors"
               >
                 <X className="w-3 h-3"/>Limpiar
@@ -3178,8 +3195,13 @@ export default function KPIPage() {
               </select>
             </div>
             <div className="flex flex-col gap-0.5">
-              <span className="text-[10px] text-[#64748B] px-1">Fecha Hallazgo</span>
-              <input type="month" value={fFechaHallazgo} onChange={e=>setFFechaHallazgo(e.target.value)}
+              <span className="text-[10px] text-[#64748B] px-1">Fecha Hallazgo · Desde</span>
+              <input type="date" value={fDesde} onChange={e=>setFDesde(e.target.value)}
+                className={SEL + " w-36"} style={{colorScheme:"dark"}}/>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-[#64748B] px-1">Fecha Hallazgo · Hasta</span>
+              <input type="date" value={fHasta} onChange={e=>setFHasta(e.target.value)}
                 className={SEL + " w-36"} style={{colorScheme:"dark"}}/>
             </div>
             <div className="flex flex-col gap-0.5 ml-auto">
@@ -3324,7 +3346,7 @@ export default function KPIPage() {
               (!fGranjas.length || fGranjas.includes(h.granjaId)) &&
               (!fAuditor    || h.auditorId === fAuditor) &&
               (!fTipoRiesgo || (Array.isArray(h.tiposRiesgo) && (h.tiposRiesgo as string[]).includes(fTipoRiesgo))) &&
-              (!fFechaHallazgo || (h.fechaVisita || "").startsWith(fFechaHallazgo))
+              ((!fDesde || (h.fechaVisita || "").slice(0,10) >= fDesde) && (!fHasta || (h.fechaVisita || "").slice(0,10) <= fHasta))
             ) : [];
             const granjasRep = granjas.filter(g => hallazgosRep.some(h => h.granjaId === g.id));
             const allHIds = new Set<string>([...(hIds as Set<string>), ...hallazgosRep.map(h => h.id as string)]);
@@ -3368,7 +3390,7 @@ export default function KPIPage() {
               (!fGranjas.length || fGranjas.includes(h.granjaId)) &&
               (!fAuditor    || h.auditorId === fAuditor) &&
               (!fTipoRiesgo || (Array.isArray(h.tiposRiesgo) && (h.tiposRiesgo as string[]).includes(fTipoRiesgo))) &&
-              (!fFechaHallazgo || (h.fechaVisita || "").startsWith(fFechaHallazgo))
+              ((!fDesde || (h.fechaVisita || "").slice(0,10) >= fDesde) && (!fHasta || (h.fechaVisita || "").slice(0,10) <= fHasta))
             ) : [];
             const granjasRep = granjas.filter(g => hallazgosRep.some(h => h.granjaId === g.id));
             const allHIds = new Set<string>([...(hIds as Set<string>), ...hallazgosRep.map(h => h.id as string)]);
@@ -3467,12 +3489,16 @@ export default function KPIPage() {
 // EvidenciasFotograficas — carga, compresión, preview y persistencia
 // Reutiliza el módulo backend existente: /api/v1/evidencias/hallazgo
 // ═══════════════════════════════════════════════════════════════════════════════
-function EvidenciasFotograficas({ hallazgoId, accessToken, onEvidenciasChange }: {
+function EvidenciasFotograficas({ hallazgoId, accessToken, onEvidenciasChange, categoria, label }: {
   hallazgoId?: string;
   accessToken: string | null;
   onEvidenciasChange?: (evs: any[]) => void;
+  categoria?: string;                 // "Seguimiento" → fotos del seguimiento; undefined → fotos del hallazgo
+  label?: string;
 }) {
   const API = process.env.NEXT_PUBLIC_API_URL || "";
+  // Separa las fotos del hallazgo de las del seguimiento (misma tabla, distinta categoría).
+  const matchCat = (e: any) => categoria === "Seguimiento" ? e.categoria === "Seguimiento" : (e.categoria || "") !== "Seguimiento";
   const [evidencias, setEvidencias] = useState<any[]>([]);
   const [cargando,   setCargando]   = useState(false);
   const [subiendo,   setSubiendo]   = useState(false);
@@ -3493,7 +3519,7 @@ function EvidenciasFotograficas({ hallazgoId, accessToken, onEvidenciasChange }:
     })
       .then(r => r.ok ? r.json() : [])
       .then((data: any[]) => {
-        const fotos = Array.isArray(data) ? data.filter(e => e.tipo === "Foto") : [];
+        const fotos = Array.isArray(data) ? data.filter(e => e.tipo === "Foto" && matchCat(e)) : [];
         setEvidencias(fotos);
         onEvidenciasChange?.(fotos);
       })
@@ -3525,6 +3551,7 @@ function EvidenciasFotograficas({ hallazgoId, accessToken, onEvidenciasChange }:
             nombre: file.name.replace(/\.[^.]+$/, "") + (dataUrl.startsWith("data:image/webp") ? ".webp" : ".jpg"),
             url:    dataUrl,
             size:   sizeBytes,
+            ...(categoria ? { categoria } : {}),
           }),
         });
         if (resp.ok) {
@@ -3562,7 +3589,7 @@ function EvidenciasFotograficas({ hallazgoId, accessToken, onEvidenciasChange }:
     <div>
       <div className="flex items-center justify-between mb-2">
         <label className="text-[11px] font-semibold text-[#94A3B8] uppercase tracking-wide flex items-center gap-1.5">
-          <ImageIcon className="w-3.5 h-3.5"/> Evidencias Fotográficas Hallazgo
+          <ImageIcon className="w-3.5 h-3.5"/> {label ?? "Evidencias Fotográficas Hallazgo"}
         </label>
         <label className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors cursor-pointer
           ${hallazgoId ? "bg-[#4A7AFF]/15 text-[#4A7AFF] border-[#4A7AFF]/30 hover:bg-[#4A7AFF]/25" : "bg-[#1E2D4A]/40 text-[#475569] border-[#1E2D4A] cursor-not-allowed"}`}>
@@ -3636,6 +3663,7 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
     estado:                normalState(editing.estado),
     responsable:           editing.responsable,
     porcentajeAvance:      editing.porcentajeAvance,
+    fechaSeguimiento:      editing.fechaSeguimiento?.slice(0,10),
   } : {
     granjaId:              granjas[0]?.id ?? "",
     accion:                "",
@@ -3867,6 +3895,13 @@ function KPIModal({ granjas, hallazgos, editing, error, onClose, onSave, accessT
             <textarea value={seguResp} onChange={e=>setSeguResp(e.target.value)}
               rows={2} className={INP+" resize-none"}
               placeholder="Observaciones del responsable sobre el avance…"/>
+          </FF>
+          {/* Evidencias fotográficas del seguimiento (trazabilidad del hallazgo) */}
+          <EvidenciasFotograficas hallazgoId={form.hallazgoId} accessToken={accessToken}
+            categoria="Seguimiento" label="Evidencias Fotográficas del Seguimiento"/>
+          <FF label="Fecha de Seguimiento">
+            <input type="date" value={form.fechaSeguimiento ?? ""}
+              onChange={e=>setForm({...form,fechaSeguimiento:e.target.value})} className={INP} style={{colorScheme:"dark"}}/>
           </FF>
           <FF label="Auditor que realiza el seguimiento">
             <input value={seguAudNombre} onChange={e=>setSeguAudNombre(e.target.value)}

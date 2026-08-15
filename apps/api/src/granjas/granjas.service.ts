@@ -64,6 +64,7 @@ export interface CreateKPIDto {
   estado?: EstadoKPI;
   responsable: string;
   porcentajeAvance?: number;
+  fechaSeguimiento?: string;
 }
 
 export interface CreateAuditoriaDto {
@@ -310,7 +311,7 @@ export class GranjasService {
     const ALLOWED = [
       "granjaId", "hallazgoId", "accion", "seguimiento", "fechaCompromiso",
       "fechaProximaVisita", "fechaCumplimiento", "planAccionVeterinario",
-      "estado", "responsable", "porcentajeAvance",
+      "estado", "responsable", "porcentajeAvance", "fechaSeguimiento",
     ];
     const data: any = {};
     for (const k of ALLOWED) {
@@ -320,7 +321,7 @@ export class GranjasService {
     for (const k of ["seguimiento", "planAccionVeterinario", "responsable", "accion"]) {
       if (typeof data[k] === "string" && data[k].trim() === "") delete data[k];
     }
-    for (const f of ["fechaCompromiso", "fechaProximaVisita", "fechaCumplimiento"]) {
+    for (const f of ["fechaCompromiso", "fechaProximaVisita", "fechaCumplimiento", "fechaSeguimiento"]) {
       if (typeof data[f] === "string" && data[f].trim() !== "") {
         const d = new Date(data[f]);
         if (!isNaN(d.getTime())) data[f] = d;
