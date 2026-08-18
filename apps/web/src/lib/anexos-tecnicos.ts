@@ -25,7 +25,7 @@ export interface BitacoraIngresoRow { fecha: string; responsable: string; }
 export interface RegistroColaboradorRow { nombre: string; cargo: string; }
 // Un galpón dentro del lote: nº de lote (editable manualmente para trazabilidad), aves ingresadas
 // (desde el módulo Lotes, editables) + su mortalidad diaria en bloques semanales de 7 días (ilimitadas).
-export interface GalponMortalidad { galpon: string; lote?: string; avesIngresadas: number; semanas: number[][]; }
+export interface GalponMortalidad { galpon: string; lote?: string; fechaEncasetamiento?: string; avesIngresadas: number; semanas: number[][]; }
 // Registro Mortalidad Diaria — trazable por lote/galpón (granja+lote+fecha de encasetamiento).
 // `avesIniciales` y `semanas` son el CONSOLIDADO (suma entre galpones) que consumen los informes
 // existentes sin cambios; `galpones` es el detalle por galpón (trazabilidad y "Mortalidad por Galpón").
@@ -94,11 +94,16 @@ function parseSemanas(v: any): number[][] {
 function parseMortalidad(p: any): RegistroMortalidadDiaria {
   if (!p) return { avesIniciales: 0, semanas: [] };
   const galpones = Array.isArray(p.galpones)
-    ? p.galpones.map((g: any) => ({ galpon: String(g?.galpon ?? ""), lote: typeof g?.lote === "string" ? g.lote : undefined, avesIngresadas: num(g?.avesIngresadas), semanas: parseSemanas(g?.semanas) }))
+    ? p.galpones.map((g: any) => ({ galpon: String(g?.galpon ?? ""), lote: typeof g?.lote === "string" ? g.lote : undefined, fechaEncasetamiento: typeof g?.fechaEncasetamiento === "string" ? g.fechaEncasetamiento : undefined, avesIngresadas: num(g?.avesIngresadas), semanas: parseSemanas(g?.semanas) }))
     : undefined;
+  // El lote y la fecha de encasetamiento se registran por galpón (cada galpón tiene su propio ingreso).
+  // Para las leyendas de los informes se derivan del detalle por galpón, con respaldo al valor antiguo
+  // a nivel de registro (retrocompatible).
+  const galpLotes  = galpones ? [...new Set(galpones.map((g: any) => String(g.lote ?? "").trim()).filter(Boolean))] : [];
+  const galpFechas = galpones ? galpones.map((g: any) => g.fechaEncasetamiento).filter(Boolean).sort() : [];
   const meta = { granjaId: typeof p.granjaId === "string" ? p.granjaId : undefined,
-                 loteCodigo: typeof p.loteCodigo === "string" ? p.loteCodigo : undefined,
-                 fechaEncasetamiento: typeof p.fechaEncasetamiento === "string" ? p.fechaEncasetamiento : undefined };
+                 loteCodigo: galpLotes.length ? galpLotes.join(", ") : (typeof p.loteCodigo === "string" ? p.loteCodigo || undefined : undefined),
+                 fechaEncasetamiento: galpFechas.length ? galpFechas[0] : (typeof p.fechaEncasetamiento === "string" ? p.fechaEncasetamiento || undefined : undefined) };
   if (galpones && galpones.length) return { ...consolidarGalpones(galpones), ...meta, galpones };
   return { avesIniciales: num(p.avesIniciales), semanas: parseSemanas(p.semanas), ...meta };
 }

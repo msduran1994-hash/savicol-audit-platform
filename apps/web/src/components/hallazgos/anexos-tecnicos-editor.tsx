@@ -127,21 +127,10 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
   const setGalpones = (gs: GalponMortalidad[]) => set({ registroMortalidadDiaria: { ...md, ...consolidarGalpones(gs), galpones: gs } });
   const editGalpon = (gi: number, patch: any) => setGalpones(galponesEf.map((g, i) => i === gi ? { ...g, ...patch } : g));
   const setGalponDia = (gi: number, w: number, d: number, v: string) => editGalpon(gi, { semanas: galponesEf[gi].semanas.map((sem, wi) => wi === w ? sem.map((c, di) => di === d ? v : c) : sem) });
-  // Carga galpones + aves ingresadas del lote desde el módulo Lotes (solo lectura); preserva la mortalidad ya capturada por galpón.
-  const cargarGalponesDesdeLotes = (granjaId: string, loteCodigo: string) => {
-    const recs = lotesData.filter(l => l.data.granjaId === granjaId && (l.data.codigo || "").trim().toLowerCase() === loteCodigo.trim().toLowerCase());
-    const fecha = recs.map(r => r.data.fechaIngreso).filter(Boolean).sort()[0] || md.fechaEncasetamiento || "";
-    const prev = new Map(galponesEf.map(g => [g.galpon, g] as const));
-    const nuevos: GalponMortalidad[] = recs.map(r => {
-      const gp = String(r.data.galponPrincipal || "").trim() || "—";
-      const ex = prev.get(gp);
-      return { galpon: gp, lote: ex?.lote ?? loteCodigo, avesIngresadas: ex && num(ex.avesIngresadas) > 0 ? ex.avesIngresadas : num(r.data.avesIngreso), semanas: ex?.semanas ?? [] };
-    });
-    set({ registroMortalidadDiaria: { ...md, granjaId, loteCodigo, fechaEncasetamiento: fecha, ...consolidarGalpones(nuevos), galpones: nuevos } });
-  };
-  // Fecha real del registro = fecha de encasetamiento + (día − 1); Día 1 = día de encasetamiento.
-  const fechaDia = (diaGlobal: number): string => {
-    const f = md.fechaEncasetamiento; if (!f) return "—";
+  // El detalle por galpón (lote, fecha de encasetamiento y aves ingresadas) se captura manualmente por galpón.
+  // Fecha real de cada fila = fecha de encasetamiento DEL GALPÓN + (día − 1); Día 1 = día de encasetamiento.
+  const fechaDia = (diaGlobal: number, fechaEnc?: string): string => {
+    const f = fechaEnc || md.fechaEncasetamiento; if (!f) return "—";
     const base = new Date(f + "T00:00:00"); if (isNaN(base.getTime())) return "—";
     base.setDate(base.getDate() + diaGlobal - 1);
     return base.toLocaleDateString("es-CO", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -167,30 +156,22 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
 
   function MortalidadDiariaTab() {
     const calc = calcMortalidadDiaria(md);                         // consolidado (todos los galpones)
-    const lotesDeGranja = [...new Set(lotesData.filter(l => l.data.granjaId === granjaMortSel).map(l => (l.data.codigo || "").trim()).filter(Boolean))];
     const gi = Math.min(galponActivo, Math.max(0, galponesEf.length - 1));
     const gAct = galponesEf[gi];
     const gCalc = gAct ? calcMortalidadDiaria({ avesIniciales: num(gAct.avesIngresadas), semanas: gAct.semanas }) : null;
-    const avesLote = gAct ? num(lotesData.find(l => l.data.granjaId === granjaMortSel && (l.data.codigo || "").trim().toLowerCase() === (md.loteCodigo || "").trim().toLowerCase() && String(l.data.galponPrincipal || "").trim() === gAct.galpon)?.data.avesIngreso) : 0;
-    const faltaCabecera = !granjaMortSel || !md.loteCodigo;
+    const avesLote = gAct ? num(lotesData.find(l => l.data.granjaId === granjaMortSel && (l.data.codigo || "").trim().toLowerCase() === (gAct.lote || "").trim().toLowerCase() && String(l.data.galponPrincipal || "").trim() === gAct.galpon)?.data.avesIngreso) : 0;
+    const faltaCabecera = !granjaMortSel;
     return (
       <div className="space-y-3">
-        {/* Cabecera / enlace al módulo Lotes */}
-        <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <label className="block"><span className="text-[10px] text-[#94A3B8]">Granja</span>
-            <select value={granjaMortSel} onChange={e => setMortMeta({ granjaId: e.target.value, loteCodigo: "" })} className={INP}>
+        {/* Cabecera: la granja da contexto. El lote y la fecha de encasetamiento se registran POR GALPÓN (cada galpón ingresa en fechas distintas). */}
+        <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3">
+          <label className="block max-w-xs"><span className="text-[10px] text-[#94A3B8]">Granja</span>
+            <select value={granjaMortSel} onChange={e => setMortMeta({ granjaId: e.target.value })} className={INP}>
               <option value="">Seleccionar…</option>
               {granjas.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
             </select></label>
-          <label className="block"><span className="text-[10px] text-[#94A3B8]">Lote</span>
-            <select value={md.loteCodigo ?? ""} onChange={e => { if (e.target.value) { cargarGalponesDesdeLotes(granjaMortSel, e.target.value); setGalponActivo(0); } else setMortMeta({ loteCodigo: "" }); }} disabled={!granjaMortSel} className={INP}>
-              <option value="">{granjaMortSel ? (lotesDeGranja.length ? "Seleccionar…" : "Sin lotes en Lotes") : "Elige granja"}</option>
-              {lotesDeGranja.map(c => <option key={c} value={c}>{c}</option>)}
-            </select></label>
-          <label className="block"><span className="text-[10px] text-[#94A3B8]">Fecha de encasetamiento</span>
-            <input type="date" value={md.fechaEncasetamiento ?? ""} onChange={e => setMortMeta({ fechaEncasetamiento: e.target.value })} className={INP} /></label>
         </div>
-        {faltaCabecera && <p className="text-[10px] text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Selecciona Granja y Lote para cargar los galpones y las aves ingresadas desde el módulo Lotes.</p>}
+        {faltaCabecera && <p className="text-[10px] text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Selecciona la Granja; luego agrega los galpones y registra en cada uno su lote, su fecha de encasetamiento y las aves ingresadas.</p>}
 
         {/* Selector de galpón (pills) + agregar galpón manual */}
         {(galponesEf.length > 0 || !faltaCabecera) && (
@@ -217,7 +198,9 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
               <span className="text-[11px] text-[#94A3B8] shrink-0">Galpón</span>
               <input value={gAct.galpon} onChange={e => editGalpon(gi, { galpon: e.target.value })} className={INP + " max-w-[80px]"} />
               <span className="text-[11px] text-[#94A3B8] shrink-0 ml-2">Lote</span>
-              <input value={gAct.lote ?? ""} onChange={e => editGalpon(gi, { lote: e.target.value })} placeholder={md.loteCodigo || "N° de lote"} className={INP + " max-w-[110px]"} title="Número de lote de este galpón (editable para trazabilidad)" />
+              <input value={gAct.lote ?? ""} onChange={e => editGalpon(gi, { lote: e.target.value })} placeholder="N° de lote" className={INP + " max-w-[110px]"} title="Número de lote de este galpón (editable para trazabilidad)" />
+              <span className="text-[11px] text-[#94A3B8] shrink-0 ml-2">Fecha encas.</span>
+              <input type="date" value={gAct.fechaEncasetamiento ?? ""} onChange={e => editGalpon(gi, { fechaEncasetamiento: e.target.value })} className={INP + " max-w-[150px]"} title="Fecha de encasetamiento de este galpón; las fechas de la tabla se calculan desde aquí" />
               <span className="text-[11px] text-[#94A3B8] shrink-0 ml-2">Aves ingresadas</span>
               <input type="number" step="any" value={gAct.avesIngresadas || ""} onChange={e => editGalpon(gi, { avesIngresadas: num(e.target.value) })} placeholder={avesLote > 0 ? String(avesLote) : "Ej: 7500"} className={INP + " max-w-[130px]"} />
               {avesLote > 0 && num(gAct.avesIngresadas) !== avesLote && <button type="button" onClick={() => editGalpon(gi, { avesIngresadas: avesLote })} className="px-2 py-1 rounded text-[10px] bg-[#1A2540] text-[#4A7AFF] hover:bg-[#22304d]">Usar Lotes ({fmt(avesLote)})</button>}
@@ -241,7 +224,7 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
                       return (
                         <tr key={d.dia} className={`border-t border-[#1E2D4A] ${excede ? "bg-[#EF4444]/10" : ""}`}>
                           <td className="px-2 py-1 text-[#94A3B8] whitespace-nowrap">Día {d.diaGlobal}</td>
-                          <td className="px-2 py-1 text-[#64748B] whitespace-nowrap">{fechaDia(d.diaGlobal)}</td>
+                          <td className="px-2 py-1 text-[#64748B] whitespace-nowrap">{fechaDia(d.diaGlobal, gAct.fechaEncasetamiento)}</td>
                           <td className="px-2 py-1"><input type="number" step="any" value={gAct.semanas[sem.semana - 1][d.dia - 1] ?? ""} onChange={e => setGalponDia(gi, sem.semana - 1, d.dia - 1, e.target.value)} className={INP + (excede ? " border-[#EF4444]" : "")} /></td>
                           <td className="px-2 py-1 text-[#22C55E] font-semibold">{fmt(d.totalAcumulado)}</td>
                           <td className="px-2 py-1">{pctDia === null ? "—" : pctDia.toFixed(2) + "%"}</td>
