@@ -6,13 +6,13 @@
 import { useState } from "react";
 import { Plus, Trash2, AlertTriangle } from "lucide-react";
 import {
-  AnexosTecnicos, TotalBultosBloque, type GalponMortalidad,
+  AnexosTecnicos, TotalBultosBloque, type GalponMortalidad, type GalponBultos,
   difConteoPicos, totalRecepcion, totalInvBultos, pesoTotalIngreso,
   subtotalBloque, cantidadBloque, totalGeneralBultos,
   totalReporteConteo, totalReporteFisico, faltanteConciliacion, totalMortalidadAves, difConteoMortalidad,
   totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalInventarioBultosSolo, totalInventarioLonas, totalBultosConsumidos, totalKgConsumidos,
   pctMortalidad, avesRecibidasTotal, num, consolidarGalpones,
-  calcMortalidadDiaria, calcBultosConsumidos,
+  calcMortalidadDiaria, calcBultosConsumidos, consolidarGalponesBultos, bultosPorGalpon,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
 } from "@/lib/anexos-tecnicos";
 import { ResumenEjecutivoPanel } from "./resumen-ejecutivo-panel";
@@ -138,7 +138,19 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
   // ── Pestaña 7: Bultos Consumidos ──
   const bc: any = value.registroBultosConsumidos;
   const setBC = (patch: any) => set({ registroBultosConsumidos: { ...bc, ...patch } });
-  const setBCDia = (w: number, d: number, v: string) => setBC({ semanas: bc.semanas.map((sem: any[], wi: number) => wi === w ? sem.map((c, di) => di === d ? v : c) : sem) });
+  // Detalle de bultos POR galpón (mismos galpones que Mortalidad Diaria). `semanas` consolidadas = Σ (informes).
+  const bcGalpones: GalponBultos[] = Array.isArray(bc.galpones) ? bc.galpones : [];
+  const bcSemanasDe = (galpon: string): any[][] => bcGalpones.find((g: GalponBultos) => g.galpon === galpon)?.semanas ?? [];
+  const setBcGalpon = (galpon: string, semanas: any[][]) => {
+    const gs = bcGalpones.some((g: GalponBultos) => g.galpon === galpon)
+      ? bcGalpones.map((g: GalponBultos) => g.galpon === galpon ? { galpon, semanas } : g)
+      : [...bcGalpones, { galpon, semanas }];
+    set({ registroBultosConsumidos: { ...bc, galpones: gs, ...consolidarGalponesBultos(gs) } });
+  };
+  const setBcGalponDia = (galpon: string, w: number, d: number, v: string) => {
+    const cur = bcSemanasDe(galpon);
+    setBcGalpon(galpon, cur.map((sem, wi) => wi === w ? sem.map((c, di) => di === d ? v : c) : sem));
+  };
   const nuevaSemana = () => ["", "", "", "", "", "", ""];
 
   // Bloque semanal reutilizable (encabezado + botón eliminar). Se llama como función (foco estable).
@@ -278,54 +290,116 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
   }
 
   function BultosConsumidosTab() {
-    const calc = calcBultosConsumidos(bc, md, avesRecibidasTotal(value));
-    const sinBase = num(md.avesIniciales) <= 0 && avesRecibidasTotal(value) <= 0;
+    const kgBulto = num(bc.kgPorBulto) || 40;
+    const calc = calcBultosConsumidos(bc, md, avesRecibidasTotal(value));   // consolidado (todos los galpones)
+    const porGalpon = bultosPorGalpon(bc, md);                              // desglose por galpón
+    const gi = Math.min(galponActivo, Math.max(0, galponesEf.length - 1));
+    const gAct = galponesEf[gi];                                            // identidad del galpón (desde Mortalidad Diaria)
+    const bSem = gAct ? bcSemanasDe(gAct.galpon) : [];
+    const gCalc = gAct ? calcBultosConsumidos({ kgPorBulto: kgBulto, semanas: bSem }, { avesIniciales: num(gAct.avesIngresadas), semanas: gAct.semanas }, num(gAct.avesIngresadas)) : null;
     return (
       <div className="space-y-3">
+        {/* Config kg/bulto */}
         <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] text-[#94A3B8] shrink-0">Kg por bulto</span>
             <input type="number" step="any" value={bc.kgPorBulto ?? ""} onChange={e => setBC({ kgPorBulto: e.target.value })} placeholder="40" className={INP + " max-w-[120px]"} />
-            <span className="text-[10px] text-[#475569]">Consumo/ave = (bultos × kg) ÷ saldo de aves vivas del día</span>
+            <span className="text-[10px] text-[#475569]">Consumo/ave = (bultos × kg) ÷ saldo de aves vivas del día · POR galpón</span>
           </div>
-          {sinBase && <p className="text-[10px] text-amber-400 mt-1.5">Define las aves iniciales (pestaña Mortalidad Diaria) o registra la recepción de aves para calcular el consumo por ave.</p>}
         </div>
-        {bc.semanas.length === 0 && <p className="text-[11px] text-[#475569]">Sin semanas. Usa "Agregar semana".</p>}
-        {calc.semanas.map(sem => SemanaCard(sem.semana, `Semana ${sem.semana}`,
-          () => setBC({ semanas: bc.semanas.filter((_: any, wi: number) => wi !== sem.semana - 1) }),
-          <div className="overflow-x-auto rounded border border-[#1E2D4A]">
-            <table className="w-full text-xs">
-              <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
-                <th className="px-2 py-1 text-left">Día</th><th className="px-2 py-1 text-left">Bultos</th>
-                <th className="px-2 py-1 text-left">Acumulado</th><th className="px-2 py-1 text-left">Saldo aves</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th>
-              </tr></thead>
-              <tbody>
-                {sem.dias.map(d => (
-                  <tr key={d.dia} className="border-t border-[#1E2D4A]">
-                    <td className="px-2 py-1 text-[#94A3B8]">Día {d.diaGlobal}</td>
-                    <td className="px-2 py-1"><input type="number" step="any" value={bc.semanas[sem.semana - 1][d.dia - 1] ?? ""} onChange={e => setBCDia(sem.semana - 1, d.dia - 1, e.target.value)} className={INP} /></td>
-                    <td className="px-2 py-1 text-[#22C55E] font-semibold">{fmt(d.totalAcumulado)}</td>
-                    <td className="px-2 py-1">{d.saldoVivo > 0 ? fmt(d.saldoVivo) : "—"}</td>
-                    <td className="px-2 py-1 text-[#8B5CF6] font-semibold">{d.consumoAveDia === null ? "—" : fmt(d.consumoAveDia)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot><tr className="border-t border-[#2A3F6A] bg-[#0A111F]">
-                <td className="px-2 py-1 text-right font-semibold text-[#94A3B8]">Total semana</td>
-                <td className="px-2 py-1 font-bold text-[#22C55E]">{fmt(sem.totalBultos)}</td>
-                <td className="px-2 py-1"></td>
-                <td className="px-2 py-1 font-bold" colSpan={2}>Sem/ave: {sem.consumoSemanalAve === null ? "—" : fmt(sem.consumoSemanalAve)} kg · Acum/ave: {sem.consumoAcumuladoAve === null ? "—" : fmt(sem.consumoAcumuladoAve)} kg</td>
-              </tr></tfoot>
-            </table>
+
+        {galponesEf.length === 0 && <p className="text-[10px] text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Registra primero los galpones en la pestaña <b>Mortalidad Diaria</b> (galpón, aves ingresadas y mortalidad); los bultos consumidos se registran por esos mismos galpones.</p>}
+
+        {/* Selector de galpón (pills) */}
+        {galponesEf.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {galponesEf.map((g, i) => {
+              const c = calcBultosConsumidos({ kgPorBulto: kgBulto, semanas: bcSemanasDe(g.galpon) }, { avesIniciales: num(g.avesIngresadas), semanas: g.semanas }, num(g.avesIngresadas));
+              const activo = i === gi;
+              return (
+                <button key={i} type="button" onClick={() => setGalponActivo(i)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] border ${activo ? "bg-[#1A2540] border-[#4A7AFF] text-white" : "bg-[#0A111F] border-[#1E2D4A] text-[#94A3B8] hover:border-[#2A3F6A]"}`}>
+                  Galpón {g.galpon}{c.totalBultos > 0 && <span className="text-[#8B5CF6]"> · {fmt(c.totalBultos)} bultos</span>}
+                </button>
+              );
+            })}
           </div>
-        ))}
-        <button type="button" onClick={() => setBC({ semanas: [...bc.semanas, nuevaSemana()] })} className="px-3 py-1.5 rounded-lg text-xs bg-[#1A2540] text-white flex items-center gap-1.5 hover:bg-[#22304d]"><Plus className="w-3.5 h-3.5" />Agregar semana</button>
+        )}
+
+        {/* Panel del galpón activo */}
+        {gAct && gCalc && (
+          <div className="rounded-lg border border-[#1E2D4A] p-3 space-y-2">
+            {/* Trazabilidad del galpón (solo lectura, desde Mortalidad Diaria) */}
+            <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px]">
+              <span className="text-[#94A3B8]">Galpón <b className="text-white">{gAct.galpon}</b></span>
+              <span className="text-[#94A3B8]">Lote <b className="text-white">{gAct.lote || "—"}</b></span>
+              <span className="text-[#94A3B8]">Fecha encas. <b className="text-white">{gAct.fechaEncasetamiento || "—"}</b></span>
+              <span className="text-[#94A3B8]">Aves recibidas <b className="text-white">{num(gAct.avesIngresadas) > 0 ? fmt(gAct.avesIngresadas) : "—"}</b></span>
+            </div>
+            {num(gAct.avesIngresadas) <= 0 && <p className="text-[10px] text-amber-400">Este galpón no tiene aves ingresadas en Mortalidad Diaria; el consumo por ave no se podrá calcular.</p>}
+
+            {bSem.length === 0 && <p className="text-[11px] text-[#475569]">Sin semanas. Usa "Agregar semana".</p>}
+            {gCalc.semanas.map(sem => SemanaCard(`bc-${gi}-${sem.semana}`, `Semana ${sem.semana}`,
+              () => setBcGalpon(gAct.galpon, bSem.filter((_, wi) => wi !== sem.semana - 1)),
+              <div className="overflow-x-auto rounded border border-[#1E2D4A]">
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
+                    <th className="px-2 py-1 text-left">Día</th><th className="px-2 py-1 text-left">Bultos</th>
+                    <th className="px-2 py-1 text-left">Acumulado</th><th className="px-2 py-1 text-left">Saldo aves</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th>
+                  </tr></thead>
+                  <tbody>
+                    {sem.dias.map(d => (
+                      <tr key={d.dia} className="border-t border-[#1E2D4A]">
+                        <td className="px-2 py-1 text-[#94A3B8]">Día {d.diaGlobal}</td>
+                        <td className="px-2 py-1"><input type="number" step="any" value={bSem[sem.semana - 1][d.dia - 1] ?? ""} onChange={e => setBcGalponDia(gAct.galpon, sem.semana - 1, d.dia - 1, e.target.value)} className={INP} /></td>
+                        <td className="px-2 py-1 text-[#22C55E] font-semibold">{fmt(d.totalAcumulado)}</td>
+                        <td className="px-2 py-1">{d.saldoVivo > 0 ? fmt(d.saldoVivo) : "—"}</td>
+                        <td className="px-2 py-1 text-[#8B5CF6] font-semibold">{d.consumoAveDia === null ? "—" : fmt(d.consumoAveDia)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot><tr className="border-t border-[#2A3F6A] bg-[#0A111F]">
+                    <td className="px-2 py-1 text-right font-semibold text-[#94A3B8]">Total semana</td>
+                    <td className="px-2 py-1 font-bold text-[#22C55E]">{fmt(sem.totalBultos)}</td>
+                    <td className="px-2 py-1"></td>
+                    <td className="px-2 py-1 font-bold" colSpan={2}>Sem/ave: {sem.consumoSemanalAve === null ? "—" : fmt(sem.consumoSemanalAve)} kg · Acum/ave: {sem.consumoAcumuladoAve === null ? "—" : fmt(sem.consumoAcumuladoAve)} kg</td>
+                  </tr></tfoot>
+                </table>
+              </div>
+            ))}
+            <button type="button" onClick={() => setBcGalpon(gAct.galpon, [...bSem, nuevaSemana()])} className="px-3 py-1.5 rounded-lg text-xs bg-[#1A2540] text-white flex items-center gap-1.5 hover:bg-[#22304d]"><Plus className="w-3.5 h-3.5" />Agregar semana</button>
+          </div>
+        )}
+
+        {/* Consolidado + desglose por galpón */}
         {calc.semanas.length > 0 && (
-          <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 grid grid-cols-3 gap-2 text-center">
-            <div><div className="text-[10px] text-[#94A3B8]">Total bultos</div><div className="text-sm font-bold text-[#4A7AFF]">{fmt(calc.totalBultos)}</div></div>
-            <div><div className="text-[10px] text-[#94A3B8]">Total kg</div><div className="text-sm font-bold text-[#0EA5E9]">{fmt(calc.totalKg)}</div></div>
-            <div><div className="text-[10px] text-[#94A3B8]">Consumo/ave (kg)</div><div className="text-sm font-bold text-[#8B5CF6]">{calc.consumoAcumuladoAveFinal === null ? "—" : fmt(calc.consumoAcumuladoAveFinal)}</div></div>
-          </div>
+          <>
+            <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 grid grid-cols-3 gap-2 text-center">
+              <div><div className="text-[10px] text-[#94A3B8]">Total bultos (granja)</div><div className="text-sm font-bold text-[#4A7AFF]">{fmt(calc.totalBultos)}</div></div>
+              <div><div className="text-[10px] text-[#94A3B8]">Total kg</div><div className="text-sm font-bold text-[#0EA5E9]">{fmt(calc.totalKg)}</div></div>
+              <div><div className="text-[10px] text-[#94A3B8]">Consumo/ave (kg)</div><div className="text-sm font-bold text-[#8B5CF6]">{calc.consumoAcumuladoAveFinal === null ? "—" : fmt(calc.consumoAcumuladoAveFinal)}</div></div>
+            </div>
+            {porGalpon.length > 1 && (
+              <div className="overflow-x-auto rounded-lg border border-[#1E2D4A]">
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
+                    <th className="px-2 py-1 text-left">Galpón</th><th className="px-2 py-1 text-left">Aves recibidas</th><th className="px-2 py-1 text-left">Bultos</th><th className="px-2 py-1 text-left">Kg</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th>
+                  </tr></thead>
+                  <tbody>
+                    {porGalpon.map((g, i) => (
+                      <tr key={i} className="border-t border-[#1E2D4A]">
+                        <td className="px-2 py-1 text-white">Galpón {g.galpon}</td>
+                        <td className="px-2 py-1">{g.aves > 0 ? fmt(g.aves) : "—"}</td>
+                        <td className="px-2 py-1 text-[#22C55E] font-semibold">{fmt(g.totalBultos)}</td>
+                        <td className="px-2 py-1 text-[#0EA5E9]">{fmt(g.totalKg)}</td>
+                        <td className="px-2 py-1 text-[#8B5CF6] font-semibold">{g.consumoAve === null ? "—" : fmt(g.consumoAve)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
         <ResumenEjecutivoPanel resumen={safeResumen(() => resumenBultosConsumidos(bc, md, avesRecibidasTotal(value)))} />
       </div>
