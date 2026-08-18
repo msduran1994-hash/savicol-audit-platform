@@ -23,9 +23,9 @@ export interface TotalBultos        { bloques: TotalBultosBloque[]; diferencias:
 export interface BitacoraIngresoRow { fecha: string; responsable: string; }
 // Registro de Colaboradores (sección aparte del hallazgo).
 export interface RegistroColaboradorRow { nombre: string; cargo: string; }
-// Un galpón dentro del lote: aves ingresadas (desde el módulo Lotes, editables) + su mortalidad
-// diaria en bloques semanales de 7 días (semanas ilimitadas).
-export interface GalponMortalidad { galpon: string; avesIngresadas: number; semanas: number[][]; }
+// Un galpón dentro del lote: nº de lote (editable manualmente para trazabilidad), aves ingresadas
+// (desde el módulo Lotes, editables) + su mortalidad diaria en bloques semanales de 7 días (ilimitadas).
+export interface GalponMortalidad { galpon: string; lote?: string; avesIngresadas: number; semanas: number[][]; }
 // Registro Mortalidad Diaria — trazable por lote/galpón (granja+lote+fecha de encasetamiento).
 // `avesIniciales` y `semanas` son el CONSOLIDADO (suma entre galpones) que consumen los informes
 // existentes sin cambios; `galpones` es el detalle por galpón (trazabilidad y "Mortalidad por Galpón").
@@ -94,7 +94,7 @@ function parseSemanas(v: any): number[][] {
 function parseMortalidad(p: any): RegistroMortalidadDiaria {
   if (!p) return { avesIniciales: 0, semanas: [] };
   const galpones = Array.isArray(p.galpones)
-    ? p.galpones.map((g: any) => ({ galpon: String(g?.galpon ?? ""), avesIngresadas: num(g?.avesIngresadas), semanas: parseSemanas(g?.semanas) }))
+    ? p.galpones.map((g: any) => ({ galpon: String(g?.galpon ?? ""), lote: typeof g?.lote === "string" ? g.lote : undefined, avesIngresadas: num(g?.avesIngresadas), semanas: parseSemanas(g?.semanas) }))
     : undefined;
   const meta = { granjaId: typeof p.granjaId === "string" ? p.granjaId : undefined,
                  loteCodigo: typeof p.loteCodigo === "string" ? p.loteCodigo : undefined,

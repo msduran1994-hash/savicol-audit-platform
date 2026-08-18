@@ -135,7 +135,7 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
     const nuevos: GalponMortalidad[] = recs.map(r => {
       const gp = String(r.data.galponPrincipal || "").trim() || "—";
       const ex = prev.get(gp);
-      return { galpon: gp, avesIngresadas: ex && num(ex.avesIngresadas) > 0 ? ex.avesIngresadas : num(r.data.avesIngreso), semanas: ex?.semanas ?? [] };
+      return { galpon: gp, lote: ex?.lote ?? loteCodigo, avesIngresadas: ex && num(ex.avesIngresadas) > 0 ? ex.avesIngresadas : num(r.data.avesIngreso), semanas: ex?.semanas ?? [] };
     });
     set({ registroMortalidadDiaria: { ...md, granjaId, loteCodigo, fechaEncasetamiento: fecha, ...consolidarGalpones(nuevos), galpones: nuevos } });
   };
@@ -215,7 +215,9 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
           <div className="rounded-lg border border-[#1E2D4A] p-3 space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[11px] text-[#94A3B8] shrink-0">Galpón</span>
-              <input value={gAct.galpon} onChange={e => editGalpon(gi, { galpon: e.target.value })} className={INP + " max-w-[90px]"} />
+              <input value={gAct.galpon} onChange={e => editGalpon(gi, { galpon: e.target.value })} className={INP + " max-w-[80px]"} />
+              <span className="text-[11px] text-[#94A3B8] shrink-0 ml-2">Lote</span>
+              <input value={gAct.lote ?? ""} onChange={e => editGalpon(gi, { lote: e.target.value })} placeholder={md.loteCodigo || "N° de lote"} className={INP + " max-w-[110px]"} title="Número de lote de este galpón (editable para trazabilidad)" />
               <span className="text-[11px] text-[#94A3B8] shrink-0 ml-2">Aves ingresadas</span>
               <input type="number" step="any" value={gAct.avesIngresadas || ""} onChange={e => editGalpon(gi, { avesIngresadas: num(e.target.value) })} placeholder={avesLote > 0 ? String(avesLote) : "Ej: 7500"} className={INP + " max-w-[130px]"} />
               {avesLote > 0 && num(gAct.avesIngresadas) !== avesLote && <button type="button" onClick={() => editGalpon(gi, { avesIngresadas: avesLote })} className="px-2 py-1 rounded text-[10px] bg-[#1A2540] text-[#4A7AFF] hover:bg-[#22304d]">Usar Lotes ({fmt(avesLote)})</button>}
