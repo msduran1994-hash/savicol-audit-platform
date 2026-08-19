@@ -53,7 +53,7 @@ export function consolidarGalpones(galpones: GalponMortalidad[]): { avesIniciale
 // Bultos Consumidos por Día — mismos bloques semanales; consumo/ave en kg (kgPorBulto config., def. 40).
 // `semanas` es el CONSOLIDADO (Σ entre galpones) que consumen los informes; `galpones` es el detalle
 // por galpón (mismos galpones que Mortalidad Diaria) para validar el consumo de bultos POR galpón.
-export interface GalponBultos { galpon: string; semanas: number[][]; }
+export interface GalponBultos { galpon: string; avesEncasetadas: number; fechaEncasetamiento?: string; semanas: number[][]; }
 export interface RegistroBultosConsumidos { kgPorBulto: number; semanas: number[][]; galpones?: GalponBultos[]; }
 // Suma los bultos de todos los galpones alineando por índice de semana/día (serie consolidada para informes).
 export function consolidarGalponesBultos(galpones: GalponBultos[]): { semanas: number[][] } {
@@ -125,7 +125,7 @@ function parseMortalidad(p: any): RegistroMortalidadDiaria {
 function parseBultosConsumidos(p: any): RegistroBultosConsumidos {
   const kgPorBulto = num(p?.kgPorBulto) || 40;
   const galpones = Array.isArray(p?.galpones)
-    ? p.galpones.map((g: any) => ({ galpon: String(g?.galpon ?? ""), semanas: parseSemanas(g?.semanas) }))
+    ? p.galpones.map((g: any) => ({ galpon: String(g?.galpon ?? ""), avesEncasetadas: num(g?.avesEncasetadas), fechaEncasetamiento: typeof g?.fechaEncasetamiento === "string" ? g.fechaEncasetamiento : undefined, semanas: parseSemanas(g?.semanas) }))
     : undefined;
   if (galpones && galpones.length) return { kgPorBulto, ...consolidarGalponesBultos(galpones), galpones };
   return { kgPorBulto, semanas: parseSemanas(p?.semanas) };
@@ -178,7 +178,7 @@ export function anexosTienenDatos(a: AnexosTecnicos): boolean {
     a.bitacoraIngreso.length > 0 ||
     a.registroColaboradores.length > 0 ||
     registroMortalidadTieneDatos(a.registroMortalidadDiaria) ||
-    a.registroBultosConsumidos.semanas.some(w => w.length > 0);
+    registroBultosTieneDatos(a.registroBultosConsumidos);
 }
 
 // ¿Hay datos en la mortalidad diaria? (aves iniciales o alguna semana con días)
@@ -186,6 +186,13 @@ export function registroMortalidadTieneDatos(r?: RegistroMortalidadDiaria): bool
   if (!r) return false;
   if (r.galpones?.some(g => num(g.avesIngresadas) > 0 || (g.semanas || []).some(w => w.length > 0))) return true;
   return num(r.avesIniciales) > 0 || (r.semanas || []).some(w => w.length > 0);
+}
+
+// ¿Hay datos en bultos consumidos? (aves encasetadas/fecha por galpón, o alguna semana con bultos)
+export function registroBultosTieneDatos(r?: RegistroBultosConsumidos): boolean {
+  if (!r) return false;
+  if (r.galpones?.some(g => num(g.avesEncasetadas) > 0 || !!g.fechaEncasetamiento || (g.semanas || []).some(w => w.length > 0))) return true;
+  return (r.semanas || []).some(w => w.length > 0);
 }
 
 // ─── Cálculos automáticos ──────────────────────────────────────────────────────
@@ -289,12 +296,16 @@ export interface BultoDiaCalc    { semana: number; dia: number; diaGlobal: numbe
 export interface BultoSemanaCalc { semana: number; totalBultos: number; consumoSemanalAve: number | null; consumoAcumuladoAve: number | null; dias: BultoDiaCalc[]; }
 export interface BultosConsumidosCalc { kgPorBulto: number; totalBultos: number; totalKg: number; consumoAcumuladoAveFinal: number | null; semanas: BultoSemanaCalc[]; }
 
-// Consumo por ave (kg) = (bultos × kgPorBulto) ÷ saldo de aves vivas del día.
-// La base de aves = saldo vivo (mortalidad diaria); si esa pestaña está vacía usa `avesFallback`.
+// Consumo por ave (kg) = (bultos × kgPorBulto) ÷ base de aves del día.
+// Base de aves: si el registro de bultos trae aves ENCASETADAS por galpón (registro manual e
+// INDEPENDIENTE de la mortalidad), se usan como base CONSTANTE (Σ, sin descontar mortalidad); si no,
+// cae al saldo vivo de la mortalidad diaria (retrocompatible) y, si esa pestaña está vacía, `avesFallback`.
 export function calcBultosConsumidos(r: RegistroBultosConsumidos, mort: RegistroMortalidadDiaria, avesFallback: number): BultosConsumidosCalc {
   const kgPorBulto = num(r?.kgPorBulto) || 40;
-  const avesIni = num(mort?.avesIniciales) > 0 ? num(mort.avesIniciales) : num(avesFallback);
-  const saldos = saldoVivoPorDia(mort);
+  const avesEnc = (r?.galpones || []).reduce((s, g) => s + num(g.avesEncasetadas), 0);
+  const usaEnc = avesEnc > 0;                                    // aves encasetadas del propio registro (independiente)
+  const avesIni = usaEnc ? avesEnc : (num(mort?.avesIniciales) > 0 ? num(mort.avesIniciales) : num(avesFallback));
+  const saldos = usaEnc ? [] : saldoVivoPorDia(mort);            // con aves encasetadas la base es CONSTANTE (sin mortalidad)
   const saldoAt = (idx: number): number => saldos.length > idx ? saldos[idx] : (saldos.length ? saldos[saldos.length - 1] : avesIni);
   let acumBultos = 0, g = 0;
   const semanas: BultoSemanaCalc[] = (r?.semanas || []).map((w, wi) => {
@@ -311,19 +322,17 @@ export function calcBultosConsumidos(r: RegistroBultosConsumidos, mort: Registro
   return { kgPorBulto, totalBultos: acumBultos, totalKg: acumBultos * kgPorBulto, consumoAcumuladoAveFinal: saldoFinal > 0 ? (acumBultos * kgPorBulto) / saldoFinal : null, semanas };
 }
 
-// Bultos consumidos por galpón (para validar el consumo POR galpón). Empareja el detalle de bultos
-// con el galpón de Mortalidad Diaria (mismo nombre) para tomar sus aves + saldo vivo por día.
+// Bultos consumidos por galpón (para validar el consumo POR galpón). Registro INDEPENDIENTE: cada
+// galpón lleva sus propias aves encasetadas (base constante del consumo por ave) y su serie de bultos.
 export interface BultoGalponResumen { galpon: string; aves: number; totalBultos: number; totalKg: number; consumoAve: number | null; dias: number; }
-export function bultosPorGalpon(bc?: RegistroBultosConsumidos, mort?: RegistroMortalidadDiaria): BultoGalponResumen[] {
-  if (!mort?.galpones?.length) return [];
-  const kgPorBulto = num(bc?.kgPorBulto) || 40;
-  const mapBultos = new Map((bc?.galpones || []).map(g => [g.galpon, g.semanas] as const));
-  return mort.galpones.map(gm => {
-    const aves = num(gm.avesIngresadas);
-    const semanas = mapBultos.get(gm.galpon) || [];
-    const c = calcBultosConsumidos({ kgPorBulto, semanas }, { avesIniciales: aves, semanas: gm.semanas }, aves);
-    const dias = semanas.reduce((s, w) => s + (w || []).filter(v => String(v ?? "").trim() !== "").length, 0);
-    return { galpon: gm.galpon || "—", aves, totalBultos: c.totalBultos, totalKg: c.totalKg, consumoAve: c.consumoAcumuladoAveFinal, dias };
+export function bultosPorGalpon(bc?: RegistroBultosConsumidos): BultoGalponResumen[] {
+  if (!bc?.galpones?.length) return [];
+  const kgPorBulto = num(bc.kgPorBulto) || 40;
+  return bc.galpones.map(g => {
+    const aves = num(g.avesEncasetadas);
+    const c = calcBultosConsumidos({ kgPorBulto, semanas: g.semanas }, { avesIniciales: 0, semanas: [] }, aves);
+    const dias = (g.semanas || []).reduce((s, w) => s + (w || []).filter(v => String(v ?? "").trim() !== "").length, 0);
+    return { galpon: g.galpon || "—", aves, totalBultos: c.totalBultos, totalKg: c.totalKg, consumoAve: c.consumoAcumuladoAveFinal, dias };
   });
 }
 

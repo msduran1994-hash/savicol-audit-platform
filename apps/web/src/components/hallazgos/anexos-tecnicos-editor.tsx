@@ -43,6 +43,7 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
 }) {
   const [tab, setTab] = useState<TabKey>("actaConteoPicos");
   const [galponActivo, setGalponActivo] = useState(0);
+  const [bcGalponActivo, setBcGalponActivo] = useState(0);
   const lotesQ = useLotes();
   const set = (patch: Partial<AnexosTecnicos>) => onChange({ ...value, ...patch });
 
@@ -138,19 +139,17 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
   // ── Pestaña 7: Bultos Consumidos ──
   const bc: any = value.registroBultosConsumidos;
   const setBC = (patch: any) => set({ registroBultosConsumidos: { ...bc, ...patch } });
-  // Detalle de bultos POR galpón (mismos galpones que Mortalidad Diaria). `semanas` consolidadas = Σ (informes).
-  const bcGalpones: GalponBultos[] = Array.isArray(bc.galpones) ? bc.galpones : [];
-  const bcSemanasDe = (galpon: string): any[][] => bcGalpones.find((g: GalponBultos) => g.galpon === galpon)?.semanas ?? [];
-  const setBcGalpon = (galpon: string, semanas: any[][]) => {
-    const gs = bcGalpones.some((g: GalponBultos) => g.galpon === galpon)
-      ? bcGalpones.map((g: GalponBultos) => g.galpon === galpon ? { galpon, semanas } : g)
-      : [...bcGalpones, { galpon, semanas }];
-    set({ registroBultosConsumidos: { ...bc, galpones: gs, ...consolidarGalponesBultos(gs) } });
-  };
-  const setBcGalponDia = (galpon: string, w: number, d: number, v: string) => {
-    const cur = bcSemanasDe(galpon);
-    setBcGalpon(galpon, cur.map((sem, wi) => wi === w ? sem.map((c, di) => di === d ? v : c) : sem));
-  };
+  // Detalle de bultos POR galpón — registro INDEPENDIENTE (cada galpón lleva sus aves encasetadas +
+  // fecha de encasetamiento + su serie de bultos). `semanas` a nivel registro = CONSOLIDADO (Σ) para
+  // los informes. Migra registros planos antiguos con datos a un galpón "General".
+  const bcGalponesEf: GalponBultos[] = (Array.isArray(bc.galpones) && bc.galpones.length)
+    ? bc.galpones
+    : ((bc.semanas || []).some((w: any[]) => (w || []).some((v: any) => String(v ?? "").trim() !== ""))
+        ? [{ galpon: "General", avesEncasetadas: 0, semanas: bc.semanas }]
+        : []);
+  const setBcGalpones = (gs: GalponBultos[]) => set({ registroBultosConsumidos: { ...bc, ...consolidarGalponesBultos(gs), galpones: gs } });
+  const editBcGalpon = (gi: number, patch: any) => setBcGalpones(bcGalponesEf.map((g, i) => i === gi ? { ...g, ...patch } : g));
+  const setBcGalponDia = (gi: number, w: number, d: number, v: string) => editBcGalpon(gi, { semanas: bcGalponesEf[gi].semanas.map((sem: any[], wi: number) => wi === w ? sem.map((c: any, di: number) => di === d ? v : c) : sem) });
   const nuevaSemana = () => ["", "", "", "", "", "", ""];
 
   // Bloque semanal reutilizable (encabezado + botón eliminar). Se llama como función (foco estable).
@@ -291,12 +290,12 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
 
   function BultosConsumidosTab() {
     const kgBulto = num(bc.kgPorBulto) || 40;
-    const calc = calcBultosConsumidos(bc, md, avesRecibidasTotal(value));   // consolidado (todos los galpones)
-    const porGalpon = bultosPorGalpon(bc, md);                              // desglose por galpón
-    const gi = Math.min(galponActivo, Math.max(0, galponesEf.length - 1));
-    const gAct = galponesEf[gi];                                            // identidad del galpón (desde Mortalidad Diaria)
-    const bSem = gAct ? bcSemanasDe(gAct.galpon) : [];
-    const gCalc = gAct ? calcBultosConsumidos({ kgPorBulto: kgBulto, semanas: bSem }, { avesIniciales: num(gAct.avesIngresadas), semanas: gAct.semanas }, num(gAct.avesIngresadas)) : null;
+    const mortVacia = { avesIniciales: 0, semanas: [] };                    // registro independiente: base = aves encasetadas
+    const calc = calcBultosConsumidos(bc, mortVacia, 0);                    // consolidado (Σ galpones)
+    const porGalpon = bultosPorGalpon(bc);                                  // desglose por galpón
+    const gi = Math.min(bcGalponActivo, Math.max(0, bcGalponesEf.length - 1));
+    const gAct = bcGalponesEf[gi];
+    const gCalc = gAct ? calcBultosConsumidos({ kgPorBulto: kgBulto, semanas: gAct.semanas }, mortVacia, num(gAct.avesEncasetadas)) : null;
     return (
       <div className="space-y-3">
         {/* Config kg/bulto */}
@@ -304,56 +303,56 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] text-[#94A3B8] shrink-0">Kg por bulto</span>
             <input type="number" step="any" value={bc.kgPorBulto ?? ""} onChange={e => setBC({ kgPorBulto: e.target.value })} placeholder="40" className={INP + " max-w-[120px]"} />
-            <span className="text-[10px] text-[#475569]">Consumo/ave = (bultos × kg) ÷ saldo de aves vivas del día · POR galpón</span>
+            <span className="text-[10px] text-[#475569]">Consumo/ave = (bultos × kg) ÷ aves encasetadas del galpón · registro independiente por galpón</span>
           </div>
         </div>
 
-        {galponesEf.length === 0 && <p className="text-[10px] text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Registra primero los galpones en la pestaña <b>Mortalidad Diaria</b> (galpón, aves ingresadas y mortalidad); los bultos consumidos se registran por esos mismos galpones.</p>}
-
-        {/* Selector de galpón (pills) */}
-        {galponesEf.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {galponesEf.map((g, i) => {
-              const c = calcBultosConsumidos({ kgPorBulto: kgBulto, semanas: bcSemanasDe(g.galpon) }, { avesIniciales: num(g.avesIngresadas), semanas: g.semanas }, num(g.avesIngresadas));
-              const activo = i === gi;
-              return (
-                <button key={i} type="button" onClick={() => setGalponActivo(i)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] border ${activo ? "bg-[#1A2540] border-[#4A7AFF] text-white" : "bg-[#0A111F] border-[#1E2D4A] text-[#94A3B8] hover:border-[#2A3F6A]"}`}>
-                  Galpón {g.galpon}{c.totalBultos > 0 && <span className="text-[#8B5CF6]"> · {fmt(c.totalBultos)} bultos</span>}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {/* Selector de galpón (pills) + agregar galpón manual */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {bcGalponesEf.map((g, i) => {
+            const c = calcBultosConsumidos({ kgPorBulto: kgBulto, semanas: g.semanas }, mortVacia, num(g.avesEncasetadas));
+            const activo = i === gi;
+            return (
+              <button key={i} type="button" onClick={() => setBcGalponActivo(i)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] border ${activo ? "bg-[#1A2540] border-[#4A7AFF] text-white" : "bg-[#0A111F] border-[#1E2D4A] text-[#94A3B8] hover:border-[#2A3F6A]"}`}>
+                Galpón {g.galpon || "—"}{c.totalBultos > 0 && <span className="text-[#8B5CF6]"> · {fmt(c.totalBultos)} bultos</span>}
+              </button>
+            );
+          })}
+          <button type="button" onClick={() => { const gs = [...bcGalponesEf, { galpon: String(bcGalponesEf.length + 1), avesEncasetadas: 0, semanas: [] }]; setBcGalpones(gs); setBcGalponActivo(gs.length - 1); }}
+            className="px-2 py-1 rounded-lg text-[11px] bg-[#0A111F] border border-dashed border-[#2A3F6A] text-[#4A7AFF] hover:bg-[#131c30] flex items-center gap-1"><Plus className="w-3 h-3" />Galpón</button>
+        </div>
+        {bcGalponesEf.length === 0 && <p className="text-[10px] text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Agrega un galpón, registra sus <b>aves encasetadas</b> y su <b>fecha de encasetamiento</b>, y captura los bultos consumidos por día/semana.</p>}
 
         {/* Panel del galpón activo */}
         {gAct && gCalc && (
           <div className="rounded-lg border border-[#1E2D4A] p-3 space-y-2">
-            {/* Trazabilidad del galpón (solo lectura, desde Mortalidad Diaria) */}
-            <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px]">
-              <span className="text-[#94A3B8]">Galpón <b className="text-white">{gAct.galpon}</b></span>
-              <span className="text-[#94A3B8]">Lote <b className="text-white">{gAct.lote || "—"}</b></span>
-              <span className="text-[#94A3B8]">Fecha encas. <b className="text-white">{gAct.fechaEncasetamiento || "—"}</b></span>
-              <span className="text-[#94A3B8]">Aves recibidas <b className="text-white">{num(gAct.avesIngresadas) > 0 ? fmt(gAct.avesIngresadas) : "—"}</b></span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] text-[#94A3B8] shrink-0">Galpón</span>
+              <input value={gAct.galpon} onChange={e => editBcGalpon(gi, { galpon: e.target.value })} className={INP + " max-w-[80px]"} />
+              <span className="text-[11px] text-[#94A3B8] shrink-0 ml-2">Aves encasetadas</span>
+              <input type="number" step="any" value={gAct.avesEncasetadas || ""} onChange={e => editBcGalpon(gi, { avesEncasetadas: num(e.target.value) })} placeholder="Ej: 7500" className={INP + " max-w-[130px]"} title="Cantidad de aves encasetadas de este galpón (base del consumo por ave)" />
+              <span className="text-[11px] text-[#94A3B8] shrink-0 ml-2">Fecha encas.</span>
+              <input type="date" value={gAct.fechaEncasetamiento ?? ""} onChange={e => editBcGalpon(gi, { fechaEncasetamiento: e.target.value })} className={INP + " max-w-[150px]"} title="Fecha de encasetamiento de este galpón" />
+              {bcGalponesEf.length > 1 && <button type="button" onClick={() => { setBcGalpones(bcGalponesEf.filter((_, i) => i !== gi)); setBcGalponActivo(0); }} className="ml-auto text-[#94A3B8] hover:text-red-400"><Trash2 className="w-4 h-4" /></button>}
             </div>
-            {num(gAct.avesIngresadas) <= 0 && <p className="text-[10px] text-amber-400">Este galpón no tiene aves ingresadas en Mortalidad Diaria; el consumo por ave no se podrá calcular.</p>}
+            {num(gAct.avesEncasetadas) <= 0 && <p className="text-[10px] text-amber-400">Ingresa las aves encasetadas de este galpón para calcular el consumo por ave.</p>}
 
-            {bSem.length === 0 && <p className="text-[11px] text-[#475569]">Sin semanas. Usa "Agregar semana".</p>}
+            {gAct.semanas.length === 0 && <p className="text-[11px] text-[#475569]">Sin semanas. Usa "Agregar semana".</p>}
             {gCalc.semanas.map(sem => SemanaCard(`bc-${gi}-${sem.semana}`, `Semana ${sem.semana}`,
-              () => setBcGalpon(gAct.galpon, bSem.filter((_, wi) => wi !== sem.semana - 1)),
+              () => editBcGalpon(gi, { semanas: gAct.semanas.filter((_: any, wi: number) => wi !== sem.semana - 1) }),
               <div className="overflow-x-auto rounded border border-[#1E2D4A]">
                 <table className="w-full text-xs">
                   <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
                     <th className="px-2 py-1 text-left">Día</th><th className="px-2 py-1 text-left">Bultos</th>
-                    <th className="px-2 py-1 text-left">Acumulado</th><th className="px-2 py-1 text-left">Saldo aves</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th>
+                    <th className="px-2 py-1 text-left">Acumulado</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th>
                   </tr></thead>
                   <tbody>
                     {sem.dias.map(d => (
                       <tr key={d.dia} className="border-t border-[#1E2D4A]">
                         <td className="px-2 py-1 text-[#94A3B8]">Día {d.diaGlobal}</td>
-                        <td className="px-2 py-1"><input type="number" step="any" value={bSem[sem.semana - 1][d.dia - 1] ?? ""} onChange={e => setBcGalponDia(gAct.galpon, sem.semana - 1, d.dia - 1, e.target.value)} className={INP} /></td>
+                        <td className="px-2 py-1"><input type="number" step="any" value={gAct.semanas[sem.semana - 1][d.dia - 1] ?? ""} onChange={e => setBcGalponDia(gi, sem.semana - 1, d.dia - 1, e.target.value)} className={INP} /></td>
                         <td className="px-2 py-1 text-[#22C55E] font-semibold">{fmt(d.totalAcumulado)}</td>
-                        <td className="px-2 py-1">{d.saldoVivo > 0 ? fmt(d.saldoVivo) : "—"}</td>
                         <td className="px-2 py-1 text-[#8B5CF6] font-semibold">{d.consumoAveDia === null ? "—" : fmt(d.consumoAveDia)}</td>
                       </tr>
                     ))}
@@ -362,12 +361,12 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
                     <td className="px-2 py-1 text-right font-semibold text-[#94A3B8]">Total semana</td>
                     <td className="px-2 py-1 font-bold text-[#22C55E]">{fmt(sem.totalBultos)}</td>
                     <td className="px-2 py-1"></td>
-                    <td className="px-2 py-1 font-bold" colSpan={2}>Sem/ave: {sem.consumoSemanalAve === null ? "—" : fmt(sem.consumoSemanalAve)} kg · Acum/ave: {sem.consumoAcumuladoAve === null ? "—" : fmt(sem.consumoAcumuladoAve)} kg</td>
+                    <td className="px-2 py-1 font-bold">Sem/ave: {sem.consumoSemanalAve === null ? "—" : fmt(sem.consumoSemanalAve)} kg · Acum/ave: {sem.consumoAcumuladoAve === null ? "—" : fmt(sem.consumoAcumuladoAve)} kg</td>
                   </tr></tfoot>
                 </table>
               </div>
             ))}
-            <button type="button" onClick={() => setBcGalpon(gAct.galpon, [...bSem, nuevaSemana()])} className="px-3 py-1.5 rounded-lg text-xs bg-[#1A2540] text-white flex items-center gap-1.5 hover:bg-[#22304d]"><Plus className="w-3.5 h-3.5" />Agregar semana</button>
+            <button type="button" onClick={() => editBcGalpon(gi, { semanas: [...gAct.semanas, nuevaSemana()] })} className="px-3 py-1.5 rounded-lg text-xs bg-[#1A2540] text-white flex items-center gap-1.5 hover:bg-[#22304d]"><Plus className="w-3.5 h-3.5" />Agregar semana</button>
           </div>
         )}
 
@@ -383,7 +382,7 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
               <div className="overflow-x-auto rounded-lg border border-[#1E2D4A]">
                 <table className="w-full text-xs">
                   <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
-                    <th className="px-2 py-1 text-left">Galpón</th><th className="px-2 py-1 text-left">Aves recibidas</th><th className="px-2 py-1 text-left">Bultos</th><th className="px-2 py-1 text-left">Kg</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th>
+                    <th className="px-2 py-1 text-left">Galpón</th><th className="px-2 py-1 text-left">Aves encasetadas</th><th className="px-2 py-1 text-left">Bultos</th><th className="px-2 py-1 text-left">Kg</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th>
                   </tr></thead>
                   <tbody>
                     {porGalpon.map((g, i) => (
@@ -401,7 +400,7 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
             )}
           </>
         )}
-        <ResumenEjecutivoPanel resumen={safeResumen(() => resumenBultosConsumidos(bc, md, avesRecibidasTotal(value)))} />
+        <ResumenEjecutivoPanel resumen={safeResumen(() => resumenBultosConsumidos(bc, { avesIniciales: 0, semanas: [] }, 0))} />
       </div>
     );
   }
