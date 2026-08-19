@@ -53,8 +53,13 @@ export function consolidarGalpones(galpones: GalponMortalidad[]): { avesIniciale
 // Bultos Consumidos por Día — mismos bloques semanales; consumo/ave en kg (kgPorBulto config., def. 40).
 // `semanas` es el CONSOLIDADO (Σ entre galpones) que consumen los informes; `galpones` es el detalle
 // por galpón (mismos galpones que Mortalidad Diaria) para validar el consumo de bultos POR galpón.
-export interface GalponBultos { galpon: string; avesEncasetadas: number; fechaEncasetamiento?: string; semanas: number[][]; }
+export interface GalponBultos { galpon: string; lote?: string; avesEncasetadas: number; saldoMortalidad?: number; fechaEncasetamiento?: string; semanas: number[][]; }
 export interface RegistroBultosConsumidos { kgPorBulto: number; semanas: number[][]; galpones?: GalponBultos[]; }
+// Base de aves para el consumo/ave del galpón: el SALDO de mortalidad transferido (aves vivas) si se
+// registró/editó; si no, las aves encasetadas. Así el consumo por ave y el engorde reflejan las aves reales.
+export const baseAveGalponBultos = (g: GalponBultos): number => num(g.saldoMortalidad) > 0 ? num(g.saldoMortalidad) : num(g.avesEncasetadas);
+// Σ de la base de aves de todos los galpones (consolidado, consumo/ave y resumen).
+export const avesBaseBultos = (bc?: RegistroBultosConsumidos): number => (bc?.galpones || []).reduce((s, g) => s + baseAveGalponBultos(g), 0);
 // Suma los bultos de todos los galpones alineando por índice de semana/día (serie consolidada para informes).
 export function consolidarGalponesBultos(galpones: GalponBultos[]): { semanas: number[][] } {
   const semanas: number[][] = [];
@@ -125,7 +130,7 @@ function parseMortalidad(p: any): RegistroMortalidadDiaria {
 function parseBultosConsumidos(p: any): RegistroBultosConsumidos {
   const kgPorBulto = num(p?.kgPorBulto) || 40;
   const galpones = Array.isArray(p?.galpones)
-    ? p.galpones.map((g: any) => ({ galpon: String(g?.galpon ?? ""), avesEncasetadas: num(g?.avesEncasetadas), fechaEncasetamiento: typeof g?.fechaEncasetamiento === "string" ? g.fechaEncasetamiento : undefined, semanas: parseSemanas(g?.semanas) }))
+    ? p.galpones.map((g: any) => ({ galpon: String(g?.galpon ?? ""), lote: typeof g?.lote === "string" ? g.lote : undefined, avesEncasetadas: num(g?.avesEncasetadas), saldoMortalidad: g?.saldoMortalidad != null && String(g.saldoMortalidad).trim() !== "" ? num(g.saldoMortalidad) : undefined, fechaEncasetamiento: typeof g?.fechaEncasetamiento === "string" ? g.fechaEncasetamiento : undefined, semanas: parseSemanas(g?.semanas) }))
     : undefined;
   if (galpones && galpones.length) return { kgPorBulto, ...consolidarGalponesBultos(galpones), galpones };
   return { kgPorBulto, semanas: parseSemanas(p?.semanas) };
@@ -274,13 +279,13 @@ export function calcMortalidadDiaria(r: RegistroMortalidadDiaria): MortalidadDia
 }
 
 // Mortalidad por galpón (para el desglose de informes). Reutiliza calcMortalidadDiaria por galpón.
-export interface MortGalponResumen { galpon: string; aves: number; total: number; pct: number | null; saldo: number; dias: number; }
+export interface MortGalponResumen { galpon: string; lote?: string; aves: number; total: number; pct: number | null; saldo: number; dias: number; }
 export function mortalidadPorGalpon(r?: RegistroMortalidadDiaria): MortGalponResumen[] {
   if (!r?.galpones?.length) return [];
   return r.galpones.map(g => {
     const c = calcMortalidadDiaria({ avesIniciales: num(g.avesIngresadas), semanas: g.semanas });
     const dias = (g.semanas || []).reduce((s, w) => s + (w || []).filter(v => String(v ?? "").trim() !== "").length, 0);
-    return { galpon: g.galpon || "—", aves: c.aves, total: c.totalGeneral, pct: c.pctAcumuladoFinal, saldo: c.saldoFinal, dias };
+    return { galpon: g.galpon || "—", lote: g.lote, aves: c.aves, total: c.totalGeneral, pct: c.pctAcumuladoFinal, saldo: c.saldoFinal, dias };
   });
 }
 
@@ -304,8 +309,8 @@ export interface BultosConsumidosCalc { kgPorBulto: number; totalBultos: number;
 // cae al saldo vivo de la mortalidad diaria (retrocompatible) y, si esa pestaña está vacía, `avesFallback`.
 export function calcBultosConsumidos(r: RegistroBultosConsumidos, mort: RegistroMortalidadDiaria, avesFallback: number): BultosConsumidosCalc {
   const kgPorBulto = num(r?.kgPorBulto) || 40;
-  const avesEnc = (r?.galpones || []).reduce((s, g) => s + num(g.avesEncasetadas), 0);
-  const usaEnc = avesEnc > 0;                                    // aves encasetadas del propio registro (independiente)
+  const avesEnc = avesBaseBultos(r);                             // saldo de mortalidad transferido si hay; si no, aves encasetadas
+  const usaEnc = avesEnc > 0;                                    // base de aves del propio registro (independiente)
   const avesIni = usaEnc ? avesEnc : (num(mort?.avesIniciales) > 0 ? num(mort.avesIniciales) : num(avesFallback));
   const saldos = usaEnc ? [] : saldoVivoPorDia(mort);            // con aves encasetadas la base es CONSTANTE (sin mortalidad)
   const saldoAt = (idx: number): number => saldos.length > idx ? saldos[idx] : (saldos.length ? saldos[saldos.length - 1] : avesIni);
@@ -332,19 +337,46 @@ export function calcBultosConsumidos(r: RegistroBultosConsumidos, mort: Registro
 
 // Bultos consumidos por galpón (para validar el consumo POR galpón). Registro INDEPENDIENTE: cada
 // galpón lleva sus propias aves encasetadas (base constante del consumo por ave) y su serie de bultos.
-export interface BultoGalponResumen { galpon: string; aves: number; semanas: number; totalBultos: number; totalKg: number; consumoAve: number | null; dias: number; }
+export interface BultoGalponResumen { galpon: string; lote?: string; aves: number; saldo: number; base: number; semanas: number; totalBultos: number; totalKg: number; consumoAve: number | null; dias: number; }
 export function bultosPorGalpon(bc?: RegistroBultosConsumidos): BultoGalponResumen[] {
   if (!bc?.galpones?.length) return [];
   const kgPorBulto = num(bc.kgPorBulto) || 40;
   return bc.galpones.map(g => {
     const aves = num(g.avesEncasetadas);
-    const c = calcBultosConsumidos({ kgPorBulto, semanas: g.semanas }, { avesIniciales: 0, semanas: [] }, aves);
+    const saldo = num(g.saldoMortalidad);
+    const base = baseAveGalponBultos(g);                          // saldo si se transfirió/editó; si no, aves encasetadas
+    const c = calcBultosConsumidos({ kgPorBulto, semanas: g.semanas }, { avesIniciales: 0, semanas: [] }, base);
     const dias = (g.semanas || []).reduce((s, w) => s + (w || []).filter(v => String(v ?? "").trim() !== "").length, 0);
-    return { galpon: g.galpon || "—", aves, semanas: (g.semanas || []).length, totalBultos: c.totalBultos, totalKg: c.totalKg, consumoAve: c.consumoAcumuladoAveFinal, dias };
+    return { galpon: g.galpon || "—", lote: g.lote, aves, saldo, base, semanas: (g.semanas || []).length, totalBultos: c.totalBultos, totalKg: c.totalKg, consumoAve: c.consumoAcumuladoAveFinal, dias };
   });
 }
 // Total de aves encasetadas del registro de bultos (Σ galpones).
 export const avesEncasetadasBultos = (bc?: RegistroBultosConsumidos): number => (bc?.galpones || []).reduce((s, g) => s + num(g.avesEncasetadas), 0);
+
+// ─── Saldo de mortalidad por galpón desde OTROS anexos (trazabilidad cruzada) ──────
+// Recolecta el saldo de aves vivas por galpón/lote desde la mortalidad de una lista de anexos (p. ej.
+// otros hallazgos de la MISMA granja). Es SOLO LECTURA: no altera la mortalidad del hallazgo origen.
+export interface SaldoGalponMort { galpon: string; lote?: string; saldo: number; aves: number; }
+export function saldosMortalidadGalpones(anexosList: (AnexosTecnicos | null | undefined)[]): SaldoGalponMort[] {
+  const out: SaldoGalponMort[] = [];
+  for (const a of anexosList) {
+    if (!a) continue;
+    for (const g of mortalidadPorGalpon(a.registroMortalidadDiaria)) {
+      if (g.saldo > 0 || g.aves > 0) out.push({ galpon: g.galpon, lote: g.lote, saldo: g.saldo, aves: g.aves });
+    }
+  }
+  return out;
+}
+// Busca el saldo para un galpón (y lote opcional) en la lista recolectada. Empareja por galpón
+// normalizado; si se da lote, prioriza el que también coincide en lote.
+export function buscarSaldoGalpon(saldos: SaldoGalponMort[], galpon: string, lote?: string): SaldoGalponMort | null {
+  const norm = (s?: string) => String(s ?? "").trim().toLowerCase();
+  const g = norm(galpon); if (!g) return null;
+  const mismos = saldos.filter(s => norm(s.galpon) === g);
+  if (!mismos.length) return null;
+  if (lote && norm(lote)) { const conLote = mismos.find(s => norm(s.lote) === norm(lote)); if (conLote) return conLote; }
+  return mismos[0];
+}
 
 // ─── Protocolo de engorde (referencia orientativa, broiler línea comercial mixta) ──
 // Por semana de vida: consumo ACUMULADO esperado por ave (kg) y peso vivo esperado (kg). Es una
@@ -462,7 +494,8 @@ export function resumenBultosConsumidos(r: RegistroBultosConsumidos, mort: Regis
   if (!(r?.semanas || []).some(w => w.length > 0)) return null;
   const c = calcBultosConsumidos(r, mort, avesFallback);
   if (c.semanas.length === 0) return null;
-  const avesEnc = avesEncasetadasBultos(r);
+  const avesEnc = avesBaseBultos(r);
+  const usaSaldo = (r?.galpones || []).some(g => num(g.saldoMortalidad) > 0);
   const avesBase = avesEnc > 0 ? avesEnc : (num(mort?.avesIniciales) > 0 ? num(mort.avesIniciales) : num(avesFallback));
   const consAve = c.consumoAcumuladoAveFinal;
   const eng = evaluarEngorde(consAve, c.semanas.length);
@@ -501,7 +534,7 @@ export function resumenBultosConsumidos(r: RegistroBultosConsumidos, mort: Regis
       ] },
       { titulo: "Observaciones técnicas", lineas: [
         `Análisis basado en ${c.semanas.length} semana(s) de registro de bultos.`,
-        `Base de aves utilizada: ${avesBase > 0 ? f2(avesBase) + (avesEnc > 0 ? " (aves encasetadas)" : " (saldo de aves vivas)") : "no disponible"}.`,
+        `Base de aves utilizada: ${avesBase > 0 ? f2(avesBase) + (avesEnc > 0 ? (usaSaldo ? " (saldo de mortalidad transferido)" : " (aves encasetadas)") : " (saldo de aves vivas)") : "no disponible"}.`,
       ] },
       { titulo: "Conclusión ejecutiva", lineas: [
         consAve === null

@@ -3,7 +3,7 @@
 // EDITOR de Anexos Técnicos del hallazgo — 5 pestañas opcionales con tablas
 // dinámicas (agregar/editar/eliminar filas) y cálculos automáticos en vivo.
 // ═══════════════════════════════════════════════════════════════════════════════
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Plus, Trash2, AlertTriangle } from "lucide-react";
 import {
   AnexosTecnicos, TotalBultosBloque, type GalponMortalidad, type GalponBultos,
@@ -13,6 +13,7 @@ import {
   totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalInventarioBultosSolo, totalInventarioLonas, totalBultosConsumidos, totalKgConsumidos,
   pctMortalidad, avesRecibidasTotal, num, consolidarGalpones,
   calcMortalidadDiaria, calcBultosConsumidos, consolidarGalponesBultos, bultosPorGalpon, evaluarEngorde,
+  saldosMortalidadGalpones, buscarSaldoGalpon, baseAveGalponBultos, parseAnexos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
 } from "@/lib/anexos-tecnicos";
 import { ResumenEjecutivoPanel } from "./resumen-ejecutivo-panel";
@@ -37,9 +38,10 @@ const fmt = (n: number) => n.toLocaleString("es-CO", { maximumFractionDigits: 2 
 
 type Col = { key: string; label: string; type?: "text" | "number" | "date"; calc?: (r: any) => number };
 
-export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGranjaId }: {
+export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGranjaId, hallazgos = [], hallazgoId }: {
   value: AnexosTecnicos; onChange: (a: AnexosTecnicos) => void;
   granjas?: { id: string; nombre: string }[]; defaultGranjaId?: string;
+  hallazgos?: { id: string; granjaId?: string; anexosTecnicos?: string | null }[]; hallazgoId?: string;
 }) {
   const [tab, setTab] = useState<TabKey>("actaConteoPicos");
   const [galponActivo, setGalponActivo] = useState(0);
@@ -150,6 +152,25 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
   const setBcGalpones = (gs: GalponBultos[]) => set({ registroBultosConsumidos: { ...bc, ...consolidarGalponesBultos(gs), galpones: gs } });
   const editBcGalpon = (gi: number, patch: any) => setBcGalpones(bcGalponesEf.map((g, i) => i === gi ? { ...g, ...patch } : g));
   const setBcGalponDia = (gi: number, w: number, d: number, v: string) => editBcGalpon(gi, { semanas: bcGalponesEf[gi].semanas.map((sem: any[], wi: number) => wi === w ? sem.map((c: any, di: number) => di === d ? v : c) : sem) });
+  // Saldo de mortalidad por galpón/lote desde OTROS hallazgos de la MISMA granja (solo lectura; no altera esos anexos).
+  const saldosMort = useMemo(() => saldosMortalidadGalpones(
+    hallazgos.filter(h => h.granjaId && defaultGranjaId && h.granjaId === defaultGranjaId && h.id !== hallazgoId)
+             .map(h => { try { return parseAnexos(h.anexosTecnicos); } catch { return null; } })
+  ), [hallazgos, defaultGranjaId, hallazgoId]);
+  // Auto-transfiere el saldo a los galpones de bultos que aún no lo tienen y sí encuentran match (solo rellena vacíos, una vez).
+  useEffect(() => {
+    if (!saldosMort.length || !Array.isArray(bc.galpones) || !bc.galpones.length) return;
+    let cambio = false;
+    const nuevos = bc.galpones.map((g: any) => {
+      if (g.saldoMortalidad != null && String(g.saldoMortalidad).trim() !== "") return g;
+      const m = buscarSaldoGalpon(saldosMort, g.galpon, g.lote);
+      if (!m) return g;
+      cambio = true;
+      return { ...g, saldoMortalidad: m.saldo, lote: g.lote || m.lote };
+    });
+    if (cambio) set({ registroBultosConsumidos: { ...bc, galpones: nuevos } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saldosMort, bc.galpones]);
   const nuevaSemana = () => ["", "", "", "", "", "", ""];
 
   // Bloque semanal reutilizable (encabezado + botón eliminar). Se llama como función (foco estable).
@@ -295,7 +316,7 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
     const porGalpon = bultosPorGalpon(bc);                                  // desglose por galpón
     const gi = Math.min(bcGalponActivo, Math.max(0, bcGalponesEf.length - 1));
     const gAct = bcGalponesEf[gi];
-    const gCalc = gAct ? calcBultosConsumidos({ kgPorBulto: kgBulto, semanas: gAct.semanas }, mortVacia, num(gAct.avesEncasetadas)) : null;
+    const gCalc = gAct ? calcBultosConsumidos({ kgPorBulto: kgBulto, semanas: gAct.semanas }, mortVacia, baseAveGalponBultos(gAct)) : null;
     return (
       <div className="space-y-3">
         {/* Config kg/bulto */}
@@ -303,14 +324,14 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] text-[#94A3B8] shrink-0">Kg por bulto</span>
             <input type="number" step="any" value={bc.kgPorBulto ?? ""} onChange={e => setBC({ kgPorBulto: e.target.value })} placeholder="40" className={INP + " max-w-[120px]"} />
-            <span className="text-[10px] text-[#475569]">Consumo/ave = (bultos × kg) ÷ aves encasetadas del galpón · registro independiente por galpón</span>
+            <span className="text-[10px] text-[#475569]">Consumo/ave = (bultos × kg) ÷ <b>saldo de mortalidad</b> del galpón (transferido de otro hallazgo) o aves encasetadas si no hay saldo · por galpón</span>
           </div>
         </div>
 
         {/* Selector de galpón (pills) + agregar galpón manual */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {bcGalponesEf.map((g, i) => {
-            const c = calcBultosConsumidos({ kgPorBulto: kgBulto, semanas: g.semanas }, mortVacia, num(g.avesEncasetadas));
+            const c = calcBultosConsumidos({ kgPorBulto: kgBulto, semanas: g.semanas }, mortVacia, baseAveGalponBultos(g));
             const activo = i === gi;
             return (
               <button key={i} type="button" onClick={() => setBcGalponActivo(i)}
@@ -329,13 +350,20 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
           <div className="rounded-lg border border-[#1E2D4A] p-3 space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[11px] text-[#94A3B8] shrink-0">Galpón</span>
-              <input value={gAct.galpon} onChange={e => editBcGalpon(gi, { galpon: e.target.value })} className={INP + " max-w-[80px]"} />
-              <span className="text-[11px] text-[#94A3B8] shrink-0 ml-2">Aves encasetadas</span>
-              <input type="number" step="any" value={gAct.avesEncasetadas || ""} onChange={e => editBcGalpon(gi, { avesEncasetadas: num(e.target.value) })} placeholder="Ej: 7500" className={INP + " max-w-[130px]"} title="Cantidad de aves encasetadas de este galpón (base del consumo por ave)" />
-              <span className="text-[11px] text-[#94A3B8] shrink-0 ml-2">Fecha encas.</span>
-              <input type="date" value={gAct.fechaEncasetamiento ?? ""} onChange={e => editBcGalpon(gi, { fechaEncasetamiento: e.target.value })} className={INP + " max-w-[150px]"} title="Fecha de encasetamiento de este galpón" />
+              <input value={gAct.galpon} onChange={e => editBcGalpon(gi, { galpon: e.target.value })} className={INP + " max-w-[70px]"} />
+              <span className="text-[11px] text-[#94A3B8] shrink-0 ml-1">Lote</span>
+              <input value={gAct.lote ?? ""} onChange={e => editBcGalpon(gi, { lote: e.target.value })} placeholder="N° lote" className={INP + " max-w-[100px]"} title="Lote del galpón (para enlazar el saldo de mortalidad del anexo de otro hallazgo)" />
+              <span className="text-[11px] text-[#94A3B8] shrink-0 ml-1">Aves encas.</span>
+              <input type="number" step="any" value={gAct.avesEncasetadas || ""} onChange={e => editBcGalpon(gi, { avesEncasetadas: num(e.target.value) })} placeholder="Ej: 7500" className={INP + " max-w-[100px]"} title="Cantidad de aves encasetadas de este galpón" />
+              <span className="text-[11px] text-[#94A3B8] shrink-0 ml-1">Saldo mort.</span>
+              <input type="number" step="any" value={gAct.saldoMortalidad ?? ""} onChange={e => editBcGalpon(gi, { saldoMortalidad: e.target.value })} placeholder={(() => { const m = buscarSaldoGalpon(saldosMort, gAct.galpon, gAct.lote); return m ? String(m.saldo) : "Sin dato"; })()} className={INP + " max-w-[110px]"} title="Saldo de aves vivas (mortalidad) transferido de otro hallazgo de la granja; editable. Es la base del consumo/ave y del engorde." />
+              <span className="text-[11px] text-[#94A3B8] shrink-0 ml-1">Fecha encas.</span>
+              <input type="date" value={gAct.fechaEncasetamiento ?? ""} onChange={e => editBcGalpon(gi, { fechaEncasetamiento: e.target.value })} className={INP + " max-w-[140px]"} title="Fecha de encasetamiento de este galpón" />
               {bcGalponesEf.length > 1 && <button type="button" onClick={() => { setBcGalpones(bcGalponesEf.filter((_, i) => i !== gi)); setBcGalponActivo(0); }} className="ml-auto text-[#94A3B8] hover:text-red-400"><Trash2 className="w-4 h-4" /></button>}
             </div>
+            {num(gAct.saldoMortalidad) > 0
+              ? <p className="text-[10px] text-[#22C55E]">Base del consumo/ave y del engorde: <b>saldo de mortalidad {fmt(num(gAct.saldoMortalidad))} aves</b> (de {fmt(num(gAct.avesEncasetadas))} encasetadas) — transferido del anexo de mortalidad; editable.</p>
+              : (() => { const m = buscarSaldoGalpon(saldosMort, gAct.galpon, gAct.lote); return m ? <p className="text-[10px] text-[#F59E0B]">Hay saldo de mortalidad {fmt(m.saldo)} aves para este galpón{m.lote ? ` (lote ${m.lote})` : ""} en otro hallazgo; se transfirió al abrir. Si no, escríbelo en "Saldo mort.".</p> : <p className="text-[10px] text-[#64748B]">Sin saldo de mortalidad para este galpón en otros hallazgos de la granja; se usa "Aves encas." como base (o escribe el saldo manualmente).</p>; })()}
             {num(gAct.avesEncasetadas) <= 0 && <p className="text-[10px] text-amber-400">Ingresa las aves encasetadas de este galpón para calcular el consumo por ave.</p>}
 
             {gAct.semanas.length === 0 && <p className="text-[11px] text-[#475569]">Sin semanas. Usa "Agregar semana".</p>}
@@ -386,11 +414,11 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
             </div>
             {porGalpon.length > 0 && (
               <div className="space-y-1">
-                <p className="text-[10px] text-[#64748B]">Cumplimiento de engorde por galpón — peso vivo estimado y % de desviación del consumo acumulado vs. la referencia (orientativo; ajústese a la línea genética).</p>
+                <p className="text-[10px] text-[#64748B]">Cumplimiento de engorde por galpón — el consumo/ave se calcula sobre el <b>saldo de mortalidad</b> (aves vivas transferidas de otro hallazgo) o, si no hay, sobre las aves encasetadas; peso vivo estimado y % de desviación vs. la referencia (orientativo; ajústese a la línea genética).</p>
                 <div className="overflow-x-auto rounded-lg border border-[#1E2D4A]">
                   <table className="w-full text-xs">
                     <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
-                      <th className="px-2 py-1 text-left">Galpón</th><th className="px-2 py-1 text-left">Aves encas.</th><th className="px-2 py-1 text-left">Sem</th><th className="px-2 py-1 text-left">Bultos</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th><th className="px-2 py-1 text-left">Peso est. (kg)</th><th className="px-2 py-1 text-left">Engorde</th>
+                      <th className="px-2 py-1 text-left">Galpón</th><th className="px-2 py-1 text-left">Lote</th><th className="px-2 py-1 text-left">Aves encas.</th><th className="px-2 py-1 text-left">Saldo mort.</th><th className="px-2 py-1 text-left">Sem</th><th className="px-2 py-1 text-left">Bultos</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th><th className="px-2 py-1 text-left">Peso est. (kg)</th><th className="px-2 py-1 text-left">Engorde</th>
                     </tr></thead>
                     <tbody>
                       {porGalpon.map((g, i) => {
@@ -398,9 +426,11 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
                         return (
                         <tr key={i} className="border-t border-[#1E2D4A]">
                           <td className="px-2 py-1 text-white">Galpón {g.galpon}</td>
+                          <td className="px-2 py-1 text-[#94A3B8]">{g.lote || "—"}</td>
                           <td className="px-2 py-1">{g.aves > 0 ? fmt(g.aves) : "—"}</td>
+                          <td className="px-2 py-1 text-[#22C55E]">{g.saldo > 0 ? fmt(g.saldo) : "—"}</td>
                           <td className="px-2 py-1 text-[#94A3B8]">{g.semanas}</td>
-                          <td className="px-2 py-1 text-[#22C55E] font-semibold">{fmt(g.totalBultos)}</td>
+                          <td className="px-2 py-1 text-[#4A7AFF] font-semibold">{fmt(g.totalBultos)}</td>
                           <td className="px-2 py-1 text-[#8B5CF6] font-semibold">{g.consumoAve === null ? "—" : fmt(g.consumoAve)}</td>
                           <td className="px-2 py-1 text-[#C4B5FD]">{eng ? fmt(eng.pesoEstimado) : "—"}</td>
                           <td className="px-2 py-1 font-semibold">{eng ? <span className={eng.estado === "cumple" ? "text-[#22C55E]" : eng.estado === "bajo" ? "text-[#EF4444]" : "text-[#F59E0B]"}>{eng.estado === "cumple" ? "Cumple" : eng.estado === "bajo" ? "Bajo" : "Alto"} · {eng.desviacionPct >= 0 ? "+" : ""}{eng.desviacionPct.toFixed(0)}%</span> : <span className="text-[#64748B]">—</span>}</td>

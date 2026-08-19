@@ -185,6 +185,7 @@ export default function HallazgosPage() {
       {modalOpen && (
         <HallazgoModal
           hallazgo={editing}
+          hallazgos={hallazgos}
           granjas={granjas}
           error={saveError}
           onClose={() => { setModalOpen(false); setSaveError(null); }}
@@ -215,8 +216,9 @@ export default function HallazgosPage() {
   );
 }
 
-function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
+function HallazgoModal({ hallazgo, hallazgos = [], granjas, onClose, onSave, error }: {
   hallazgo: Hallazgo | null;
+  hallazgos?: Hallazgo[];
   granjas: any[];
   onClose: () => void;
   onSave: (h: Partial<Hallazgo>) => Promise<void> | void;
@@ -385,7 +387,7 @@ function HallazgoModal({ hallazgo, granjas, onClose, onSave, error }: {
             {anexosOpen && (
               <div className="px-4 pb-4 border-t border-[#1E2D4A] pt-3">
                 <p className="text-[10px] text-[#475569] mb-3">Documenta controles operativos e inventarios relacionados con el hallazgo. Todo es opcional y se guarda junto con el hallazgo.</p>
-                <AnexosTecnicosEditor value={anexos} onChange={setAnexos} granjas={granjas} defaultGranjaId={form.granjaId} />
+                <AnexosTecnicosEditor value={anexos} onChange={setAnexos} granjas={granjas} defaultGranjaId={form.granjaId} hallazgos={hallazgos} hallazgoId={hallazgo?.id} />
               </div>
             )}
           </div>
