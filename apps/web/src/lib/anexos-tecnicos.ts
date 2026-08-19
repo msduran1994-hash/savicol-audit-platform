@@ -332,7 +332,7 @@ export function calcBultosConsumidos(r: RegistroBultosConsumidos, mort: Registro
 
 // Bultos consumidos por galpón (para validar el consumo POR galpón). Registro INDEPENDIENTE: cada
 // galpón lleva sus propias aves encasetadas (base constante del consumo por ave) y su serie de bultos.
-export interface BultoGalponResumen { galpon: string; aves: number; totalBultos: number; totalKg: number; consumoAve: number | null; dias: number; }
+export interface BultoGalponResumen { galpon: string; aves: number; semanas: number; totalBultos: number; totalKg: number; consumoAve: number | null; dias: number; }
 export function bultosPorGalpon(bc?: RegistroBultosConsumidos): BultoGalponResumen[] {
   if (!bc?.galpones?.length) return [];
   const kgPorBulto = num(bc.kgPorBulto) || 40;
@@ -340,8 +340,38 @@ export function bultosPorGalpon(bc?: RegistroBultosConsumidos): BultoGalponResum
     const aves = num(g.avesEncasetadas);
     const c = calcBultosConsumidos({ kgPorBulto, semanas: g.semanas }, { avesIniciales: 0, semanas: [] }, aves);
     const dias = (g.semanas || []).reduce((s, w) => s + (w || []).filter(v => String(v ?? "").trim() !== "").length, 0);
-    return { galpon: g.galpon || "—", aves, totalBultos: c.totalBultos, totalKg: c.totalKg, consumoAve: c.consumoAcumuladoAveFinal, dias };
+    return { galpon: g.galpon || "—", aves, semanas: (g.semanas || []).length, totalBultos: c.totalBultos, totalKg: c.totalKg, consumoAve: c.consumoAcumuladoAveFinal, dias };
   });
+}
+// Total de aves encasetadas del registro de bultos (Σ galpones).
+export const avesEncasetadasBultos = (bc?: RegistroBultosConsumidos): number => (bc?.galpones || []).reduce((s, g) => s + num(g.avesEncasetadas), 0);
+
+// ─── Protocolo de engorde (referencia orientativa, broiler línea comercial mixta) ──
+// Por semana de vida: consumo ACUMULADO esperado por ave (kg) y peso vivo esperado (kg). Es una
+// referencia general para dar un análisis dinámico; conviene calibrarla a la guía de la línea
+// genética real del lote (Ross/Cobb, etc.).
+export interface ProtocoloEngordeSemana { semana: number; consumoAcumAve: number; pesoAve: number; }
+export const PROTOCOLO_ENGORDE: ProtocoloEngordeSemana[] = [
+  { semana: 1, consumoAcumAve: 0.165, pesoAve: 0.185 },
+  { semana: 2, consumoAcumAve: 0.500, pesoAve: 0.465 },
+  { semana: 3, consumoAcumAve: 1.210, pesoAve: 0.945 },
+  { semana: 4, consumoAcumAve: 2.225, pesoAve: 1.560 },
+  { semana: 5, consumoAcumAve: 3.560, pesoAve: 2.230 },
+  { semana: 6, consumoAcumAve: 5.100, pesoAve: 2.900 },
+  { semana: 7, consumoAcumAve: 6.750, pesoAve: 3.480 },
+  { semana: 8, consumoAcumAve: 8.350, pesoAve: 3.950 },
+];
+// Evalúa el consumo acumulado por ave (kg) a la semana N contra el estándar de engorde: estado
+// (cumple/bajo/alto con tolerancia ±tol), desviación % y peso vivo estimado (consumo real × FCR ref).
+export interface EvalEngorde { semana: number; consumoAcumAve: number; refConsumo: number; refPeso: number; pesoEstimado: number; pesoMin: number; pesoMax: number; desviacionPct: number; estado: "cumple" | "bajo" | "alto"; }
+export function evaluarEngorde(consumoAcumAve: number | null, semanas: number, tol = 0.12): EvalEngorde | null {
+  if (!consumoAcumAve || consumoAcumAve <= 0 || semanas < 1) return null;
+  const wk = Math.min(Math.max(Math.round(semanas), 1), PROTOCOLO_ENGORDE.length);
+  const ref = PROTOCOLO_ENGORDE[wk - 1];
+  const desv = (consumoAcumAve - ref.consumoAcumAve) / ref.consumoAcumAve;
+  const estado: "cumple" | "bajo" | "alto" = Math.abs(desv) <= tol ? "cumple" : (desv < 0 ? "bajo" : "alto");
+  const pesoEstimado = consumoAcumAve * (ref.pesoAve / ref.consumoAcumAve);
+  return { semana: wk, consumoAcumAve, refConsumo: ref.consumoAcumAve, refPeso: ref.pesoAve, pesoEstimado, pesoMin: ref.pesoAve * (1 - tol), pesoMax: ref.pesoAve * (1 + tol), desviacionPct: desv * 100, estado };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -432,8 +462,10 @@ export function resumenBultosConsumidos(r: RegistroBultosConsumidos, mort: Regis
   if (!(r?.semanas || []).some(w => w.length > 0)) return null;
   const c = calcBultosConsumidos(r, mort, avesFallback);
   if (c.semanas.length === 0) return null;
-  const avesBase = num(mort?.avesIniciales) > 0 ? num(mort.avesIniciales) : num(avesFallback);
+  const avesEnc = avesEncasetadasBultos(r);
+  const avesBase = avesEnc > 0 ? avesEnc : (num(mort?.avesIniciales) > 0 ? num(mort.avesIniciales) : num(avesFallback));
   const consAve = c.consumoAcumuladoAveFinal;
+  const eng = evaluarEngorde(consAve, c.semanas.length);
   const t = tendenciaSerie(c.semanas.map(s => s.consumoSemanalAve ?? 0));
   const caidas = c.semanas.filter((s, i) => i > 0 && (s.consumoSemanalAve ?? 0) < (c.semanas[i - 1].consumoSemanalAve ?? 0));
 
@@ -460,14 +492,21 @@ export function resumenBultosConsumidos(r: RegistroBultosConsumidos, mort: Regis
         consAve === null ? "No fue posible calcular el consumo por ave (sin saldo de aves vivas disponible)." : `Consumo promedio de ${f2(consAve)} kg por ave sobre una base de ${f2(avesBase)} aves.`,
       ] },
       { titulo: "Viabilidad y desviaciones", lineas: viabilidad },
+      { titulo: "Protocolo de engorde (consumo y peso)", lineas: eng ? [
+        `A la semana ${eng.semana}, el consumo acumulado es de ${f2(eng.consumoAcumAve)} kg/ave frente a la referencia de engorde de ${f2(eng.refConsumo)} kg/ave (desviación ${eng.desviacionPct >= 0 ? "+" : ""}${f2(eng.desviacionPct)}%).`,
+        `Peso vivo estimado por consumo: ${f2(eng.pesoEstimado)} kg/ave (rango esperado ${f2(eng.pesoMin)}–${f2(eng.pesoMax)} kg). ${eng.estado === "cumple" ? "CUMPLE el rango de peso/consumo del protocolo de engorde." : eng.estado === "bajo" ? "POR DEBAJO del estándar: posible sub-consumo o bajo peso; verificar disponibilidad de alimento, sanidad y ambiente." : "POR ENCIMA del estándar: posible sobreconsumo/desperdicio o lote adelantado; verificar registros y manejo."}`,
+        "Referencia orientativa de línea comercial; ajústese a la guía de la línea genética real del lote.",
+      ] : [
+        "Registre las aves encasetadas y al menos una semana de bultos para evaluar el cumplimiento del protocolo de engorde.",
+      ] },
       { titulo: "Observaciones técnicas", lineas: [
         `Análisis basado en ${c.semanas.length} semana(s) de registro de bultos.`,
-        `Base de aves utilizada: ${avesBase > 0 ? f2(avesBase) + " (saldo de aves vivas)" : "no disponible"}.`,
+        `Base de aves utilizada: ${avesBase > 0 ? f2(avesBase) + (avesEnc > 0 ? " (aves encasetadas)" : " (saldo de aves vivas)") : "no disponible"}.`,
       ] },
       { titulo: "Conclusión ejecutiva", lineas: [
         consAve === null
-          ? `Se consumieron ${f2(c.totalKg)} kg de alimento; registre las aves para estimar el consumo por ave.`
-          : `El lote consumió ${f2(c.totalKg)} kg (${f2(consAve)} kg/ave). ${t.dir === "descendente" ? "El patrón descendente amerita revisión." : "El patrón es consistente con el desarrollo esperado del lote."}`,
+          ? `Se consumieron ${f2(c.totalKg)} kg de alimento; registre las aves encasetadas para estimar el consumo por ave.`
+          : `El lote consumió ${f2(c.totalKg)} kg (${f2(consAve)} kg/ave)${eng ? `; peso estimado ${f2(eng.pesoEstimado)} kg/ave — ${eng.estado === "cumple" ? "CUMPLE" : "NO CUMPLE (" + eng.estado + ")"} el protocolo de engorde a la semana ${eng.semana}` : ""}. ${t.dir === "descendente" ? "El patrón descendente amerita revisión." : "El patrón es consistente con el desarrollo esperado del lote."}`,
       ] },
     ],
   };

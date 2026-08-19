@@ -12,7 +12,7 @@ import {
   totalReporteConteo, totalReporteFisico, faltanteConciliacion, totalMortalidadAves, difConteoMortalidad,
   totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalInventarioBultosSolo, totalInventarioLonas, totalBultosConsumidos, totalKgConsumidos,
   pctMortalidad, avesRecibidasTotal, num, consolidarGalpones,
-  calcMortalidadDiaria, calcBultosConsumidos, consolidarGalponesBultos, bultosPorGalpon,
+  calcMortalidadDiaria, calcBultosConsumidos, consolidarGalponesBultos, bultosPorGalpon, evaluarEngorde,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
 } from "@/lib/anexos-tecnicos";
 import { ResumenEjecutivoPanel } from "./resumen-ejecutivo-panel";
@@ -378,29 +378,38 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
         {/* Consolidado + desglose por galpón */}
         {calc.semanas.length > 0 && (
           <>
-            <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 grid grid-cols-3 gap-2 text-center">
-              <div><div className="text-[10px] text-[#94A3B8]">Total bultos (granja)</div><div className="text-sm font-bold text-[#4A7AFF]">{fmt(calc.totalBultos)}</div></div>
+            <div className="rounded-lg border border-[#2A3F6A] bg-[#0A111F] p-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+              <div><div className="text-[10px] text-[#94A3B8]">Aves encasetadas (Σ)</div><div className="text-sm font-bold text-white">{fmt(bcGalponesEf.reduce((s, g) => s + num(g.avesEncasetadas), 0))}</div></div>
+              <div><div className="text-[10px] text-[#94A3B8]">Total bultos</div><div className="text-sm font-bold text-[#4A7AFF]">{fmt(calc.totalBultos)}</div></div>
               <div><div className="text-[10px] text-[#94A3B8]">Total kg</div><div className="text-sm font-bold text-[#0EA5E9]">{fmt(calc.totalKg)}</div></div>
               <div><div className="text-[10px] text-[#94A3B8]">Consumo/ave (kg)</div><div className="text-sm font-bold text-[#8B5CF6]">{calc.consumoAcumuladoAveFinal === null ? "—" : fmt(calc.consumoAcumuladoAveFinal)}</div></div>
             </div>
-            {porGalpon.length > 1 && (
-              <div className="overflow-x-auto rounded-lg border border-[#1E2D4A]">
-                <table className="w-full text-xs">
-                  <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
-                    <th className="px-2 py-1 text-left">Galpón</th><th className="px-2 py-1 text-left">Aves encasetadas</th><th className="px-2 py-1 text-left">Bultos</th><th className="px-2 py-1 text-left">Kg</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th>
-                  </tr></thead>
-                  <tbody>
-                    {porGalpon.map((g, i) => (
-                      <tr key={i} className="border-t border-[#1E2D4A]">
-                        <td className="px-2 py-1 text-white">Galpón {g.galpon}</td>
-                        <td className="px-2 py-1">{g.aves > 0 ? fmt(g.aves) : "—"}</td>
-                        <td className="px-2 py-1 text-[#22C55E] font-semibold">{fmt(g.totalBultos)}</td>
-                        <td className="px-2 py-1 text-[#0EA5E9]">{fmt(g.totalKg)}</td>
-                        <td className="px-2 py-1 text-[#8B5CF6] font-semibold">{g.consumoAve === null ? "—" : fmt(g.consumoAve)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {porGalpon.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[10px] text-[#64748B]">Cumplimiento de engorde por galpón — peso vivo estimado y % de desviación del consumo acumulado vs. la referencia (orientativo; ajústese a la línea genética).</p>
+                <div className="overflow-x-auto rounded-lg border border-[#1E2D4A]">
+                  <table className="w-full text-xs">
+                    <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
+                      <th className="px-2 py-1 text-left">Galpón</th><th className="px-2 py-1 text-left">Aves encas.</th><th className="px-2 py-1 text-left">Sem</th><th className="px-2 py-1 text-left">Bultos</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th><th className="px-2 py-1 text-left">Peso est. (kg)</th><th className="px-2 py-1 text-left">Engorde</th>
+                    </tr></thead>
+                    <tbody>
+                      {porGalpon.map((g, i) => {
+                        const eng = evaluarEngorde(g.consumoAve, g.semanas);
+                        return (
+                        <tr key={i} className="border-t border-[#1E2D4A]">
+                          <td className="px-2 py-1 text-white">Galpón {g.galpon}</td>
+                          <td className="px-2 py-1">{g.aves > 0 ? fmt(g.aves) : "—"}</td>
+                          <td className="px-2 py-1 text-[#94A3B8]">{g.semanas}</td>
+                          <td className="px-2 py-1 text-[#22C55E] font-semibold">{fmt(g.totalBultos)}</td>
+                          <td className="px-2 py-1 text-[#8B5CF6] font-semibold">{g.consumoAve === null ? "—" : fmt(g.consumoAve)}</td>
+                          <td className="px-2 py-1 text-[#C4B5FD]">{eng ? fmt(eng.pesoEstimado) : "—"}</td>
+                          <td className="px-2 py-1 font-semibold">{eng ? <span className={eng.estado === "cumple" ? "text-[#22C55E]" : eng.estado === "bajo" ? "text-[#EF4444]" : "text-[#F59E0B]"}>{eng.estado === "cumple" ? "Cumple" : eng.estado === "bajo" ? "Bajo" : "Alto"} · {eng.desviacionPct >= 0 ? "+" : ""}{eng.desviacionPct.toFixed(0)}%</span> : <span className="text-[#64748B]">—</span>}</td>
+                        </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </>
