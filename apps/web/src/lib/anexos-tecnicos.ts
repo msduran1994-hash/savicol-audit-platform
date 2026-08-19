@@ -53,7 +53,7 @@ export function consolidarGalpones(galpones: GalponMortalidad[]): { avesIniciale
 // Bultos Consumidos por Día — mismos bloques semanales; consumo/ave en kg (kgPorBulto config., def. 40).
 // `semanas` es el CONSOLIDADO (Σ entre galpones) que consumen los informes; `galpones` es el detalle
 // por galpón (mismos galpones que Mortalidad Diaria) para validar el consumo de bultos POR galpón.
-export interface GalponBultos { galpon: string; lote?: string; avesEncasetadas: number; saldoMortalidad?: number; fechaEncasetamiento?: string; semanas: number[][]; }
+export interface GalponBultos { galpon: string; lote?: string; avesEncasetadas: number; saldoMortalidad?: number; saldoAuto?: boolean; fechaEncasetamiento?: string; semanas: number[][]; }
 export interface RegistroBultosConsumidos { kgPorBulto: number; semanas: number[][]; galpones?: GalponBultos[]; }
 // Base de aves para el consumo/ave del galpón: el SALDO de mortalidad transferido (aves vivas) si se
 // registró/editó; si no, las aves encasetadas. Así el consumo por ave y el engorde reflejan las aves reales.
@@ -130,7 +130,7 @@ function parseMortalidad(p: any): RegistroMortalidadDiaria {
 function parseBultosConsumidos(p: any): RegistroBultosConsumidos {
   const kgPorBulto = num(p?.kgPorBulto) || 40;
   const galpones = Array.isArray(p?.galpones)
-    ? p.galpones.map((g: any) => ({ galpon: String(g?.galpon ?? ""), lote: typeof g?.lote === "string" ? g.lote : undefined, avesEncasetadas: num(g?.avesEncasetadas), saldoMortalidad: g?.saldoMortalidad != null && String(g.saldoMortalidad).trim() !== "" ? num(g.saldoMortalidad) : undefined, fechaEncasetamiento: typeof g?.fechaEncasetamiento === "string" ? g.fechaEncasetamiento : undefined, semanas: parseSemanas(g?.semanas) }))
+    ? p.galpones.map((g: any) => ({ galpon: String(g?.galpon ?? ""), lote: typeof g?.lote === "string" ? g.lote : undefined, avesEncasetadas: num(g?.avesEncasetadas), saldoMortalidad: g?.saldoMortalidad != null && String(g.saldoMortalidad).trim() !== "" ? num(g.saldoMortalidad) : undefined, saldoAuto: g?.saldoAuto === true ? true : undefined, fechaEncasetamiento: typeof g?.fechaEncasetamiento === "string" ? g.fechaEncasetamiento : undefined, semanas: parseSemanas(g?.semanas) }))
     : undefined;
   if (galpones && galpones.length) return { kgPorBulto, ...consolidarGalponesBultos(galpones), galpones };
   return { kgPorBulto, semanas: parseSemanas(p?.semanas) };

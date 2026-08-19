@@ -159,14 +159,19 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
   ), [hallazgos, defaultGranjaId, hallazgoId]);
   // Auto-transfiere el saldo a los galpones de bultos que aún no lo tienen y sí encuentran match (solo rellena vacíos, una vez).
   useEffect(() => {
-    if (!saldosMort.length || !Array.isArray(bc.galpones) || !bc.galpones.length) return;
+    if (!Array.isArray(bc.galpones) || !bc.galpones.length) return;
+    const haySaldos = saldosMort.length > 0;
     let cambio = false;
     const nuevos = bc.galpones.map((g: any) => {
-      if (g.saldoMortalidad != null && String(g.saldoMortalidad).trim() !== "") return g;
+      const cur = String(g.saldoMortalidad ?? "").trim();
+      const auto = g.saldoAuto === true;
+      if (cur !== "" && !auto) return g;                          // saldo editado a mano: no lo tocamos
       const m = buscarSaldoGalpon(saldosMort, g.galpon, g.lote);
-      if (!m) return g;
-      cambio = true;
-      return { ...g, saldoMortalidad: m.saldo, lote: g.lote || m.lote };
+      if (!m && !haySaldos) return g;                             // aún sin datos de otros hallazgos: no borrar
+      const nuevoStr = m ? String(m.saldo) : "";
+      if (cur === nuevoStr) return g;                             // ya sincronizado
+      cambio = true;                                              // rellena si hay match; limpia si el galpón ya no coincide
+      return { ...g, saldoMortalidad: m ? m.saldo : undefined, saldoAuto: m ? true : undefined, lote: g.lote || (m ? m.lote : undefined) };
     });
     if (cambio) set({ registroBultosConsumidos: { ...bc, galpones: nuevos } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -356,7 +361,7 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
               <span className="text-[11px] text-[#94A3B8] shrink-0 ml-1">Aves encas.</span>
               <input type="number" step="any" value={gAct.avesEncasetadas || ""} onChange={e => editBcGalpon(gi, { avesEncasetadas: num(e.target.value) })} placeholder="Ej: 7500" className={INP + " max-w-[100px]"} title="Cantidad de aves encasetadas de este galpón" />
               <span className="text-[11px] text-[#94A3B8] shrink-0 ml-1">Saldo mort.</span>
-              <input type="number" step="any" value={gAct.saldoMortalidad ?? ""} onChange={e => editBcGalpon(gi, { saldoMortalidad: e.target.value })} placeholder={(() => { const m = buscarSaldoGalpon(saldosMort, gAct.galpon, gAct.lote); return m ? String(m.saldo) : "Sin dato"; })()} className={INP + " max-w-[110px]"} title="Saldo de aves vivas (mortalidad) transferido de otro hallazgo de la granja; editable. Es la base del consumo/ave y del engorde." />
+              <input type="number" step="any" value={gAct.saldoMortalidad ?? ""} onChange={e => editBcGalpon(gi, { saldoMortalidad: e.target.value, saldoAuto: false })} placeholder={(() => { const m = buscarSaldoGalpon(saldosMort, gAct.galpon, gAct.lote); return m ? String(m.saldo) : "Sin dato"; })()} className={INP + " max-w-[110px]"} title="Saldo de aves vivas (mortalidad) transferido de otro hallazgo de la granja; editable. Es la base del consumo/ave y del engorde." />
               <span className="text-[11px] text-[#94A3B8] shrink-0 ml-1">Fecha encas.</span>
               <input type="date" value={gAct.fechaEncasetamiento ?? ""} onChange={e => editBcGalpon(gi, { fechaEncasetamiento: e.target.value })} className={INP + " max-w-[140px]"} title="Fecha de encasetamiento de este galpón" />
               {bcGalponesEf.length > 1 && <button type="button" onClick={() => { setBcGalpones(bcGalponesEf.filter((_, i) => i !== gi)); setBcGalponActivo(0); }} className="ml-auto text-[#94A3B8] hover:text-red-400"><Trash2 className="w-4 h-4" /></button>}
