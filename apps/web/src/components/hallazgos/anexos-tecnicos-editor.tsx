@@ -345,7 +345,8 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
                 <table className="w-full text-xs">
                   <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
                     <th className="px-2 py-1 text-left">Día</th><th className="px-2 py-1 text-left">Bultos</th>
-                    <th className="px-2 py-1 text-left">Acumulado</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th>
+                    <th className="px-2 py-1 text-left">Acum.</th><th className="px-2 py-1 text-left">Día/ave (kg)</th>
+                    <th className="px-2 py-1 text-left">Sem/ave (kg)</th><th className="px-2 py-1 text-left">Acum/ave (kg)</th>
                   </tr></thead>
                   <tbody>
                     {sem.dias.map(d => (
@@ -354,14 +355,18 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
                         <td className="px-2 py-1"><input type="number" step="any" value={gAct.semanas[sem.semana - 1][d.dia - 1] ?? ""} onChange={e => setBcGalponDia(gi, sem.semana - 1, d.dia - 1, e.target.value)} className={INP} /></td>
                         <td className="px-2 py-1 text-[#22C55E] font-semibold">{fmt(d.totalAcumulado)}</td>
                         <td className="px-2 py-1 text-[#8B5CF6] font-semibold">{d.consumoAveDia === null ? "—" : fmt(d.consumoAveDia)}</td>
+                        <td className="px-2 py-1 text-[#A78BFA]">{d.consumoSemAve === null ? "—" : fmt(d.consumoSemAve)}</td>
+                        <td className="px-2 py-1 text-[#C4B5FD]">{d.consumoAcumAve === null ? "—" : fmt(d.consumoAcumAve)}</td>
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot><tr className="border-t border-[#2A3F6A] bg-[#0A111F]">
-                    <td className="px-2 py-1 text-right font-semibold text-[#94A3B8]">Total semana</td>
-                    <td className="px-2 py-1 font-bold text-[#22C55E]">{fmt(sem.totalBultos)}</td>
+                  <tfoot><tr className="border-t border-[#2A3F6A] bg-[#0A111F] font-bold">
+                    <td className="px-2 py-1 text-right text-[#94A3B8]" title="Total de bultos de la semana · abajo: promedio y % de consumo (respecto al acumulado por ave)">Total · Prom · %</td>
+                    <td className="px-2 py-1 text-[#22C55E]">{fmt(sem.totalBultos)}</td>
                     <td className="px-2 py-1"></td>
-                    <td className="px-2 py-1 font-bold">Sem/ave: {sem.consumoSemanalAve === null ? "—" : fmt(sem.consumoSemanalAve)} kg · Acum/ave: {sem.consumoAcumuladoAve === null ? "—" : fmt(sem.consumoAcumuladoAve)} kg</td>
+                    <td className="px-2 py-1 text-[#8B5CF6]">{sem.consumoDiaAvePromedio === null ? "—" : fmt(sem.consumoDiaAvePromedio)}{sem.consumoDiaAvePromedio !== null && sem.consumoAcumuladoAve ? <span className="text-[#64748B] font-normal"> · {(sem.consumoDiaAvePromedio / sem.consumoAcumuladoAve * 100).toFixed(1)}%</span> : null}</td>
+                    <td className="px-2 py-1 text-[#A78BFA]">{sem.consumoSemanalAve === null ? "—" : fmt(sem.consumoSemanalAve)}{sem.consumoSemanalAve !== null && sem.consumoAcumuladoAve ? <span className="text-[#64748B] font-normal"> · {(sem.consumoSemanalAve / sem.consumoAcumuladoAve * 100).toFixed(1)}%</span> : null}</td>
+                    <td className="px-2 py-1 text-[#C4B5FD]">{sem.consumoAcumuladoAve === null ? "—" : fmt(sem.consumoAcumuladoAve)}<span className="text-[#64748B] font-normal"> · 100%</span></td>
                   </tr></tfoot>
                 </table>
               </div>

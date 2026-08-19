@@ -292,8 +292,10 @@ export function saldoVivoPorDia(mort: RegistroMortalidadDiaria): number[] {
 }
 
 // ─── Bultos Consumidos por Día (consumo/ave en kg sobre el saldo de aves vivas) ─
-export interface BultoDiaCalc    { semana: number; dia: number; diaGlobal: number; bultos: number; totalAcumulado: number; saldoVivo: number; consumoAveDia: number | null; }
-export interface BultoSemanaCalc { semana: number; totalBultos: number; consumoSemanalAve: number | null; consumoAcumuladoAve: number | null; dias: BultoDiaCalc[]; }
+// consumoAveDia = consumo del día por ave; consumoSemAve = acumulado por ave DENTRO de la semana (corrido);
+// consumoAcumAve = acumulado por ave de TODO el lote (corrido).
+export interface BultoDiaCalc    { semana: number; dia: number; diaGlobal: number; bultos: number; totalAcumulado: number; saldoVivo: number; consumoAveDia: number | null; consumoSemAve: number | null; consumoAcumAve: number | null; }
+export interface BultoSemanaCalc { semana: number; totalBultos: number; consumoDiaAvePromedio: number | null; consumoSemanalAve: number | null; consumoAcumuladoAve: number | null; dias: BultoDiaCalc[]; }
 export interface BultosConsumidosCalc { kgPorBulto: number; totalBultos: number; totalKg: number; consumoAcumuladoAveFinal: number | null; semanas: BultoSemanaCalc[]; }
 
 // Consumo por ave (kg) = (bultos × kgPorBulto) ÷ base de aves del día.
@@ -309,14 +311,20 @@ export function calcBultosConsumidos(r: RegistroBultosConsumidos, mort: Registro
   const saldoAt = (idx: number): number => saldos.length > idx ? saldos[idx] : (saldos.length ? saldos[saldos.length - 1] : avesIni);
   let acumBultos = 0, g = 0;
   const semanas: BultoSemanaCalc[] = (r?.semanas || []).map((w, wi) => {
+    let acumSemBultos = 0;
     const dias: BultoDiaCalc[] = (w || []).map((bv, di) => {
-      const bultos = num(bv); acumBultos += bultos; const idx = g; g += 1;
+      const bultos = num(bv); acumBultos += bultos; acumSemBultos += bultos; const idx = g; g += 1;
       const saldoVivo = saldoAt(idx);
-      return { semana: wi + 1, dia: di + 1, diaGlobal: idx + 1, bultos, totalAcumulado: acumBultos, saldoVivo, consumoAveDia: saldoVivo > 0 ? (bultos * kgPorBulto) / saldoVivo : null };
+      return { semana: wi + 1, dia: di + 1, diaGlobal: idx + 1, bultos, totalAcumulado: acumBultos, saldoVivo,
+        consumoAveDia:  saldoVivo > 0 ? (bultos * kgPorBulto) / saldoVivo : null,
+        consumoSemAve:  saldoVivo > 0 ? (acumSemBultos * kgPorBulto) / saldoVivo : null,
+        consumoAcumAve: saldoVivo > 0 ? (acumBultos * kgPorBulto) / saldoVivo : null };
     });
     const totalBultos = dias.reduce((s, d) => s + d.bultos, 0);
     const saldoFin = dias.length ? dias[dias.length - 1].saldoVivo : avesIni;
-    return { semana: wi + 1, totalBultos, consumoSemanalAve: saldoFin > 0 ? (totalBultos * kgPorBulto) / saldoFin : null, consumoAcumuladoAve: saldoFin > 0 ? (acumBultos * kgPorBulto) / saldoFin : null, dias };
+    const diasCon = dias.filter(d => d.consumoAveDia !== null);
+    const consumoDiaAvePromedio = diasCon.length ? diasCon.reduce((s, d) => s + (d.consumoAveDia || 0), 0) / diasCon.length : null;
+    return { semana: wi + 1, totalBultos, consumoDiaAvePromedio, consumoSemanalAve: saldoFin > 0 ? (totalBultos * kgPorBulto) / saldoFin : null, consumoAcumuladoAve: saldoFin > 0 ? (acumBultos * kgPorBulto) / saldoFin : null, dias };
   });
   const saldoFinal = saldos.length ? saldos[saldos.length - 1] : avesIni;
   return { kgPorBulto, totalBultos: acumBultos, totalKg: acumBultos * kgPorBulto, consumoAcumuladoAveFinal: saldoFinal > 0 ? (acumBultos * kgPorBulto) / saldoFinal : null, semanas };
