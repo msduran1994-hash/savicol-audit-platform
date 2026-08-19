@@ -175,7 +175,7 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
       const nuevoStr = m ? String(m.saldo) : "";
       if (cur === nuevoStr) return g;                             // ya sincronizado
       cambio = true;                                              // rellena si hay match; limpia si el galpón ya no coincide
-      return { ...g, saldoMortalidad: m ? m.saldo : undefined, saldoAuto: m ? true : undefined, lote: g.lote || (m ? m.lote : undefined) };
+      return { ...g, saldoMortalidad: m ? m.saldo : undefined, saldoAuto: m ? true : undefined, diasMortalidad: m ? m.dias : undefined, lote: g.lote || (m ? m.lote : undefined) };
     });
     if (cambio) set({ registroBultosConsumidos: { ...bc, galpones: nuevos } });
     // eslint-disable-next-line react-hooks/exhaustive-deps

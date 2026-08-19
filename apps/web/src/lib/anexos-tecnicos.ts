@@ -53,13 +53,20 @@ export function consolidarGalpones(galpones: GalponMortalidad[]): { avesIniciale
 // Bultos Consumidos por Día — mismos bloques semanales; consumo/ave en kg (kgPorBulto config., def. 40).
 // `semanas` es el CONSOLIDADO (Σ entre galpones) que consumen los informes; `galpones` es el detalle
 // por galpón (mismos galpones que Mortalidad Diaria) para validar el consumo de bultos POR galpón.
-export interface GalponBultos { galpon: string; lote?: string; avesEncasetadas: number; saldoMortalidad?: number; saldoAuto?: boolean; fechaEncasetamiento?: string; semanas: number[][]; }
+export interface GalponBultos { galpon: string; lote?: string; avesEncasetadas: number; saldoMortalidad?: number; saldoAuto?: boolean; diasMortalidad?: number; fechaEncasetamiento?: string; semanas: number[][]; }
 export interface RegistroBultosConsumidos { kgPorBulto: number; semanas: number[][]; galpones?: GalponBultos[]; }
 // Base de aves para el consumo/ave del galpón: el SALDO de mortalidad transferido (aves vivas) si se
 // registró/editó; si no, las aves encasetadas. Así el consumo por ave y el engorde reflejan las aves reales.
 export const baseAveGalponBultos = (g: GalponBultos): number => num(g.saldoMortalidad) > 0 ? num(g.saldoMortalidad) : num(g.avesEncasetadas);
 // Σ de la base de aves de todos los galpones (consolidado, consumo/ave y resumen).
 export const avesBaseBultos = (bc?: RegistroBultosConsumidos): number => (bc?.galpones || []).reduce((s, g) => s + baseAveGalponBultos(g), 0);
+// Días de consumo registrados (edad del lote): máximo de días CON DATO entre galpones. El detalle por
+// galpón conserva las celdas vacías; el consolidado (`semanas`) las rellena con 0, por eso NO se usa.
+export function diasConsumoBultos(bc?: RegistroBultosConsumidos): number {
+  const cnt = (semanas?: number[][]) => (semanas || []).reduce((s, w) => s + (w || []).filter(v => String(v ?? "").trim() !== "").length, 0);
+  if (bc?.galpones?.length) return bc.galpones.reduce((mx, g) => Math.max(mx, cnt(g.semanas)), 0);
+  return cnt(bc?.semanas);
+}
 // Suma los bultos de todos los galpones alineando por índice de semana/día (serie consolidada para informes).
 export function consolidarGalponesBultos(galpones: GalponBultos[]): { semanas: number[][] } {
   const semanas: number[][] = [];
@@ -130,7 +137,7 @@ function parseMortalidad(p: any): RegistroMortalidadDiaria {
 function parseBultosConsumidos(p: any): RegistroBultosConsumidos {
   const kgPorBulto = num(p?.kgPorBulto) || 40;
   const galpones = Array.isArray(p?.galpones)
-    ? p.galpones.map((g: any) => ({ galpon: String(g?.galpon ?? ""), lote: typeof g?.lote === "string" ? g.lote : undefined, avesEncasetadas: num(g?.avesEncasetadas), saldoMortalidad: g?.saldoMortalidad != null && String(g.saldoMortalidad).trim() !== "" ? num(g.saldoMortalidad) : undefined, saldoAuto: g?.saldoAuto === true ? true : undefined, fechaEncasetamiento: typeof g?.fechaEncasetamiento === "string" ? g.fechaEncasetamiento : undefined, semanas: parseSemanas(g?.semanas) }))
+    ? p.galpones.map((g: any) => ({ galpon: String(g?.galpon ?? ""), lote: typeof g?.lote === "string" ? g.lote : undefined, avesEncasetadas: num(g?.avesEncasetadas), saldoMortalidad: g?.saldoMortalidad != null && String(g.saldoMortalidad).trim() !== "" ? num(g.saldoMortalidad) : undefined, saldoAuto: g?.saldoAuto === true ? true : undefined, diasMortalidad: g?.diasMortalidad != null && String(g.diasMortalidad).trim() !== "" ? num(g.diasMortalidad) : undefined, fechaEncasetamiento: typeof g?.fechaEncasetamiento === "string" ? g.fechaEncasetamiento : undefined, semanas: parseSemanas(g?.semanas) }))
     : undefined;
   if (galpones && galpones.length) return { kgPorBulto, ...consolidarGalponesBultos(galpones), galpones };
   return { kgPorBulto, semanas: parseSemanas(p?.semanas) };
@@ -357,13 +364,13 @@ export const avesEncasetadasBultos = (bc?: RegistroBultosConsumidos): number => 
 // ─── Saldo de mortalidad por galpón desde OTROS anexos (trazabilidad cruzada) ──────
 // Recolecta el saldo de aves vivas por galpón/lote desde la mortalidad de una lista de anexos (p. ej.
 // otros hallazgos de la MISMA granja). Es SOLO LECTURA: no altera la mortalidad del hallazgo origen.
-export interface SaldoGalponMort { galpon: string; lote?: string; saldo: number; aves: number; }
+export interface SaldoGalponMort { galpon: string; lote?: string; saldo: number; aves: number; dias: number; }
 export function saldosMortalidadGalpones(anexosList: (AnexosTecnicos | null | undefined)[]): SaldoGalponMort[] {
   const out: SaldoGalponMort[] = [];
   for (const a of anexosList) {
     if (!a) continue;
     for (const g of mortalidadPorGalpon(a.registroMortalidadDiaria)) {
-      if (g.saldo > 0 || g.aves > 0) out.push({ galpon: g.galpon, lote: g.lote, saldo: g.saldo, aves: g.aves });
+      if (g.saldo > 0 || g.aves > 0) out.push({ galpon: g.galpon, lote: g.lote, saldo: g.saldo, aves: g.aves, dias: g.dias });
     }
   }
   return out;
@@ -512,8 +519,9 @@ export function resumenBultosConsumidos(r: RegistroBultosConsumidos, mort: Regis
   const usaSaldo = (r?.galpones || []).some(g => num(g.saldoMortalidad) > 0);
   const avesBase = avesEnc > 0 ? avesEnc : (num(mort?.avesIniciales) > 0 ? num(mort.avesIniciales) : num(avesFallback));
   const consAve = c.consumoAcumuladoAveFinal;
-  const diasConsumo = c.diasRegistrados;
-  const diasMort = (mort?.semanas || []).reduce((s, w) => s + (w || []).filter(v => String(v ?? "").trim() !== "").length, 0);
+  const diasConsumo = diasConsumoBultos(r);
+  const diasMortGalpones = (r?.galpones || []).reduce((mx, g) => Math.max(mx, num(g.diasMortalidad)), 0);
+  const diasMort = diasMortGalpones > 0 ? diasMortGalpones : (mort?.semanas || []).reduce((s, w) => s + (w || []).filter(v => String(v ?? "").trim() !== "").length, 0);
   const eng = evaluarEngorde(consAve, diasConsumo);
   const t = tendenciaSerie(c.semanas.map(s => s.consumoSemanalAve ?? 0));
   const caidas = c.semanas.filter((s, i) => i > 0 && (s.consumoSemanalAve ?? 0) < (c.semanas[i - 1].consumoSemanalAve ?? 0));
