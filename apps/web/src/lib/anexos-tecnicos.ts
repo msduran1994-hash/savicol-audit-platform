@@ -301,7 +301,7 @@ export function saldoVivoPorDia(mort: RegistroMortalidadDiaria): number[] {
 // consumoAcumAve = acumulado por ave de TODO el lote (corrido).
 export interface BultoDiaCalc    { semana: number; dia: number; diaGlobal: number; bultos: number; totalAcumulado: number; saldoVivo: number; consumoAveDia: number | null; consumoSemAve: number | null; consumoAcumAve: number | null; }
 export interface BultoSemanaCalc { semana: number; totalBultos: number; consumoDiaAvePromedio: number | null; consumoSemanalAve: number | null; consumoAcumuladoAve: number | null; dias: BultoDiaCalc[]; }
-export interface BultosConsumidosCalc { kgPorBulto: number; totalBultos: number; totalKg: number; consumoAcumuladoAveFinal: number | null; semanas: BultoSemanaCalc[]; }
+export interface BultosConsumidosCalc { kgPorBulto: number; totalBultos: number; totalKg: number; consumoAcumuladoAveFinal: number | null; diasRegistrados: number; semanas: BultoSemanaCalc[]; }
 
 // Consumo por ave (kg) = (bultos × kgPorBulto) ÷ base de aves del día.
 // Base de aves: si el registro de bultos trae aves ENCASETADAS por galpón (registro manual e
@@ -332,7 +332,8 @@ export function calcBultosConsumidos(r: RegistroBultosConsumidos, mort: Registro
     return { semana: wi + 1, totalBultos, consumoDiaAvePromedio, consumoSemanalAve: saldoFin > 0 ? (totalBultos * kgPorBulto) / saldoFin : null, consumoAcumuladoAve: saldoFin > 0 ? (acumBultos * kgPorBulto) / saldoFin : null, dias };
   });
   const saldoFinal = saldos.length ? saldos[saldos.length - 1] : avesIni;
-  return { kgPorBulto, totalBultos: acumBultos, totalKg: acumBultos * kgPorBulto, consumoAcumuladoAveFinal: saldoFinal > 0 ? (acumBultos * kgPorBulto) / saldoFinal : null, semanas };
+  const diasRegistrados = (r?.semanas || []).reduce((s, w) => s + (w || []).filter(bv => String(bv ?? "").trim() !== "").length, 0);
+  return { kgPorBulto, totalBultos: acumBultos, totalKg: acumBultos * kgPorBulto, consumoAcumuladoAveFinal: saldoFinal > 0 ? (acumBultos * kgPorBulto) / saldoFinal : null, diasRegistrados, semanas };
 }
 
 // Bultos consumidos por galpón (para validar el consumo POR galpón). Registro INDEPENDIENTE: cada
@@ -378,32 +379,45 @@ export function buscarSaldoGalpon(saldos: SaldoGalponMort[], galpon: string, lot
   return mismos[0];
 }
 
-// ─── Protocolo de engorde (referencia orientativa, broiler línea comercial mixta) ──
-// Por semana de vida: consumo ACUMULADO esperado por ave (kg) y peso vivo esperado (kg). Es una
-// referencia general para dar un análisis dinámico; conviene calibrarla a la guía de la línea
-// genética real del lote (Ross/Cobb, etc.).
-export interface ProtocoloEngordeSemana { semana: number; consumoAcumAve: number; pesoAve: number; }
+// ─── Directriz de consumo avícola (engorde) — estándar Ross 308 usado en Colombia (p. ej. Solla) ──
+// Por DÍA de vida: consumo ACUMULADO esperado por ave (kg) y peso vivo esperado (kg). Se INTERPOLA por
+// día para validar según los días reales de consumo/mortalidad. Ajústese a la guía de la línea
+// genética real del lote si difiere.
+export interface ProtocoloEngordeSemana { semana: number; dia: number; consumoAcumAve: number; pesoAve: number; }
 export const PROTOCOLO_ENGORDE: ProtocoloEngordeSemana[] = [
-  { semana: 1, consumoAcumAve: 0.165, pesoAve: 0.185 },
-  { semana: 2, consumoAcumAve: 0.500, pesoAve: 0.465 },
-  { semana: 3, consumoAcumAve: 1.210, pesoAve: 0.945 },
-  { semana: 4, consumoAcumAve: 2.225, pesoAve: 1.560 },
-  { semana: 5, consumoAcumAve: 3.560, pesoAve: 2.230 },
-  { semana: 6, consumoAcumAve: 5.100, pesoAve: 2.900 },
-  { semana: 7, consumoAcumAve: 6.750, pesoAve: 3.480 },
-  { semana: 8, consumoAcumAve: 8.350, pesoAve: 3.950 },
+  { semana: 0, dia: 0,  consumoAcumAve: 0,     pesoAve: 0.042 },
+  { semana: 1, dia: 7,  consumoAcumAve: 0.172, pesoAve: 0.196 },
+  { semana: 2, dia: 14, consumoAcumAve: 0.574, pesoAve: 0.512 },
+  { semana: 3, dia: 21, consumoAcumAve: 1.273, pesoAve: 1.000 },
+  { semana: 4, dia: 28, consumoAcumAve: 2.359, pesoAve: 1.615 },
+  { semana: 5, dia: 35, consumoAcumAve: 3.717, pesoAve: 2.270 },
+  { semana: 6, dia: 42, consumoAcumAve: 5.311, pesoAve: 2.929 },
+  { semana: 7, dia: 49, consumoAcumAve: 7.060, pesoAve: 3.535 },
+  { semana: 8, dia: 56, consumoAcumAve: 8.700, pesoAve: 4.030 },
 ];
-// Evalúa el consumo acumulado por ave (kg) a la semana N contra el estándar de engorde: estado
-// (cumple/bajo/alto con tolerancia ±tol), desviación % y peso vivo estimado (consumo real × FCR ref).
-export interface EvalEngorde { semana: number; consumoAcumAve: number; refConsumo: number; refPeso: number; pesoEstimado: number; pesoMin: number; pesoMax: number; desviacionPct: number; estado: "cumple" | "bajo" | "alto"; }
-export function evaluarEngorde(consumoAcumAve: number | null, semanas: number, tol = 0.12): EvalEngorde | null {
-  if (!consumoAcumAve || consumoAcumAve <= 0 || semanas < 1) return null;
-  const wk = Math.min(Math.max(Math.round(semanas), 1), PROTOCOLO_ENGORDE.length);
-  const ref = PROTOCOLO_ENGORDE[wk - 1];
+// Referencia de la directriz interpolada por día (consumo acum/ave y peso/ave a esa edad).
+export function refEngordeDia(dias: number): { consumoAcumAve: number; pesoAve: number } {
+  const t = PROTOCOLO_ENGORDE, d = Math.max(0, dias);
+  if (d <= t[0].dia) return { consumoAcumAve: t[0].consumoAcumAve, pesoAve: t[0].pesoAve };
+  for (let i = 1; i < t.length; i++) {
+    if (d <= t[i].dia) { const a = t[i - 1], b = t[i], f = (d - a.dia) / (b.dia - a.dia);
+      return { consumoAcumAve: a.consumoAcumAve + f * (b.consumoAcumAve - a.consumoAcumAve), pesoAve: a.pesoAve + f * (b.pesoAve - a.pesoAve) }; }
+  }
+  const last = t[t.length - 1];
+  return { consumoAcumAve: last.consumoAcumAve, pesoAve: last.pesoAve };
+}
+// Evalúa el consumo acumulado por ave (kg) a los `dias` de vida contra la directriz: estado
+// (cumple/bajo/alto ±tol), desviación % y peso vivo estimado (consumo real × relación peso/consumo de
+// la directriz al día). El peso estimado se contrasta con el peso de la directriz para esa edad.
+export interface EvalEngorde { dia: number; consumoAcumAve: number; refConsumo: number; refPeso: number; pesoEstimado: number; pesoMin: number; pesoMax: number; desviacionPct: number; estado: "cumple" | "bajo" | "alto"; }
+export function evaluarEngorde(consumoAcumAve: number | null, dias: number, tol = 0.12): EvalEngorde | null {
+  if (!consumoAcumAve || consumoAcumAve <= 0 || dias < 1) return null;
+  const ref = refEngordeDia(dias);
+  if (ref.consumoAcumAve <= 0) return null;
   const desv = (consumoAcumAve - ref.consumoAcumAve) / ref.consumoAcumAve;
   const estado: "cumple" | "bajo" | "alto" = Math.abs(desv) <= tol ? "cumple" : (desv < 0 ? "bajo" : "alto");
   const pesoEstimado = consumoAcumAve * (ref.pesoAve / ref.consumoAcumAve);
-  return { semana: wk, consumoAcumAve, refConsumo: ref.consumoAcumAve, refPeso: ref.pesoAve, pesoEstimado, pesoMin: ref.pesoAve * (1 - tol), pesoMax: ref.pesoAve * (1 + tol), desviacionPct: desv * 100, estado };
+  return { dia: Math.round(dias), consumoAcumAve, refConsumo: ref.consumoAcumAve, refPeso: ref.pesoAve, pesoEstimado, pesoMin: ref.pesoAve * (1 - tol), pesoMax: ref.pesoAve * (1 + tol), desviacionPct: desv * 100, estado };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -498,7 +512,9 @@ export function resumenBultosConsumidos(r: RegistroBultosConsumidos, mort: Regis
   const usaSaldo = (r?.galpones || []).some(g => num(g.saldoMortalidad) > 0);
   const avesBase = avesEnc > 0 ? avesEnc : (num(mort?.avesIniciales) > 0 ? num(mort.avesIniciales) : num(avesFallback));
   const consAve = c.consumoAcumuladoAveFinal;
-  const eng = evaluarEngorde(consAve, c.semanas.length);
+  const diasConsumo = c.diasRegistrados;
+  const diasMort = (mort?.semanas || []).reduce((s, w) => s + (w || []).filter(v => String(v ?? "").trim() !== "").length, 0);
+  const eng = evaluarEngorde(consAve, diasConsumo);
   const t = tendenciaSerie(c.semanas.map(s => s.consumoSemanalAve ?? 0));
   const caidas = c.semanas.filter((s, i) => i > 0 && (s.consumoSemanalAve ?? 0) < (c.semanas[i - 1].consumoSemanalAve ?? 0));
 
@@ -525,12 +541,12 @@ export function resumenBultosConsumidos(r: RegistroBultosConsumidos, mort: Regis
         consAve === null ? "No fue posible calcular el consumo por ave (sin saldo de aves vivas disponible)." : `Consumo promedio de ${f2(consAve)} kg por ave sobre una base de ${f2(avesBase)} aves.`,
       ] },
       { titulo: "Viabilidad y desviaciones", lineas: viabilidad },
-      { titulo: "Protocolo de engorde (consumo y peso)", lineas: eng ? [
-        `A la semana ${eng.semana}, el consumo acumulado es de ${f2(eng.consumoAcumAve)} kg/ave frente a la referencia de engorde de ${f2(eng.refConsumo)} kg/ave (desviación ${eng.desviacionPct >= 0 ? "+" : ""}${f2(eng.desviacionPct)}%).`,
-        `Peso vivo estimado por consumo: ${f2(eng.pesoEstimado)} kg/ave (rango esperado ${f2(eng.pesoMin)}–${f2(eng.pesoMax)} kg). ${eng.estado === "cumple" ? "CUMPLE el rango de peso/consumo del protocolo de engorde." : eng.estado === "bajo" ? "POR DEBAJO del estándar: posible sub-consumo o bajo peso; verificar disponibilidad de alimento, sanidad y ambiente." : "POR ENCIMA del estándar: posible sobreconsumo/desperdicio o lote adelantado; verificar registros y manejo."}`,
-        "Referencia orientativa de línea comercial; ajústese a la guía de la línea genética real del lote.",
+      { titulo: "Cumplimiento de consumo y peso (directriz avícola)", lineas: eng ? [
+        `Con ${diasConsumo} día(s) de consumo registrados${diasMort > 0 ? ` y ${diasMort} día(s) de mortalidad` : ""}, el consumo acumulado es de ${f2(eng.consumoAcumAve)} kg/ave frente a la directriz (Ross 308) de ${f2(eng.refConsumo)} kg/ave al día ${eng.dia} — desviación ${eng.desviacionPct >= 0 ? "+" : ""}${f2(eng.desviacionPct)}%.`,
+        `Peso vivo estimado por el consumo: ${f2(eng.pesoEstimado)} kg/ave, contrastado con el peso de la directriz para esa edad (${f2(eng.refPeso)} kg, rango ${f2(eng.pesoMin)}–${f2(eng.pesoMax)} kg): ${eng.estado === "cumple" ? "CONCUERDA con el peso promedio esperado del ave." : eng.estado === "bajo" ? "POR DEBAJO del peso esperado — sub-consumo o bajo peso; verificar alimento, sanidad y ambiente." : "POR ENCIMA del peso esperado — sobreconsumo/desperdicio o lote adelantado; verificar registros."}`,
+        `${diasMort > 0 && Math.abs(diasConsumo - diasMort) > 3 ? `Los días de consumo (${diasConsumo}) y de mortalidad (${diasMort}) no concuerdan; alinee ambos registros para validar la edad del lote. ` : ""}Base de aves: ${usaSaldo ? "saldo de mortalidad (aves vivas)" : "aves encasetadas"}. Directriz Ross 308 (usada en Colombia, p. ej. Solla); ajústese a la línea genética real.`,
       ] : [
-        "Registre las aves encasetadas y al menos una semana de bultos para evaluar el cumplimiento del protocolo de engorde.",
+        "Registre las aves encasetadas (o transfiera el saldo de mortalidad) y al menos un día de bultos para validar el consumo y el peso contra la directriz.",
       ] },
       { titulo: "Observaciones técnicas", lineas: [
         `Análisis basado en ${c.semanas.length} semana(s) de registro de bultos.`,
@@ -539,7 +555,7 @@ export function resumenBultosConsumidos(r: RegistroBultosConsumidos, mort: Regis
       { titulo: "Conclusión ejecutiva", lineas: [
         consAve === null
           ? `Se consumieron ${f2(c.totalKg)} kg de alimento; registre las aves encasetadas para estimar el consumo por ave.`
-          : `El lote consumió ${f2(c.totalKg)} kg (${f2(consAve)} kg/ave)${eng ? `; peso estimado ${f2(eng.pesoEstimado)} kg/ave — ${eng.estado === "cumple" ? "CUMPLE" : "NO CUMPLE (" + eng.estado + ")"} el protocolo de engorde a la semana ${eng.semana}` : ""}. ${t.dir === "descendente" ? "El patrón descendente amerita revisión." : "El patrón es consistente con el desarrollo esperado del lote."}`,
+          : `El lote consumió ${f2(c.totalKg)} kg (${f2(consAve)} kg/ave)${eng ? `; peso estimado ${f2(eng.pesoEstimado)} kg/ave — ${eng.estado === "cumple" ? "CONCUERDA con" : "NO CONCUERDA (" + eng.estado + ") con"} el peso de la directriz al día ${eng.dia}` : ""}. ${t.dir === "descendente" ? "El patrón descendente amerita revisión." : "El patrón es consistente con el desarrollo esperado del lote."}`,
       ] },
     ],
   };

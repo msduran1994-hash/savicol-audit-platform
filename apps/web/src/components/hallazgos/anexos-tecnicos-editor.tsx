@@ -152,11 +152,15 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
   const setBcGalpones = (gs: GalponBultos[]) => set({ registroBultosConsumidos: { ...bc, ...consolidarGalponesBultos(gs), galpones: gs } });
   const editBcGalpon = (gi: number, patch: any) => setBcGalpones(bcGalponesEf.map((g, i) => i === gi ? { ...g, ...patch } : g));
   const setBcGalponDia = (gi: number, w: number, d: number, v: string) => editBcGalpon(gi, { semanas: bcGalponesEf[gi].semanas.map((sem: any[], wi: number) => wi === w ? sem.map((c: any, di: number) => di === d ? v : c) : sem) });
-  // Saldo de mortalidad por galpón/lote desde OTROS hallazgos de la MISMA granja (solo lectura; no altera esos anexos).
-  const saldosMort = useMemo(() => saldosMortalidadGalpones(
-    hallazgos.filter(h => h.granjaId && defaultGranjaId && h.granjaId === defaultGranjaId && h.id !== hallazgoId)
-             .map(h => { try { return parseAnexos(h.anexosTecnicos); } catch { return null; } })
-  ), [hallazgos, defaultGranjaId, hallazgoId]);
+  // Saldo de mortalidad por galpón/lote desde la mortalidad del PROPIO hallazgo y de OTROS hallazgos de
+  // la MISMA granja (solo lectura; no altera esos anexos).
+  const saldosMort = useMemo(() => saldosMortalidadGalpones([
+    value,
+    ...hallazgos.filter(h => h.granjaId && defaultGranjaId && h.granjaId === defaultGranjaId && h.id !== hallazgoId)
+                .map(h => { try { return parseAnexos(h.anexosTecnicos); } catch { return null; } }),
+  ]),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [value.registroMortalidadDiaria, hallazgos, defaultGranjaId, hallazgoId]);
   // Auto-transfiere el saldo a los galpones de bultos que aún no lo tienen y sí encuentran match (solo rellena vacíos, una vez).
   useEffect(() => {
     if (!Array.isArray(bc.galpones) || !bc.galpones.length) return;
@@ -423,18 +427,18 @@ export function AnexosTecnicosEditor({ value, onChange, granjas = [], defaultGra
                 <div className="overflow-x-auto rounded-lg border border-[#1E2D4A]">
                   <table className="w-full text-xs">
                     <thead><tr className="bg-[#0A111F] text-[#94A3B8]">
-                      <th className="px-2 py-1 text-left">Galpón</th><th className="px-2 py-1 text-left">Lote</th><th className="px-2 py-1 text-left">Aves encas.</th><th className="px-2 py-1 text-left">Saldo mort.</th><th className="px-2 py-1 text-left">Sem</th><th className="px-2 py-1 text-left">Bultos</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th><th className="px-2 py-1 text-left">Peso est. (kg)</th><th className="px-2 py-1 text-left">Engorde</th>
+                      <th className="px-2 py-1 text-left">Galpón</th><th className="px-2 py-1 text-left">Lote</th><th className="px-2 py-1 text-left">Aves encas.</th><th className="px-2 py-1 text-left">Saldo mort.</th><th className="px-2 py-1 text-left" title="Días de consumo registrados (edad del lote para la directriz)">Días</th><th className="px-2 py-1 text-left">Bultos</th><th className="px-2 py-1 text-left">Consumo/ave (kg)</th><th className="px-2 py-1 text-left">Peso est. (kg)</th><th className="px-2 py-1 text-left">Engorde</th>
                     </tr></thead>
                     <tbody>
                       {porGalpon.map((g, i) => {
-                        const eng = evaluarEngorde(g.consumoAve, g.semanas);
+                        const eng = evaluarEngorde(g.consumoAve, g.dias);
                         return (
                         <tr key={i} className="border-t border-[#1E2D4A]">
                           <td className="px-2 py-1 text-white">Galpón {g.galpon}</td>
                           <td className="px-2 py-1 text-[#94A3B8]">{g.lote || "—"}</td>
                           <td className="px-2 py-1">{g.aves > 0 ? fmt(g.aves) : "—"}</td>
                           <td className="px-2 py-1 text-[#22C55E]">{g.saldo > 0 ? fmt(g.saldo) : "—"}</td>
-                          <td className="px-2 py-1 text-[#94A3B8]">{g.semanas}</td>
+                          <td className="px-2 py-1 text-[#94A3B8]">{g.dias}</td>
                           <td className="px-2 py-1 text-[#4A7AFF] font-semibold">{fmt(g.totalBultos)}</td>
                           <td className="px-2 py-1 text-[#8B5CF6] font-semibold">{g.consumoAve === null ? "—" : fmt(g.consumoAve)}</td>
                           <td className="px-2 py-1 text-[#C4B5FD]">{eng ? fmt(eng.pesoEstimado) : "—"}</td>
