@@ -12,7 +12,7 @@ import {
   parseAnexos, anexosTienenDatos, difConteoPicos, totalRecepcion, totalInvBultos,
   pesoTotalIngreso, subtotalBloque, cantidadBloque, totalGeneralBultos, num as anexNum,
   faltanteConciliacion, recepcionResumenTieneDatos, pctMortalidad, avesRecibidasTotal, totalMortalidadAves,
-  calcMortalidadDiaria, calcBultosConsumidos, registroMortalidadTieneDatos, mortalidadPorGalpon,
+  calcMortalidadDiaria, calcBultosConsumidos, registroMortalidadTieneDatos, mortalidadPorGalpon, bultosPorGalpon, evaluarEngorde,
   totalIngresoUnidades, totalIngresoKg, totalInventarioBultos, totalInventarioBultosSolo, totalInventarioLonas, totalBultosConsumidos, totalKgConsumidos,
   resumenMortalidadDiaria, resumenBultosConsumidos, resumenRecepcionAves, resumenIngresoBultos, safeResumen,
   type ResumenEjecutivo,
@@ -1416,6 +1416,27 @@ function donutSVG(pct: number | null, color: string, label: string): string {
   </svg>`;
 }
 
+// Gráfica de TORTA (multi-sector) con leyenda. Para el desglose por galpón en el informe (SVG, se
+// renderiza con html2canvas igual que lineTrendSVG/donutSVG). Ignora valores ≤ 0.
+function pieSVG(slices: { label: string; value: number }[], size = 118): string {
+  const data = slices.map(s => ({ label: s.label, value: Math.max(0, s.value) })).filter(s => s.value > 0);
+  const total = data.reduce((s, x) => s + x.value, 0);
+  if (total <= 0) return "";
+  const cx = size / 2, cy = size / 2, r = size / 2 - 2, rad = (d: number) => (d * Math.PI) / 180;
+  const PAL = ["#4A7AFF", "#EF4444", "#22C55E", "#F59E0B", "#8B5CF6", "#0EA5E9", "#EC4899", "#14B8A6", "#F97316", "#64748B", "#A855F7", "#84CC16", "#06B6D4", "#F43F5E"];
+  let ang = -90;
+  const paths = data.map((s, i) => {
+    const frac = s.value / total, a0 = ang, a1 = ang + frac * 360; ang = a1;
+    const color = PAL[i % PAL.length];
+    if (frac >= 0.9999) return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}"/>`;
+    const x0 = (cx + r * Math.cos(rad(a0))).toFixed(2), y0 = (cy + r * Math.sin(rad(a0))).toFixed(2);
+    const x1 = (cx + r * Math.cos(rad(a1))).toFixed(2), y1 = (cy + r * Math.sin(rad(a1))).toFixed(2);
+    return `<path d="M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${(a1 - a0) > 180 ? 1 : 0} 1 ${x1} ${y1} Z" fill="${color}"/>`;
+  }).join("");
+  const legend = data.map((s, i) => `<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:#334155;white-space:nowrap"><span style="width:7px;height:7px;background:${PAL[i % PAL.length]};border-radius:1px;display:inline-block"></span>${s.label} · ${(s.value / total * 100).toFixed(0)}%</div>`).join("");
+  return `<div style="display:flex;align-items:center;gap:8px;flex-shrink:0"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex-shrink:0">${paths}</svg><div style="display:flex;flex-direction:column;flex-wrap:wrap;max-height:${size}px;gap:2px 10px">${legend}</div></div>`;
+}
+
 // Tendencia simple de una serie (primer vs último valor no nulo, umbral 10%).
 function tendenciaTxt(vals: number[]): string {
   const v = vals.filter(x => x > 0);
@@ -1446,6 +1467,15 @@ function bloqueMortalidadHallazgo(a: any): string {
   const c = calcMortalidadDiaria(a.registroMortalidadDiaria);
   const pts = c.semanas.map((s: any) => ({ label: `Sem ${s.semana}`, value: s.totalSemanal }));
   const pct = c.pctAcumuladoFinal, color = (pct ?? 0) >= 8 ? "#EF4444" : (pct ?? 0) >= 4 ? "#F97316" : "#22C55E";
+  // Resultado FINAL por galpón (trazabilidad): tabla + gráfica lineal (% por galpón) + torta (distribución de la mortalidad).
+  const pg = mortalidadPorGalpon(a.registroMortalidadDiaria);
+  const galpon = pg.length > 1 ? `<div style="font-size:11px;font-weight:700;color:#0D1526;margin:8px 0 3px">Resultado final por Galpón · Mortalidad</div>
+    <table style="margin-bottom:6px"><thead><tr><th>Galpón</th><th style="text-align:right">Aves ing.</th><th style="text-align:right">Mortalidad</th><th style="text-align:right">% Acum.</th><th style="text-align:right">Saldo</th></tr></thead>
+    <tbody>${pg.map(x => `<tr><td>Galpón ${x.galpon}${x.lote ? ` · L${x.lote}` : ""}</td><td style="text-align:right">${_fmtAnx(x.aves)}</td><td style="text-align:right">${_fmtAnx(x.total)}</td><td style="text-align:right;font-weight:700">${x.pct == null ? "—" : x.pct.toFixed(2) + "%"}</td><td style="text-align:right">${_fmtAnx(x.saldo)}</td></tr>`).join("")}</tbody></table>
+    <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px"><div style="font-size:9px;color:#64748b;margin-bottom:2px">% mortalidad por galpón</div>${lineTrendSVG(pg.map(x => ({ label: `G${x.galpon}`, value: x.pct ?? 0 })), "#EF4444", "%")}</div>
+      <div><div style="font-size:9px;color:#64748b;margin-bottom:2px">Distribución de la mortalidad</div>${pieSVG(pg.map(x => ({ label: `G${x.galpon}`, value: x.total })))}</div>
+    </div>` : "";
   return `<div style="margin-top:8px;border-top:1px dashed #e2e8f0;padding-top:6px;page-break-inside:avoid">
     <div style="font-size:11px;font-weight:700;color:#EF4444;margin-bottom:3px">Mortalidad · tendencia semanal</div>
     <div style="display:flex;align-items:center;gap:12px">
@@ -1453,6 +1483,7 @@ function bloqueMortalidadHallazgo(a: any): string {
       ${donutSVG(pct, color, "% mortalidad")}
     </div>
     <p style="font-size:12px;color:#334155;line-height:1.5;margin-top:4px">${parrafoMortalidad(c)}</p>
+    ${galpon}
   </div>`;
 }
 
@@ -1489,12 +1520,22 @@ function bloqueConsumoHallazgo(a: any): string {
   const explicacion = recep > 0
     ? `La diferencia de ${_fmtAnx(difTablas)} bulto(s) (${difPct.toFixed(1)}% de la recepción) corresponde al alimento consumido o despachado del inventario. ${salidas > 0 ? `Contrastada con el consumo registrado de ${_fmtAnx(salidas)} bulto(s), ${cuadra ? "la trazabilidad es conforme" : `se observa un descuadre de ${_fmtAnx(difTablas - salidas)} bulto(s) que requiere validación`}.` : "No se registró el consumo diario para contrastar la diferencia."}`
     : `Sin recepción registrada para calcular la diferencia con el inventario físico.`;
+  // Resultado FINAL por galpón (trazabilidad): tabla + gráfica lineal (consumo/ave por galpón) + torta (distribución de bultos).
+  const pgB = bultosPorGalpon(a.registroBultosConsumidos);
+  const galponB = pgB.length > 1 ? `<div style="font-size:11px;font-weight:700;color:#0D1526;margin:8px 0 3px">Resultado final por Galpón · Bultos Consumidos</div>
+    <table style="margin-bottom:6px"><thead><tr><th>Galpón</th><th>Lote</th><th style="text-align:right">Base aves</th><th style="text-align:right">Bultos</th><th style="text-align:right">Kg</th><th style="text-align:right">Consumo/ave</th><th>Engorde</th></tr></thead>
+    <tbody>${pgB.map(x => { const e = evaluarEngorde(x.consumoAve, x.semanas); const est = e ? `${e.estado === "cumple" ? "Cumple" : e.estado === "bajo" ? "Bajo" : "Alto"} ${e.desviacionPct >= 0 ? "+" : ""}${e.desviacionPct.toFixed(0)}%` : "—"; const ec = e ? (e.estado === "cumple" ? "#16a34a" : e.estado === "bajo" ? "#dc2626" : "#d97706") : "#64748b"; return `<tr><td>Galpón ${x.galpon}</td><td>${x.lote || "—"}</td><td style="text-align:right">${_fmtAnx(x.base)}</td><td style="text-align:right">${_fmtAnx(x.totalBultos)}</td><td style="text-align:right">${_fmtAnx(x.totalKg)}</td><td style="text-align:right;font-weight:700">${x.consumoAve == null ? "—" : x.consumoAve.toFixed(2)}</td><td style="color:${ec};font-weight:700">${est}</td></tr>`; }).join("")}</tbody></table>
+    <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px"><div style="font-size:9px;color:#64748b;margin-bottom:2px">Consumo/ave (kg) por galpón</div>${lineTrendSVG(pgB.map(x => ({ label: `G${x.galpon}`, value: x.consumoAve ?? 0 })), "#4A7AFF")}</div>
+      <div><div style="font-size:9px;color:#64748b;margin-bottom:2px">Distribución de bultos consumidos</div>${pieSVG(pgB.map(x => ({ label: `G${x.galpon}`, value: x.totalBultos })))}</div>
+    </div>` : "";
   return `<div style="margin-top:8px;border-top:1px dashed #e2e8f0;padding-top:6px;page-break-inside:avoid">
     <div style="font-size:11px;font-weight:700;color:#4A7AFF;margin-bottom:3px">Consumo de alimento · tendencia y trazabilidad de bultos</div>
     ${chart}
     <p style="font-size:12px;color:#334155;line-height:1.5;margin-top:4px">${parrafoConsumo(cb)}</p>
     ${resumen}
-    <p style="font-size:12px;color:#334155;line-height:1.5;margin-top:4px">${explicacion}</p></div>`;
+    <p style="font-size:12px;color:#334155;line-height:1.5;margin-top:4px">${explicacion}</p>
+    ${galponB}</div>`;
 }
 
 // ─── SECCIÓN REGISTRO MORTALIDAD DIARIA (resumen / detalle) ───────────────────
